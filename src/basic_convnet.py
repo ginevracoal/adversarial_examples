@@ -1,59 +1,21 @@
 import keras
 import numpy as np
-from keras.datasets import mnist
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import Conv2D, MaxPooling2D
-from keras import backend as K
 from keras.models import load_model
 from art.classifiers import KerasClassifier
 from art.attacks import FastGradientMethod
-
+from utils import *
 
 SAVE_MODEL = False
 MODEL_NAME = "basic_convnet"
 TRAINED_MODELS = "../trained_models/"
 
 BATCH_SIZE = 128
-NUM_CLASSES = 10
 EPOCHS = 12
-IMG_COLS = 28
-IMG_ROWS = 28
 MIN = 0
 MAX = 255
-
-
-def preprocess_mnist():
-    """Preprocess mnist for keras training"""
-
-    # input image dimensions
-    img_rows, img_cols = IMG_ROWS, IMG_COLS
-
-    # the data, split between train and test sets
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-
-    if K.image_data_format() == 'channels_first':
-        x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
-        x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
-        input_shape = (1, img_rows, img_cols)
-    else:
-        x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
-        x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
-        input_shape = (img_rows, img_cols, 1)
-
-    x_train = x_train.astype('float32')
-    x_test = x_test.astype('float32')
-    x_train /= 255
-    x_test /= 255
-    print('x_train shape:', x_train.shape)
-    print(x_train.shape[0], 'train samples')
-    print(x_test.shape[0], 'test samples')
-
-    # convert class vectors to binary class matrices
-    y_train = keras.utils.to_categorical(y_train, NUM_CLASSES)
-    y_test = keras.utils.to_categorical(y_test, NUM_CLASSES)
-
-    return x_train, y_train, x_test, y_test, input_shape
 
 
 def basic_convnet(input_shape):
@@ -107,7 +69,7 @@ def load_trained_model():
 
 def main():
 
-    x_train, y_train, x_test, y_test, input_shape = preprocess_mnist()
+    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
 
     # subset
     x_train, y_train, x_test, y_test = x_train[:100], y_train[:100], x_test[:100], y_test[:100]

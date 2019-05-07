@@ -12,5 +12,3 @@ Implementations of classifiers robust to adversarial examples, based on random p
 - src
 - trained_models
 
-
-
