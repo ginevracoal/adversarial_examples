@@ -1,10 +1,9 @@
 import keras
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Flatten, Input
 from keras.layers import Conv2D, MaxPooling2D
 from utils import *
 from classifier import Classifier
-
 
 SAVE_MODEL = False
 MODEL_NAME = "baseline_convnet"
@@ -19,7 +18,8 @@ class BaselineConvnet(Classifier):
     Simple convnet model. This will be our benchmark on the MNIST dataset.
     """
 
-    def _set_layers(self):
+    def _set_layers_old(self):
+        # TODO: delete this method
         model = Sequential()
         model.add(Conv2D(32, kernel_size=(3, 3),
                          activation='relu',
@@ -36,13 +36,31 @@ class BaselineConvnet(Classifier):
                       metrics=['accuracy'])
         return model
 
+    def _set_layers(self):
+        inputs = Input(shape=self.input_shape)
+        x = Conv2D(32, kernel_size=(3, 3),
+                   activation='relu', data_format='channels_last')(inputs)
+        x = Conv2D(64, (3, 3), activation='relu')(x)
+        x = MaxPooling2D(pool_size=(2, 2))(x)
+        x = Dropout(0.25)(x)
+        x = Flatten()(x)
+        x = Dense(128, activation='relu')(x)
+        x = Dropout(0.5)(x)
+        predictions = Dense(self.num_classes, activation='softmax')(x)
+
+        model = Model(inputs=inputs, outputs=predictions)
+        model.compile(loss=keras.losses.categorical_crossentropy,
+                      optimizer=keras.optimizers.Adadelta(),
+                      metrics=['accuracy'])
+        return model
+
 
 def main():
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
 
     # take a subset
-    print("\nTaking just a small subset")
+    print("\nTaking just the first 100 images.")
     x_train, y_train, x_test, y_test = x_train[:100], y_train[:100], x_test[:100], y_test[:100]
 
     convNet = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
