@@ -1,6 +1,8 @@
+import numpy as np
+from sklearn.random_projection import GaussianRandomProjection
 import keras
-from keras.datasets import mnist
 from keras import backend as K
+from keras.datasets import mnist
 
 
 NUM_CLASSES = 10
@@ -15,6 +17,7 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
 
     :param img_rows, img_cols: input image dimensions
     """
+    print("\nLoading mnist.")
 
     # the data, split between train and test sets
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -32,9 +35,7 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     x_test = x_test.astype('float32')
     x_train /= 255
     x_test /= 255
-    print('x_train shape:', x_train.shape)
-    print(x_train.shape[0], 'train samples')
-    print(x_test.shape[0], 'test samples')
+    print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape,)
 
     # convert class vectors to binary class matrices
     y_train = keras.utils.to_categorical(y_train, NUM_CLASSES)
@@ -48,22 +49,27 @@ def compute_random_projections(input_data, n_proj, dim_proj=None):
 
     :param input_data: full dimension input data
     :param n_proj: number of projections
-    :param dim_proj: dimensionality of a projection
+    :param dim_proj: dimension of a projection
     :param random_state: pseudo random number generator
-    :return: array containing the m projections
+    :return: array containing m random projections
     """
+    print("\nComputing random projections.")
 
     # TODO: non funziona il metodo di johns-lind
     if dim_proj is None:
         dim_proj = 'auto'
 
-    print(input_data.shape)
+    # TODO: dim proj deve essere inferiore a 28 e superiore a (vedi struttura layers)
 
-    projected_data = []
-    for i in range(n_proj):
-        projected_data.append(GaussianRandomProjection(n_components=dim_proj).fit_transform(input_data))
-    projected_data = np.array(projected_data)
+    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
+    print("Input shape: ", input_data.shape)
+    #print(flat_images.shape)
 
-    print(projected_data.shape)
+    projection = GaussianRandomProjection(n_components=dim_proj*dim_proj)
+    projected_data = [projection.fit_transform(flat_images) for i in range(n_proj)]
+    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], dim_proj, dim_proj, 1)
+
+    print("Projections shape: ", projected_data.shape)
+
     return projected_data
 
