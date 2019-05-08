@@ -3,6 +3,7 @@ from keras.callbacks import History
 from keras.engine import training
 from keras.layers import Average, Concatenate
 from art.classifiers import KerasClassifier
+#from keras.wrappers.scikit_learn import KerasClassifier
 from keras.models import Model, Input
 from tensorflow.python.framework.ops import Tensor
 from typing import Tuple, List
@@ -29,7 +30,7 @@ class RandomEnsemble(Classifier):
         self.n_proj = n_proj
         self.num_classes = num_classes
         self.dim_proj = dim_proj
-        self.input_shape = (n_proj, dim_proj, dim_proj, 1)
+        self.input_shape = (dim_proj, dim_proj, 1)
         self.model = self._set_layers()
 
     def _set_layers(self):
@@ -38,26 +39,25 @@ class RandomEnsemble(Classifier):
         :return:
         """
 
-        #inputs = [Input(shape=self.input_shape) for i in range(self.n_proj)]
+        inputs = [Input(shape=self.input_shape) for i in range(self.n_proj)]
 
-        inputs = Input(shape=self.input_shape)
+        baseline = BaselineConvnet(input_shape=self.input_shape,#(self.dim_proj, self.dim_proj, 1),
+                                   num_classes=self.num_classes)
 
-        # TODO: n_proj reti diverse, una su ogni proiezione
         # same model for all the projections
-        baseline_model = BaselineConvnet(input_shape=self.input_shape[1:], num_classes=self.num_classes).model
+        outputs = [baseline.model(inputs[i]) for i in range(self.n_proj)]
 
-        # devo dire di prendere l'i-esimo input
-        outputs = [baseline_model.outputs[0] for i in range(self.n_proj)]
-
-        #outputs = [model.outputs[0] for model in models]
         # final prediction as an average of the outputs
         prediction = Average()(outputs)
 
-        model = Model(inputs=inputs, outputs=prediction, name='ensemble')
+        model = Model(inputs=inputs, outputs=prediction, name='random_ensemble')
+        #model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+
+        model.summary()
 
         return model
 
-    def ensemble_training(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train, batch_size, epochs):
         """
 
         :param x_train: original training data
@@ -73,7 +73,10 @@ class RandomEnsemble(Classifier):
 
         x_train_projected = compute_random_projections(x_train, n_proj=self.n_proj, dim_proj=self.dim_proj)
 
+        # TODO: indexing problem here
         classifier = KerasClassifier((MIN, MAX), model=self.model)
+        exit()
+        #classifier = KerasClassifier(model=self.model, batch_size=batch_size, nb_epochs=epochs)
         classifier.fit(x_train_projected, y_train, batch_size=batch_size, nb_epochs=epochs)
 
         return classifier
@@ -89,11 +92,11 @@ def main():
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, dim_proj=DIM_PROJECTION)
-    exit()
 
     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
     #classifier = model.load_classifier(TRAINED_MODEL)
 
+    exit()
     model.evaluate_test(classifier, x_test, y_test)
     model.evaluate_adversaries(classifier, x_test, y_test)
 
