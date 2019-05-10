@@ -2,13 +2,13 @@ import keras
 from keras.callbacks import History
 from keras.engine import training
 from keras.layers import Average, Concatenate
-from art.classifiers import KerasClassifier
+#from art.classifiers import KerasClassifier
 #from keras.wrappers.scikit_learn import KerasClassifier
 from keras.models import Model, Input
 from tensorflow.python.framework.ops import Tensor
 from typing import Tuple, List
 from utils import *
-from classifier import Classifier
+from classifier import AdversarialClassifier
 from baseline_convnet import BaselineConvnet
 
 SAVE_MODEL = False
@@ -18,19 +18,20 @@ MODEL_NAME = "random_ensemble"
 BATCH_SIZE = 128
 EPOCHS = 12
 N_PROJECTIONS = 10
-DIM_PROJECTION = 8
+SIZE_PROJECTION = 8
 
 
-class RandomEnsemble(Classifier):
+class RandomEnsemble(AdversarialClassifier):
     """
-    Classifies n_proj random projections of the training data in a lower dimensional space,
-    then classifies the original high dimensional data with a voting technique.
+    Classifies n_proj random projections of the training data in a lower dimensional space (whose dimension is
+    dim_proj=size_proj^2), then classifies the original high dimensional data with a voting technique.
     """
-    def __init__(self, input_shape, num_classes, n_proj, dim_proj):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, *args, **kwargs):
         self.n_proj = n_proj
+        self.size_proj = size_proj
         self.num_classes = num_classes
-        self.dim_proj = dim_proj
-        self.input_shape = (dim_proj, dim_proj, 1)
+        #super(RandomEnsemble, self).__init__(input_shape, num_classes, *args, **kwargs)
+        self.input_shape = (size_proj, size_proj, 1)
         self.model = self._set_layers()
 
     def _set_layers(self):
@@ -39,10 +40,10 @@ class RandomEnsemble(Classifier):
         :return:
         """
 
+        # n_proj arrays of shape (dim_proj, dim_proj, 1)
         inputs = [Input(shape=self.input_shape) for i in range(self.n_proj)]
 
-        baseline = BaselineConvnet(input_shape=self.input_shape,#(self.dim_proj, self.dim_proj, 1),
-                                   num_classes=self.num_classes)
+        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
 
         # same model for all the projections
         outputs = [baseline.model(inputs[i]) for i in range(self.n_proj)]
@@ -51,7 +52,8 @@ class RandomEnsemble(Classifier):
         prediction = Average()(outputs)
 
         model = Model(inputs=inputs, outputs=prediction, name='random_ensemble')
-        #model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+        model.compile(loss=keras.losses.categorical_crossentropy,
+                      optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
 
         model.summary()
 
@@ -71,12 +73,11 @@ class RandomEnsemble(Classifier):
 
         # TODO: docstring
 
-        x_train_projected = compute_random_projections(x_train, n_proj=self.n_proj, dim_proj=self.dim_proj)
+        x_train_projected = compute_random_projections(x_train, n_proj=self.n_proj, size_proj=self.size_proj)
 
         # TODO: indexing problem here
-        classifier = KerasClassifier((MIN, MAX), model=self.model)
-        exit()
-        #classifier = KerasClassifier(model=self.model, batch_size=batch_size, nb_epochs=epochs)
+        classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=True)
+        classifier = AdversarialClassifier(model=self.model, use_logits=True)
         classifier.fit(x_train_projected, y_train, batch_size=batch_size, nb_epochs=epochs)
 
         return classifier
@@ -91,7 +92,7 @@ def main():
     x_train, y_train, x_test, y_test = x_train[:100], y_train[:100], x_test[:100], y_test[:100]
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=N_PROJECTIONS, dim_proj=DIM_PROJECTION)
+                           n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
     #classifier = model.load_classifier(TRAINED_MODEL)

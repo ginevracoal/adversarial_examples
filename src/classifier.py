@@ -2,24 +2,23 @@ import numpy as np
 import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
-#from keras.wrappers.scikit_learn import KerasClassifier
 from art.attacks import FastGradientMethod
 from utils import *
 
-#TODO: unittest
 
 TRAINED_MODELS = "../trained_models/"
 
 
-class Classifier:
+class AdversarialClassifier:
     """
     Keras Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes):
+    def __init__(self, input_shape, num_classes, regularizer=None):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.model = self._set_layers()
+        self.regularizer = regularizer
 
     def _set_layers(self):
         """
@@ -38,12 +37,8 @@ class Classifier:
         :param epochs:
         :return: trained classifier
         """
-        classifier = KerasClassifier((MIN, MAX), model=self.model)
+        classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
         classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
-
-        #classifier = KerasClassifier(model=self.model, batch_size=batch_size, nb_epochs=epochs)
-        #classifier.fit(x_train, y_train)
-
         return classifier
 
     def evaluate_test(self, classifier, x_test, y_test):
@@ -96,9 +91,6 @@ class Classifier:
     def load_classifier(self, relative_path):
         """ Loads a pretrained classifier. """
         # load a trained model
-        classifier_model = load_model(TRAINED_MODELS+relative_path)
-        classifier = KerasClassifier((MIN, MAX), classifier_model, use_logits=False)
-
-        #classifier = KerasClassifier(classifier_model)
-
+        trained_model = load_model(TRAINED_MODELS+relative_path)
+        classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier

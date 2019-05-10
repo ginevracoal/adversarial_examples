@@ -6,6 +6,8 @@ from utils import *
 
 BATCH_SIZE = 20
 EPOCHS = 5
+N_PROJECTIONS = 3
+SIZE_PROJECTION = 4
 
 
 class Test(unittest.TestCase):
@@ -19,7 +21,7 @@ class Test(unittest.TestCase):
         x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
         return x_train[:size], y_train[:size], x_test[:size], y_test[:size], input_shape, num_classes
 
-    def test_baseline_training(self):
+    def test_baseline(self):
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
 
         # model training
@@ -33,11 +35,10 @@ class Test(unittest.TestCase):
         convNet.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
     def test_random_ensemble(self):
-        model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
                                n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-
         exit()
         model.evaluate_test(classifier, self.x_test, self.y_test)
         model.evaluate_adversaries(classifier, self.x_test, self.y_test)
