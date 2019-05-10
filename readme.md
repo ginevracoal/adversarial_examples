@@ -1,5 +1,5 @@
-# On the robustness of adversarial examples
-## Master thesis project 
+## On the robustness to adversarial examples
+### Master thesis project 
 
 Implementations of robust classifiers in the context of adversarial examples.
 The proposed methods are based on the computation of random projections and the use of `Keras` and 
@@ -10,7 +10,7 @@ Models:
 - The model `random_ensemble` computes n_proj random projections of the training data in a lower dimensional space,
 then classifies the original high dimensional data with a voting technique on the single classifications.
 
-## Folders structure
+### Folders structure
 
 - data
 - notebooks
