@@ -63,6 +63,10 @@ class Classifier:
         :param classifier: trained classifier
         :param x_test: test data
         :param y_test: test labels
+        :return:
+        x_test_pred: test set predictions
+        x_test_adv: adversarial perturbations of test data
+        x_test_adv_pred: adversarial test set predictions
         """
         x_test_pred = np.argmax(classifier.predict(x_test), axis=1)
         correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
@@ -82,6 +86,8 @@ class Classifier:
         print("\nAdversarial test data:")
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
+
+        return x_test_pred, x_test_adv, x_test_adv_pred
 
     def save_model(self, classifier, model_name):
         """ Saves the trained model and adds the current datetime to the filename. """
