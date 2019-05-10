@@ -4,7 +4,6 @@ import keras
 from keras import backend as K
 from keras.datasets import mnist
 
-
 NUM_CLASSES = 10
 IMG_COLS = 28
 IMG_ROWS = 28
@@ -37,6 +36,7 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     x_test /= 255
     print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape,)
 
+
     # convert class vectors to binary class matrices
     y_train = keras.utils.to_categorical(y_train, NUM_CLASSES)
     y_test = keras.utils.to_categorical(y_test, NUM_CLASSES)
@@ -44,32 +44,61 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     return x_train, y_train, x_test, y_test, input_shape, NUM_CLASSES
 
 
-def compute_random_projections(input_data, n_proj, dim_proj=None):
+def compute_random_projections(input_data, n_proj, size_proj=None):
     """ Computes m projections of the whole input data over k randomly chosen directions.
 
     :param input_data: full dimension input data
     :param n_proj: number of projections
-    :param dim_proj: dimension of a projection
+    :param size_proj: size of a projection
     :param random_state: pseudo random number generator
     :return: array containing m random projections
     """
     print("\nComputing random projections.")
 
     # TODO: non funziona il metodo di johns-lind
-    if dim_proj is None:
-        dim_proj = 'auto'
+    if size_proj is None:
+        size_proj = 'auto'
 
     # TODO: dim proj deve essere inferiore a 28 e superiore a (vedi struttura layers)
 
     flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
     print("Input shape: ", input_data.shape)
-    #print(flat_images.shape)
 
-    projection = GaussianRandomProjection(n_components=dim_proj*dim_proj)
-    projected_data = [projection.fit_transform(flat_images) for i in range(n_proj)]
-    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], dim_proj, dim_proj, 1)
+    project = GaussianRandomProjection(n_components=size_proj*size_proj)
 
-    print("Projections shape: ", projected_data.shape)
+    # list of n_proj arrays
+    #projected_data = [np.array(project.fit_transform(flat_images).reshape(input_data.shape[0], size_proj, size_proj, 1)) for i in range(n_proj)]
+    #projected_data = List(projected_data, dtype=type(projected_data[0][0, 0, 0, 0]))
+
+    # array of n_proj arrays
+    #projected_data = [[project.fit_transform(image) for image in flat_images].reshape(size_proj, size_proj, 1) for i in range(n_proj)]
+    #print(projected_data.shape)
+
+    projected_data = [project.fit_transform(flat_images) for i in range(n_proj)]
+    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
+    #projected_data = np.ndarray(projected_data)
+
+    print("Output shape:", projected_data.shape)
+    print("->", len(projected_data), "random projections of", projected_data.shape[1], "images whose shape is", projected_data.shape[2:])
 
     return projected_data
 
+
+class List(list):
+    """
+    A subclass of list that can accept additional attributes.
+    Should be able to be used just like a regular list.
+    """
+    def __new__(self, *args, **kwargs):
+        return super(List, self).__new__(self, args, kwargs)
+
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1 and hasattr(args[0], '__iter__'):
+            list.__init__(self, args[0])
+        else:
+            list.__init__(self, args)
+        self.__dict__.update(kwargs)
+
+    def __call__(self, **kwargs):
+        self.__dict__.update(kwargs)
+        return self
