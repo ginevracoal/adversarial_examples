@@ -19,7 +19,6 @@ class AdversarialClassifier:
         self.num_classes = num_classes
         self.model = self._set_layers()
         self.regularizer = regularizer
-        self.classifier = None
 
     def _set_layers(self):
         """
@@ -40,12 +39,12 @@ class AdversarialClassifier:
         """
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
         classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
-        self.classifier = classifier
+
         return classifier
 
     def predict(self, classifier, x_test):
-        #return self.classifier.predict(x_test)
         return classifier.predict(x_test)
+        #return classifier.predict(x_test)
 
     def evaluate_test(self, classifier, x_test, y_test):
         """
@@ -55,6 +54,7 @@ class AdversarialClassifier:
         :param y_test: test labels
         """
         preds = np.argmax(self.predict(classifier, x_test), axis=1)
+
         acc = np.sum(preds == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("\nTest accuracy: %.2f%%" % (acc * 100))
 
@@ -70,8 +70,8 @@ class AdversarialClassifier:
         x_test_adv_pred: adversarial test set predictions
         """
         # TODO: implementare tutto con questa sintassi, che è quella corretta
-        #x_test_pred = np.argmax(self.classifier.predict(x_test), axis=1)
         x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+
         correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
 
         print("\nOriginal test data:")
@@ -83,7 +83,7 @@ class AdversarialClassifier:
         x_test_adv = attacker.generate(x_test)
 
         # evaluate the performance
-        x_test_adv_pred = np.argmax(classifier.predict(x_test_adv), axis=1)
+        x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
         nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
 
         print("\nAdversarial test data:")
@@ -101,5 +101,5 @@ class AdversarialClassifier:
         # load a trained model
         trained_model = load_model(TRAINED_MODELS+relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
-        #self.classifier = classifier
+        self.classifier = classifier
         return classifier
