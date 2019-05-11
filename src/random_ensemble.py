@@ -3,15 +3,15 @@ import numpy as np
 from keras.layers import Average
 from art.classifiers import KerasClassifier
 from keras.models import Model, Input
+from art.attacks import FastGradientMethod
 from utils import *
-from classifier import AdversarialClassifier
 from baseline_convnet import BaselineConvnet
-from scipy import stats
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+
 
 SAVE_MODEL = False
 MODEL_NAME = "random_ensemble"
-# TRAINED_MODEL_PATH =
+TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
+
 
 BATCH_SIZE = 128
 EPOCHS = 12
@@ -33,6 +33,7 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projector = None
+        self.classifier = None
 
     def buggy_set_layers(self):
         # TODO: delete this
@@ -108,6 +109,30 @@ class RandomEnsemble(BaselineConvnet):
         classifier = [convNet.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
                       range(len(x_train_projected))]
 
+        self.classifier = classifier
+        return classifier
+
+    def train(self, x_train, y_train, batch_size, epochs):
+        """
+        Trains the baseline model over n_proj random projections of the training data
+
+        :param x_train:
+        :param y_train:
+        :param batch_size:
+        :param epochs:
+        :return: list of n_proj trained models
+        """
+
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
+        x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
+
+        # use the same model for all trainings
+        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+
+        # train n_proj classifiers on different training data
+        classifier = [convNet.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
+                      range(len(x_train_projected))]
+
         return classifier
 
     def predict(self, classifier, x_test):
@@ -135,7 +160,7 @@ class RandomEnsemble(BaselineConvnet):
         :param y_test: test labels
         """
         preds = self.predict(classifier, x_test)
-       # preds = self._ensemble_classifier(classifier, x_test_projected)
+        # preds = self._ensemble_classifier(classifier, x_test_projected)
         # TODO: refactor this
         # numeric test
         y_test = np.argmax(y_test, axis=1)
@@ -146,8 +171,40 @@ class RandomEnsemble(BaselineConvnet):
         print("\nTest accuracy: %.2f%%" % (acc * 100))
 
     def evaluate_adversaries(self, classifier, x_test, y_test):
-        # TODO: implement this
-        pass
+        """
+        Evaluates the trained model against FGSM and prints the number of misclassifications.
+        :param classifier: trained classifier
+        :param x_test: test data
+        :param y_test: test labels
+        :return:
+        x_test_pred: test set predictions
+        x_test_adv: adversarial perturbations of test data
+        x_test_adv_pred: adversarial test set predictions
+        """
+        # TODO: implementare tutto con questa sintassi, che è quella corretta
+        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+
+        correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
+
+        print("\nOriginal test data:")
+        print("Correctly classified: {}".format(correct_preds))
+        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
+
+        # generate adversarial examples using FGSM on the baseline model
+        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
+        attacker = FastGradientMethod(baseline_classifier, eps=0.5)
+        x_test_adv = attacker.generate(x_test)
+
+        # evaluate the performance
+        x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
+        nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
+
+        print("\nAdversarial test data:")
+        print("Correctly classified: {}".format(nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
+
+        return x_test_pred, x_test_adv, x_test_adv_pred
 
 
 def main():
@@ -168,7 +225,7 @@ def main():
     model.evaluate_test(classifier, x_test, y_test)
 
     #TODO: evaluate adversaries
-    #model.evaluate_adversaries(classifier, x_test, y_test)
+    model.evaluate_adversaries(classifier, x_test, y_test)
 
     if SAVE_MODEL is True:
         model.save_model(classifier=classifier, model_name=MODEL_NAME)
