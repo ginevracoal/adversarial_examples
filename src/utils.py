@@ -14,7 +14,8 @@ MAX = 255
 def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     """Preprocess mnist dataset for keras training
 
-    :param img_rows, img_cols: input image dimensions
+    :param img_rows: input image n. rows
+    :param img_cols: input image n. cols
     """
     print("\nLoading mnist.")
 
@@ -44,9 +45,10 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     return x_train, y_train, x_test, y_test, input_shape, NUM_CLASSES
 
 
-def compute_random_projections(input_data, n_proj, size_proj=None):
-    """ Computes m projections of the whole input data over k randomly chosen directions.
+def compute_projections(input_data, projector, n_proj, size_proj=None):
 
+    """ Computes m projections of the whole input data over k randomly chosen directions.
+    # TODO: change docstring
     :param input_data: full dimension input data
     :param n_proj: number of projections
     :param size_proj: size of a projection
@@ -64,22 +66,12 @@ def compute_random_projections(input_data, n_proj, size_proj=None):
     flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
     print("Input shape: ", input_data.shape)
 
-    project = GaussianRandomProjection(n_components=size_proj*size_proj)
-
-    # list of n_proj arrays
-    #projected_data = [np.array(project.fit_transform(flat_images).reshape(input_data.shape[0], size_proj, size_proj, 1)) for i in range(n_proj)]
-    #projected_data = List(projected_data, dtype=type(projected_data[0][0, 0, 0, 0]))
-
-    # array of n_proj arrays
-    #projected_data = [[project.fit_transform(image) for image in flat_images].reshape(size_proj, size_proj, 1) for i in range(n_proj)]
-    #print(projected_data.shape)
-
-    projected_data = [project.fit_transform(flat_images) for i in range(n_proj)]
+    projected_data = [projector.fit_transform(flat_images) for i in range(n_proj)]
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
-    #projected_data = np.ndarray(projected_data)
 
     print("Output shape:", projected_data.shape)
-    print("->", len(projected_data), "random projections of", projected_data.shape[1], "images whose shape is", projected_data.shape[2:])
+    print("->", len(projected_data), "random projections of", projected_data.shape[1], "images whose shape is",
+          projected_data.shape[2:])
 
     return projected_data
 
