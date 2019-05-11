@@ -1,15 +1,13 @@
 import keras
-from keras.callbacks import History
-from keras.engine import training
-from keras.layers import Average, Concatenate
-#from art.classifiers import KerasClassifier
-#from keras.wrappers.scikit_learn import KerasClassifier
+import numpy as np
+from keras.layers import Average
+from art.classifiers import KerasClassifier
 from keras.models import Model, Input
-from tensorflow.python.framework.ops import Tensor
-from typing import Tuple, List
 from utils import *
 from classifier import AdversarialClassifier
 from baseline_convnet import BaselineConvnet
+from scipy import stats
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 
 SAVE_MODEL = False
 MODEL_NAME = "random_ensemble"
@@ -21,20 +19,23 @@ N_PROJECTIONS = 10
 SIZE_PROJECTION = 8
 
 
-class RandomEnsemble(AdversarialClassifier):
+class RandomEnsemble(BaselineConvnet):
     """
     Classifies n_proj random projections of the training data in a lower dimensional space (whose dimension is
     dim_proj=size_proj^2), then classifies the original high dimensional data with a voting technique.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, *args, **kwargs):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj):
+        """
+        Extends BaselineConvnet initializer with informations about the projections.
+        """
+        super(BaselineConvnet, self).__init__(input_shape, num_classes)
+        self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
-        self.num_classes = num_classes
-        #super(RandomEnsemble, self).__init__(input_shape, num_classes, *args, **kwargs)
-        self.input_shape = (size_proj, size_proj, 1)
-        self.model = self._set_layers()
+        self.projector = None
 
-    def _set_layers(self):
+    def buggy_set_layers(self):
+        # TODO: delete this
         """
         Using functional API
         :return:
@@ -59,8 +60,10 @@ class RandomEnsemble(AdversarialClassifier):
 
         return model
 
-    def train(self, x_train, y_train, batch_size, epochs):
+    def buggy_train(self, x_train, y_train, batch_size, epochs):
+        # TODO: delete this
         """
+        Trains the model defined by _set_layers over random projections of the training data
 
         :param x_train: original training data
         :param y_train: training labels
@@ -71,16 +74,80 @@ class RandomEnsemble(AdversarialClassifier):
         :return: trained classifier
         """
 
-        # TODO: docstring
-
-        x_train_projected = compute_random_projections(x_train, n_proj=self.n_proj, size_proj=self.size_proj)
+        x_train_projected = compute_projections(x_train, n_proj=self.n_proj, size_proj=self.size_proj)
 
         # TODO: indexing problem here
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=True)
-        classifier = AdversarialClassifier(model=self.model, use_logits=True)
         classifier.fit(x_train_projected, y_train, batch_size=batch_size, nb_epochs=epochs)
 
         return classifier
+
+    def _ensemble_classifier(self, classifiers, projected_data):
+        predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
+        summed_predictions = np.sum(predictions, axis=0)
+        return summed_predictions
+
+    def train(self, x_train, y_train, batch_size, epochs):
+        """
+        Trains the baseline model over n_proj random projections of the training data
+
+        :param x_train:
+        :param y_train:
+        :param batch_size:
+        :param epochs:
+        :return: list of n_proj trained models
+        """
+
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
+        x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
+
+        # use the same model for all trainings
+        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+
+        # train n_proj classifiers on different training data
+        classifier = [convNet.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
+                      range(len(x_train_projected))]
+
+        return classifier
+
+    def predict(self, classifier, x_test):
+        """
+        Compute the average prediction over the trained models.
+
+        :param classifier: list of trained classifiers over different projections
+        :param x_test: list of projected test data
+        :return:
+        """
+        #x_test_projected = compute_random_projections(x_test, n_proj=self.n_proj, size_proj=self.size_proj)
+        # TODO: raise error if there is no projector
+
+        x_test_projected = compute_projections(x_test, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
+
+        predictions = self._ensemble_classifier(classifier, x_test_projected)
+
+        return predictions
+
+    def _evaluate_test(self, classifier, x_test, y_test):
+        """
+        Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
+        :param classifier: trained classifier
+        :param x_test: test data
+        :param y_test: test labels
+        """
+        preds = self.predict(classifier, x_test)
+       # preds = self._ensemble_classifier(classifier, x_test_projected)
+        # TODO: refactor this
+        # numeric test
+        y_test = np.argmax(y_test, axis=1)
+
+        for i in range(len(y_test)):
+            print(preds[i], y_test[i])
+        acc = np.sum(preds == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        print("\nTest accuracy: %.2f%%" % (acc * 100))
+
+    def evaluate_adversaries(self, classifier, x_test, y_test):
+        # TODO: implement this
+        pass
 
 
 def main():
@@ -94,12 +161,14 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
     #classifier = model.load_classifier(TRAINED_MODEL)
+    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    exit()
     model.evaluate_test(classifier, x_test, y_test)
-    model.evaluate_adversaries(classifier, x_test, y_test)
+
+    #TODO: evaluate adversaries
+    #model.evaluate_adversaries(classifier, x_test, y_test)
 
     if SAVE_MODEL is True:
         model.save_model(classifier=classifier, model_name=MODEL_NAME)
