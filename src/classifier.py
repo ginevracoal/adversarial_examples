@@ -37,6 +37,9 @@ class AdversarialClassifier:
         :param epochs:
         :return: trained classifier
         """
+        print("\nTraining infos:\nbatch_size = ", batch_size, "\nepochs =", epochs,
+              "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
+
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
         classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
 
@@ -44,7 +47,6 @@ class AdversarialClassifier:
 
     def predict(self, classifier, x_test):
         return classifier.predict(x_test)
-        #return classifier.predict(x_test)
 
     def evaluate_test(self, classifier, x_test, y_test):
         """
@@ -53,6 +55,8 @@ class AdversarialClassifier:
         :param x_test: test data
         :param y_test: test labels
         """
+        print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
+
         preds = np.argmax(self.predict(classifier, x_test), axis=1)
 
         acc = np.sum(preds == np.argmax(y_test, axis=1)) / y_test.shape[0]

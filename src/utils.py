@@ -1,12 +1,10 @@
 import numpy as np
-from sklearn.random_projection import GaussianRandomProjection
 import keras
 from keras import backend as K
 from keras.datasets import mnist
 
-NUM_CLASSES = 10
-IMG_COLS = 28
 IMG_ROWS = 28
+IMG_COLS = 28
 MIN = 0
 MAX = 255
 
@@ -37,24 +35,31 @@ def preprocess_mnist(img_rows=IMG_ROWS, img_cols=IMG_COLS):
     x_test /= 255
     print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape,)
 
-
     # convert class vectors to binary class matrices
-    y_train = keras.utils.to_categorical(y_train, NUM_CLASSES)
-    y_test = keras.utils.to_categorical(y_test, NUM_CLASSES)
+    y_train = keras.utils.to_categorical(y_train, 10)
+    y_test = keras.utils.to_categorical(y_test, 10)
 
-    return x_train, y_train, x_test, y_test, input_shape, NUM_CLASSES
+    return x_train, y_train, x_test, y_test, input_shape, 10
 
 
 def compute_projections(input_data, projector, n_proj, size_proj=None):
 
-    """ Computes m projections of the whole input data over k randomly chosen directions.
-    # TODO: change docstring
+    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
+    given projector function `projector`.
+
     :param input_data: full dimension input data
+    :type input_data: numpy array
+    :param projector: projector function
+    :type projector: GaussianRandomProjection object
     :param n_proj: number of projections
+    :type n_proj: int
     :param size_proj: size of a projection
+    :type size_proj: int
     :param random_state: pseudo random number generator
+    :type random_state: int
     :return: array containing m random projections
     """
+
     print("\nComputing random projections.")
 
     # TODO: non funziona il metodo di johns-lind
@@ -69,14 +74,21 @@ def compute_projections(input_data, projector, n_proj, size_proj=None):
     projected_data = [projector.fit_transform(flat_images) for i in range(n_proj)]
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
 
-    print("Output shape:", projected_data.shape)
-    print("->", len(projected_data), "random projections of", projected_data.shape[1], "images whose shape is",
-          projected_data.shape[2:])
+    print("Output shape:", projected_data.shape, "->", len(projected_data), "random projections of",
+          projected_data.shape[1], "images whose shape is", projected_data.shape[2:])
+
+    # print(predictions.shape, summed.shape, argmax_predictions.shape) # (3,100,10), (100,10), 100
 
     return projected_data
 
 
+##############
+# DEPRECATED #
+##############
+
+
 class List(list):
+    # TODO: remove this
     """
     A subclass of list that can accept additional attributes.
     Should be able to be used just like a regular list.

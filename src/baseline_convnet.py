@@ -1,7 +1,6 @@
 import keras
 from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Flatten, Input
-from keras.layers import Conv2D, MaxPooling2D
+from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
 from classifier import AdversarialClassifier
 
@@ -45,8 +44,8 @@ def main():
 
     convNet = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
 
-    classifier = convNet.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    #classifier = convNet.load_classifier(TRAINED_MODEL)
+    #classifier = convNet.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    classifier = convNet.load_classifier(TRAINED_MODEL)
 
     convNet.evaluate_test(classifier, x_test, y_test)
     convNet.evaluate_adversaries(classifier, x_test, y_test)
