@@ -5,7 +5,7 @@ from utils import *
 
 
 BATCH_SIZE = 20
-EPOCHS = 5
+EPOCHS = 3
 N_PROJECTIONS = 3
 SIZE_PROJECTION = 8
 
@@ -41,15 +41,6 @@ class Test(unittest.TestCase):
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
         model.evaluate_test(classifier, self.x_test, self.y_test)
         model.evaluate_adversaries(classifier, self.x_test, self.y_test)
-
-    def test_projector_shapes(self):
-        # TODO: aggiungere test sulle dimensioni calcolate da questa funzione
-        # print(predictions.shape, summed.shape, argmax_predictions.shape) # (3,100,10), (100,10), 100
-
-        pass
-
-    def test_no_projector_available(self):
-        pass
 
 
 if __name__ == '__main__':
