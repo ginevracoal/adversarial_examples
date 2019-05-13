@@ -16,9 +16,9 @@ DATETIME=$(date +%Y%m%d%H%M)
 ## local
 source ~/virtualenvs/venv/bin/activate
 
-#################
-# model testing #
-#################
+##############
+# run script #
+##############
 
 mkdir -p "$RESULTS/$DATE/"
 python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${MODEL_NAME}_${DATETIME}"_out.txt
