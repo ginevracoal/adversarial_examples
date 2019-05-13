@@ -7,6 +7,8 @@ from utils import *
 
 
 TRAINED_MODELS = "../trained_models/"
+MIN = 0
+MAX = 255
 
 
 class AdversarialClassifier:
@@ -18,6 +20,7 @@ class AdversarialClassifier:
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.model = self._set_layers()
+        self.trained = False
         self.regularizer = regularizer
 
     def _set_layers(self):
@@ -27,7 +30,7 @@ class AdversarialClassifier:
         """
         raise NotImplementedError
 
-    def train(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train, batch_size, epochs, save_model=False):
         """
         Trains the model using art.KerasClassifier wrapper, which then allows to easily train adversaries
         using the same package.
@@ -43,6 +46,7 @@ class AdversarialClassifier:
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
         classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
 
+        self.trained = True
         return classifier
 
     def predict(self, classifier, x_test):
@@ -98,12 +102,12 @@ class AdversarialClassifier:
 
     def save_model(self, classifier, model_name):
         """ Saves the trained model and adds the current datetime to the filename. """
-        classifier.save(filename=model_name+"_"+time.strftime('%Y%m%d%H%M%S'), path=TRAINED_MODELS)
+        if self.trained:
+            classifier.save(filename=model_name+".h5", path=TRAINED_MODELS+time.strftime('%Y%m%d'))
 
     def load_classifier(self, relative_path):
         """ Loads a pretrained classifier. """
         # load a trained model
         trained_model = load_model(TRAINED_MODELS+relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
-        self.classifier = classifier
         return classifier
