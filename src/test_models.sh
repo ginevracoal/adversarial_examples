@@ -4,8 +4,6 @@
 # settings #
 ############
 
-# execute this script from the folder where you want to save the logs!
-
 MODEL_NAME="random_ensemble"
 RESULTS="../trained_models/"
 DATE=$(date +%Y%m%d)
