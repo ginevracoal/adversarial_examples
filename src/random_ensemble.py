@@ -5,18 +5,25 @@ from art.classifiers import KerasClassifier
 from keras.models import Model, Input
 from art.attacks import FastGradientMethod
 from utils import *
+import time
 from baseline_convnet import BaselineConvnet
 from sklearn.random_projection import GaussianRandomProjection
+from keras.models import load_model
+
 
 SAVE_MODEL = True
 MODEL_NAME = "random_ensemble"
 TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
-# TRAINED_MODEL = ""
+TRAINED_MODELS = "../trained_models/"
 
 BATCH_SIZE = 128
 EPOCHS = 12
 N_PROJECTIONS = 10
 SIZE_PROJECTION = 8
+SEED = 123
+
+MIN = 0
+MAX = 255
 
 
 class RandomEnsemble(BaselineConvnet):
@@ -37,7 +44,7 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projector = None
-        self.classifier = None
+        self.trained = False
 
     def train(self, x_train, y_train, batch_size, epochs):
         """
@@ -50,7 +57,8 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of n_proj trained models
         """
 
-        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
+                                                  random_state=SEED)
         #projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
         x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
 
@@ -61,7 +69,8 @@ class RandomEnsemble(BaselineConvnet):
         classifier = [convNet.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
                       range(len(x_train_projected))]
 
-        self.classifier = classifier
+        self.trained = True
+
         return classifier
 
     def _ensemble_classifier(self, classifiers, projected_test_data):
@@ -180,7 +189,32 @@ class RandomEnsemble(BaselineConvnet):
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=True)
         classifier.fit(x_train_projected, y_train, batch_size=batch_size, nb_epochs=epochs)
 
+        self.trained = True
+
         return classifier
+
+    def save_model(self, classifier, model_name):
+        if self.trained:
+            self.projector
+
+            for i, proj_classifier in enumerate(classifier):
+                proj_classifier.save(filename=model_name+"_"+str(i)+".h5",
+                                     path=TRAINED_MODELS+time.strftime('%Y%m%d'))
+
+    def load_classifier(self, relative_path, model_name):
+        """ Loads a pretrained classifier. """
+        # load a trained model
+        classifiers = []
+        for i in range(self.n_proj):
+            trained_model = load_model(TRAINED_MODELS + relative_path + model_name+"_"+str(i)+".h5")
+            classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
+            classifiers.append(classifier)
+
+        # build a random projector with the same original seed
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
+                                                  random_state=SEED)
+
+        return classifiers
 
 
 def main():
@@ -194,8 +228,8 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
+    #classifier = model.load_classifier(relative_path=MODEL_NAME+"/", model_name=MODEL_NAME)
     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    #classifier = model.load_classifier(TRAINED_MODEL)
 
     model.evaluate_test(classifier, x_test, y_test)
     model.evaluate_adversaries(classifier, x_test, y_test)
