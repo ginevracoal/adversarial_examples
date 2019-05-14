@@ -24,4 +24,4 @@ mkdir -p "$RESULTS/$DATE/"
 python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${MODEL_NAME}_${TIME}"_out.txt
 
 ## remove the unnecessary infos from output text
-#sed -n '/ETA:/!p' "results/${MODEL_NAME}_out.txt" > "results/${MODEL_NAME}_out_clean.txt"
+sed -n '/ETA:/!p' "$RESULTS/$DATE/${MODEL_NAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${MODEL_NAME}_${TIME}_clean.txt"
