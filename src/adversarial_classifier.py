@@ -1,4 +1,5 @@
-import numpy as np
+# -*- coding: utf-8 -*-
+
 import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
@@ -11,17 +12,16 @@ MIN = 0
 MAX = 255
 
 
-class AdversarialClassifier:
+class AdversarialClassifier(object):
     """
     Keras Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, regularizer=None):
+    def __init__(self, input_shape, num_classes):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.model = self._set_layers()
         self.trained = False
-        self.regularizer = regularizer
 
     def _set_layers(self):
         """
@@ -30,7 +30,7 @@ class AdversarialClassifier:
         """
         raise NotImplementedError
 
-    def train(self, x_train, y_train, batch_size, epochs, save_model=False):
+    def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the model using art.KerasClassifier wrapper, which then allows to easily train adversaries
         using the same package.
