@@ -39,7 +39,7 @@ class RandomEnsemble(BaselineConvnet):
         :param n_proj: number of random projections
         :param size_proj: size of a random projection
         """
-        super(BaselineConvnet, self).__init__(input_shape, num_classes)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes)
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
@@ -48,7 +48,8 @@ class RandomEnsemble(BaselineConvnet):
 
     def train(self, x_train, y_train, batch_size, epochs):
         """
-        Trains the baseline model over n_proj random projections of the training data
+        Trains the baseline model over `n_proj` random projections of the training data whose input shape is
+        `(size_proj, size_proj, 1)`.
 
         :param x_train:
         :param y_train:
@@ -57,6 +58,7 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of n_proj trained models
         """
 
+        print("\nGaussianRandomProjector seed = ", SEED)
         self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
                                                   random_state=SEED)
         #projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
@@ -115,12 +117,9 @@ class RandomEnsemble(BaselineConvnet):
         x_test_adv: adversarial perturbations of test data
         x_test_adv_pred: adversarial test set predictions
         """
-        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
-        correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
 
-        print("\nOriginal test data:")
-        print("Correctly classified: {}".format(correct_preds))
-        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
+        #x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+        #correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
 
         # generate adversarial examples using FGSM on the baseline model
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
@@ -128,7 +127,7 @@ class RandomEnsemble(BaselineConvnet):
         attacker = FastGradientMethod(baseline_classifier, eps=0.5)
         x_test_adv = attacker.generate(x_test)
 
-        # evaluate the performance
+        # evaluate the performance on the list of trained classifiers
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
         nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
 
@@ -136,7 +135,36 @@ class RandomEnsemble(BaselineConvnet):
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
 
-        return x_test_pred, x_test_adv, x_test_adv_pred
+        acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        print("Adversarial accuracy: %.2f%%" % (acc * 100))
+
+        return x_test_adv, x_test_adv_pred
+
+    def save_model(self, classifier, model_name):
+        if self.trained:
+            for i, proj_classifier in enumerate(classifier):
+                proj_classifier.save(filename=model_name + "_" + str(i) + ".h5",
+                                     path=TRAINED_MODELS + time.strftime('%Y-%m-%d'))
+
+    def load_classifier(self, relative_path, model_name=MODEL_NAME):
+        """
+        Loads a pretrained classifier and sets the projector with the training seed.
+        :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
+        :param model_name: name of the model used when files were saved
+        :return: list of trained classifiers
+        """
+        # load a trained model
+        classifiers = []
+        for i in range(self.n_proj):
+            trained_model = load_model(relative_path + model_name + "_" + str(i) + ".h5")
+            classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
+            classifiers.append(classifier)
+
+        # build a random projector with the same original seed
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
+                                                  random_state=SEED)
+
+        return classifiers
 
     ##############
     # DEPRECATED #
@@ -160,7 +188,7 @@ class RandomEnsemble(BaselineConvnet):
         # final prediction as an average of the outputs
         prediction = Average()(outputs)
 
-        model = Model(inputs=inputs, outputs=prediction, name='random_ensemble')
+        model = Model(inputs=inputs, outputs=prediction, name=MODEL_NAME)
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
 
@@ -193,42 +221,15 @@ class RandomEnsemble(BaselineConvnet):
 
         return classifier
 
-    def save_model(self, classifier, model_name):
-        if self.trained:
-            self.projector
-
-            for i, proj_classifier in enumerate(classifier):
-                proj_classifier.save(filename=model_name+"_"+str(i)+".h5",
-                                     path=TRAINED_MODELS+time.strftime('%Y%m%d'))
-
-    def load_classifier(self, relative_path, model_name):
-        """ Loads a pretrained classifier. """
-        # load a trained model
-        classifiers = []
-        for i in range(self.n_proj):
-            trained_model = load_model(TRAINED_MODELS + relative_path + model_name+"_"+str(i)+".h5")
-            classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
-            classifiers.append(classifier)
-
-        # build a random projector with the same original seed
-        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
-                                                  random_state=SEED)
-
-        return classifiers
-
 
 def main():
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
 
-    # take a subset
-    print("\nTaking just the first 100 images.")
-    x_train, y_train, x_test, y_test = x_train[:100], y_train[:100], x_test[:100], y_test[:100]
-
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    #classifier = model.load_classifier(relative_path=MODEL_NAME+"/", model_name=MODEL_NAME)
+    #classifier = model.load_classifier(relative_path=MODEL_NAME+"/")
     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     model.evaluate_test(classifier, x_test, y_test)
