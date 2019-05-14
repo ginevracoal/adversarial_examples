@@ -1,13 +1,17 @@
 import unittest
+from utils import *
 from baseline_convnet import BaselineConvnet
 from random_ensemble import RandomEnsemble
-from utils import *
+import time
+from random_adversarial_projection import RandomAdversarialProjection
 
 
 BATCH_SIZE = 20
 EPOCHS = 3
 N_PROJECTIONS = 3
 SIZE_PROJECTION = 8
+
+TRAINED_MODELS = "../trained_models/"
 
 
 class Test(unittest.TestCase):
@@ -30,7 +34,7 @@ class Test(unittest.TestCase):
         convNet.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
         # model loading
-        classifier = convNet.load_classifier("IBM-art/mnist_cnn_original.h5")
+        classifier = convNet.load_classifier(relative_path="IBM-art/mnist_cnn_original.h5")
         convNet.evaluate_test(classifier, self.x_test, self.y_test)
         convNet.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
@@ -38,9 +42,30 @@ class Test(unittest.TestCase):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
                                n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
+        # train
+        classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+        #TODO: questo va di schifo. Poi non sta usando la funzione predict che ho definito per la classe
+        model.evaluate_test(classifiers, self.x_test, self.y_test)
+        model.evaluate_adversaries(classifiers, self.x_test, self.y_test)
+
+        # save and load
+        model.save_model(classifier=classifiers, model_name="random_ensemble")
+        model.load_classifier(relative_path=TRAINED_MODELS+time.strftime('%Y-%m-%d')+"/")
+
+    """
+    def test_random_adversarial_projection(self):
+        model = RandomAdversarialProjection(input_shape=self.input_shape, num_classes=self.num_classes,
+                                            n_proj=1, size_proj=SIZE_PROJECTION)
+
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
         model.evaluate_test(classifier, self.x_test, self.y_test)
         model.evaluate_adversaries(classifier, self.x_test, self.y_test)
+
+        # classifier = model.load_classifier(TRAINED_MODEL)
+        model.evaluate_test(classifier, self.x_test, self.y_test)
+        model.evaluate_adversaries(classifier, self.x_test, self.y_test)
+    """
 
 
 if __name__ == '__main__':
