@@ -59,13 +59,21 @@ class AdversarialClassifier(object):
         :param classifier: trained classifier
         :param x_test: test data
         :param y_test: test labels
+        :return: x_test predictions
         """
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        preds = np.argmax(self.predict(classifier, x_test), axis=1)
+        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+        correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
 
-        acc = np.sum(preds == np.argmax(y_test, axis=1)) / y_test.shape[0]
-        print("\nTest accuracy: %.2f%%" % (acc * 100))
+        print("\nOriginal test data.")
+        print("Correctly classified: {}".format(correct_preds))
+        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
+
+        acc = np.sum(x_test_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        print("Test accuracy: %.2f%%" % (acc * 100))
+
+        return x_test_pred
 
     def evaluate_adversaries(self, classifier, x_test, y_test):
         """
@@ -80,13 +88,6 @@ class AdversarialClassifier(object):
         """
         self.classifier = classifier
 
-        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
-        correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
-
-        print("\nOriginal test data:")
-        print("Correctly classified: {}".format(correct_preds))
-        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
-
         # generate adversarial examples using FGSM
         attacker = FastGradientMethod(classifier, eps=0.5)
         x_test_adv = attacker.generate(x_test)
@@ -95,11 +96,15 @@ class AdversarialClassifier(object):
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
         nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
 
-        print("\nAdversarial test data:")
+        print("\nAdversarial test data.")
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
 
-        return x_test_pred, x_test_adv, x_test_adv_pred
+        acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        print("Adversarial accuracy: %.2f%%" % (acc * 100))
+        # TODO: use other measure to compute the results
+
+        return x_test_adv, x_test_adv_pred
 
     def save_model(self, classifier, model_name):
         """
