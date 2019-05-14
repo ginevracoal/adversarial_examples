@@ -39,6 +39,10 @@ class RandomEnsemble(BaselineConvnet):
         :param n_proj: number of random projections
         :param size_proj: size of a random projection
         """
+
+        if size_proj > input_shape[1]:
+            raise ValueError("The number of projections has to be lower than the image size.")
+
         super(RandomEnsemble, self).__init__(input_shape, num_classes)
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
