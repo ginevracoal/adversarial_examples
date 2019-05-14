@@ -22,6 +22,7 @@ class AdversarialClassifier(object):
         self.num_classes = num_classes
         self.model = self._set_layers()
         self.trained = False
+        self.classifier = None
 
     def _set_layers(self):
         """
@@ -77,9 +78,9 @@ class AdversarialClassifier(object):
         x_test_adv: adversarial perturbations of test data
         x_test_adv_pred: adversarial test set predictions
         """
-        # TODO: implementare tutto con questa sintassi, che è quella corretta
-        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+        self.classifier = classifier
 
+        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
         correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
 
         print("\nOriginal test data:")
@@ -101,12 +102,24 @@ class AdversarialClassifier(object):
         return x_test_pred, x_test_adv, x_test_adv_pred
 
     def save_model(self, classifier, model_name):
-        """ Saves the trained model and adds the current datetime to the filename. """
+        """
+        Saves the trained model and adds the current datetime to the filename.
+        Example of saved model: `trained_models/2019-05-20/baseline.h5`
+
+        :param classifier: trained classifier
+        :param model_name: name of the model
+        """
         if self.trained:
-            classifier.save(filename=model_name+".h5", path=TRAINED_MODELS+time.strftime('%Y%m%d'))
+            classifier.save(filename=model_name+".h5",  # "_"+time.strftime('%H:%M')+".h5",
+                            path=TRAINED_MODELS+time.strftime('%Y-%m-%d')+"/")
 
     def load_classifier(self, relative_path):
-        """ Loads a pretrained classifier. """
+        """
+        Loads a pretrained classifier.
+        :param relative_path: is the relative path w.r.t. trained_models folder, `2019-05-20/baseline.h5` in the example
+        from save_model()
+        returns: trained classifier
+        """
         # load a trained model
         trained_model = load_model(TRAINED_MODELS+relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
