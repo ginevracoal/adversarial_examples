@@ -10,16 +10,18 @@ from baseline_convnet import BaselineConvnet
 from keras.models import load_model
 from sklearn.random_projection import GaussianRandomProjection
 from utils import *
+import pickle as pkl
 
 
-SAVE_MODEL = True
+SAVE_MODEL = False
+TEST = False
 MODEL_NAME = "random_ensemble"
 TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
 TRAINED_MODELS = "../trained_models/"
 
 BATCH_SIZE = 128
 EPOCHS = 12
-N_PROJECTIONS = 10
+N_PROJECTIONS = 5
 SIZE_PROJECTION = 8
 SEED = 123
 
@@ -64,9 +66,7 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         print("\nGaussianRandomProjector seed = ", SEED)
-        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
-                                                  random_state=SEED)
-        #projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj)
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
         x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
 
         # use the same model for all trainings
@@ -110,7 +110,7 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def evaluate_adversaries(self, classifier, x_test, y_test):
+    def old_evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications. Here FGSM is applied to
         the baseline classifier.
@@ -123,15 +123,20 @@ class RandomEnsemble(BaselineConvnet):
         x_test_adv: adversarial perturbations of test data
         x_test_adv_pred: adversarial test set predictions
         """
-
-        #x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
-        #correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
-
-        # generate adversarial examples using FGSM on the baseline model
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
-        attacker = FastGradientMethod(baseline_classifier, eps=0.5)
-        x_test_adv = attacker.generate(x_test)
+
+        if method == 'fgsm':
+            print("\nAdversarial evaluation using FGSM method.")
+            attacker = FastGradientMethod(baseline_classifier, eps=0.5)
+            x_test_adv = attacker.generate(x_test)
+
+        elif method == 'deepfool':
+            print("\nAdversarial evaluation using DeepFool method.")
+            with open('../data/mnist_x_test_deepfool.pkl', 'rb') as f:
+                u = pkl._Unpickler(f)
+                u.encoding = 'latin1'
+                x_test_adv = u.load()
 
         # evaluate the performance on the list of trained classifiers
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
@@ -145,6 +150,13 @@ class RandomEnsemble(BaselineConvnet):
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
         return x_test_adv, x_test_adv_pred
+
+    def _generate_adversaries(self, classifier, x, method='fgsm', adversaries_path=None):
+        """ Adversaries are generated on the baseline classifier """
+        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
+        x_adv = convNet._generate_adversaries(baseline_classifier, x, method=method, adversaries_path=adversaries_path)
+        return x_adv
 
     def save_model(self, classifier, model_name):
         if self.trained:
@@ -176,11 +188,15 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    #classifier = model.load_classifier(relative_path=MODEL_NAME+"/")
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    classifier, projector = model.load_classifier(relative_path="../trained_models/random_ensemble/2019-05-14/")
 
     model.evaluate_test(classifier, x_test, y_test)
-    model.evaluate_adversaries(classifier, x_test, y_test)
+    x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
+
+    # bug
+    print(np.argwhere(np.isnan(x_test_adv)))
+    exit()
 
     if SAVE_MODEL is True:
         model.save_model(classifier=classifier, model_name=MODEL_NAME)

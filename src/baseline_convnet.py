@@ -41,16 +41,17 @@ class BaselineConvnet(AdversarialClassifier):
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        model.summary()
+        #model.summary()
         return model
 
-    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
+    def _evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
 
         if method == 'fgsm':
             print("\nAdversarial evaluation using FGSM method.")
             attacker = FastGradientMethod(classifier, eps=0.5)
             x_test_adv = attacker.generate(x_test)
         elif method == 'deepfool':
+            print("\nAdversarial evaluation using DeepFool method.")
             with open('../data/mnist_x_test_deepfool.pkl', 'rb') as f:
                 u = pkl._Unpickler(f)
                 u.encoding = 'latin1'
@@ -80,7 +81,8 @@ def main():
     classifier = convNet.load_classifier(relative_path=TRAINED_MODEL)
 
     convNet.evaluate_test(classifier, x_test, y_test)
-    x_test_adv, x_test_adv_pred = convNet.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
+    x_test_adv, x_test_adv_pred = convNet.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
+                                                               adversaries_path="../data/mnist_x_test_deepfool.pkl")
 
     if SAVE is True:
         #convNet.save_model(classifier=classifier, model_name=MODEL_NAME)
