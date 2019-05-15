@@ -23,7 +23,7 @@ class AdversarialClassifier(object):
         self.num_classes = num_classes
         self.model = self._set_layers()
         self.trained = False
-        self.classifier = None
+        #self.classifier = None
 
     def _set_layers(self):
         """
@@ -83,7 +83,7 @@ class AdversarialClassifier(object):
 
         return x_test_pred
 
-    def evaluate_adversaries(self, classifier, x_test, y_test):
+    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications.
         :param classifier: trained classifier
@@ -94,13 +94,19 @@ class AdversarialClassifier(object):
         x_test_adv: adversarial perturbations of test data
         x_test_adv_pred: adversarial test set predictions
         """
-        self.classifier = classifier
+        #self.classifier = classifier
 
-        # generate adversarial examples using FGSM
-        attacker = FastGradientMethod(classifier, eps=0.5)
-        x_test_adv = attacker.generate(x_test)
+        # generate adversarial examples on train and test sets
+        if method == 'fgsm':
+            print("\nAdversarial evaluation using FGSM method.")
+            attacker = FastGradientMethod(classifier, eps=0.5)
+            x_test_adv = attacker.generate(x_test)
+        elif method == 'deepfool':
+            print("\nAdversarial evaluation using DeepFool method.")
+            attacker = DeepFool(classifier)
+            x_test_adv = attacker.generate(x_test)
 
-        # evaluate the performance
+        # evaluate the performance on the adversarial test set
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
         nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
 
@@ -144,12 +150,12 @@ class AdversarialClassifier(object):
 
         # generate adversarial examples on train and test sets
         if method == 'fgsm':
-            print("Adversarial training using FGSM method.")
+            print("\nAdversarial training using FGSM method.")
             attacker = FastGradientMethod(classifier, eps=0.5)
             x_train_adv = attacker.generate(x_train)
             x_test_adv = attacker.generate(x_test)
         elif method == 'deepfool':
-            print("Adversarial training using DeepFool method.")
+            print("\nAdversarial training using DeepFool method.")
             attacker = DeepFool(classifier)
             x_train_adv = attacker.generate(x_train)
             x_test_adv = attacker.generate(x_test)
