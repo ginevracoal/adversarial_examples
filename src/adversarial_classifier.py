@@ -51,8 +51,15 @@ class AdversarialClassifier(object):
         self.trained = True
         return classifier
 
-    def predict(self, classifier, x_test):
-        return classifier.predict(x_test)
+    def predict(self, classifier, x):
+        """
+        This method is needed for calling the method predict on other objects than keras classifiers in the derived
+        classes.
+        :param classifier: trained classifier
+        :param x: input data
+        :return: predictions
+        """
+        return classifier.predict(x)
 
     def evaluate_test(self, classifier, x_test, y_test):
         """

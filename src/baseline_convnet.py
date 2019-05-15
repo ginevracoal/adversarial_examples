@@ -1,7 +1,11 @@
+"""
+Simple CNN model. This is out benchmark on the MNIST dataset.
+"""
+
+from adversarial_classifier import AdversarialClassifier
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
-from adversarial_classifier import AdversarialClassifier
 
 SAVE_MODEL = False
 MODEL_NAME = "baseline_convnet"
@@ -12,9 +16,6 @@ EPOCHS = 12
 
 
 class BaselineConvnet(AdversarialClassifier):
-    """
-    Simple convnet model. This will be our benchmark on the MNIST dataset.
-    """
 
     def _set_layers(self):
         inputs = Input(shape=self.input_shape)
