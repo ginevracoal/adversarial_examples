@@ -1,14 +1,15 @@
-import keras
-import numpy as np
-from keras.layers import Average
-from art.classifiers import KerasClassifier
-from keras.models import Model, Input
-from art.attacks import FastGradientMethod
-from utils import *
+"""
+This model computes random projections of the input points in a lower dimensional space and performs classification
+separately on each projection, then it returns an ensemble classification on the original input data.
+"""
+
 import time
+from art.classifiers import KerasClassifier
+from art.attacks import FastGradientMethod
 from baseline_convnet import BaselineConvnet
-from sklearn.random_projection import GaussianRandomProjection
 from keras.models import load_model
+from sklearn.random_projection import GaussianRandomProjection
+from utils import *
 
 
 SAVE_MODEL = True
@@ -79,7 +80,8 @@ class RandomEnsemble(BaselineConvnet):
 
         return classifier
 
-    def _ensemble_classifier(self, classifiers, projected_test_data):
+    @staticmethod
+    def _ensemble_classifier(classifiers, projected_test_data):
         """
         :param classifiers: list of `n_proj` different GaussianRandomProjection objects
         :param projected_test_data: array of test data projected on the different `n_proj` training random directions
@@ -157,73 +159,14 @@ class RandomEnsemble(BaselineConvnet):
         :param model_name: name of the model used when files were saved
         :return: list of trained classifiers
         """
-        # load a trained model
-        classifiers = []
-        for i in range(self.n_proj):
-            trained_model = load_model(relative_path + model_name + "_" + str(i) + ".h5")
-            classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
-            classifiers.append(classifier)
+        # load all trained models
+        trained_models = [load_model(relative_path + model_name + "_" + str(i) + ".h5") for i in range(self.n_proj)]
+        classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
 
         # build a random projector with the same original seed
-        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj,
-                                                  random_state=SEED)
+        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
 
-        return classifiers
-
-    ##############
-    # DEPRECATED #
-    ##############
-
-    def buggy_set_layers(self):
-        # TODO: adjust or delete this
-        """
-        Using functional API
-        :return:
-        """
-
-        # n_proj arrays of shape (dim_proj, dim_proj, 1)
-        inputs = [Input(shape=self.input_shape) for i in range(self.n_proj)]
-
-        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
-
-        # same model for all the projections
-        outputs = [baseline.model(inputs[i]) for i in range(self.n_proj)]
-
-        # final prediction as an average of the outputs
-        prediction = Average()(outputs)
-
-        model = Model(inputs=inputs, outputs=prediction, name=MODEL_NAME)
-        model.compile(loss=keras.losses.categorical_crossentropy,
-                      optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-
-        model.summary()
-
-        return model
-
-    def buggy_train(self, x_train, y_train, batch_size, epochs):
-        # TODO: adjust or delete this
-        """
-        Trains the model defined by _set_layers over random projections of the training data
-
-        :param x_train: original training data
-        :param y_train: training labels
-        :param batch_size:
-        :param epochs:
-        :param n_proj: number of projections
-        :param dim_proj: dimension of a projection
-        :return: trained classifier
-        """
-
-        x_train_projected = compute_projections(x_train, projector=self.projector,
-                                                n_proj=self.n_proj, size_proj=self.size_proj)
-
-        # TODO: indexing problem here
-        classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=True)
-        classifier.fit(x_train_projected, y_train, batch_size=batch_size, nb_epochs=epochs)
-
-        self.trained = True
-
-        return classifier
+        return classifiers, self.projector
 
 
 def main():
