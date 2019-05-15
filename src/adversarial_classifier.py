@@ -6,6 +6,7 @@ from art.classifiers import KerasClassifier
 from art.attacks import FastGradientMethod, DeepFool
 # from art.metrics import clever_t, loss_sensitivity
 from utils import *
+import pickle as pkl
 
 
 TRAINED_MODELS = "../trained_models/"
@@ -83,28 +84,48 @@ class AdversarialClassifier(object):
 
         return x_test_pred
 
-    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
+    def _generate_adversaries(self, classifier, x, method='fgsm', adversaries_path=None):
+        """
+        Generates adversaries on the input data x using a given method or loads saved data if available.
+
+        :param classifier: trained classifier
+        :param x: input data
+        :param method: art.attack method
+        :param adversaries_path: path of saved pickle data
+        :return: adversarially perturbed data
+        """
+        if method == 'fgsm':
+            print("\nAdversarial evaluation using FGSM method.")
+            attacker = FastGradientMethod(classifier, eps=0.5)
+            x_adv = attacker.generate(x)
+        elif method == 'deepfool':
+            if adversaries_path is None:
+                print("\nAdversarial evaluation using DeepFool method.")
+                attacker = DeepFool(classifier)
+                x_adv = attacker.generate(x)
+            else:
+                with open(adversaries_path, 'rb') as f:
+                    u = pkl._Unpickler(f)
+                    u.encoding = 'latin1'
+                    x_adv = u.load()
+        return x_adv
+
+    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications.
         :param classifier: trained classifier
         :param x_test: test data
         :param y_test: test labels
+        :param method: art.attack method
+        :param adversaries_path: path of saved pickle data
         :return:
         x_test_pred: test set predictions
         x_test_adv: adversarial perturbations of test data
         x_test_adv_pred: adversarial test set predictions
         """
-        #self.classifier = classifier
 
-        # generate adversarial examples on train and test sets
-        if method == 'fgsm':
-            print("\nAdversarial evaluation using FGSM method.")
-            attacker = FastGradientMethod(classifier, eps=0.5)
-            x_test_adv = attacker.generate(x_test)
-        elif method == 'deepfool':
-            print("\nAdversarial evaluation using DeepFool method.")
-            attacker = DeepFool(classifier)
-            x_test_adv = attacker.generate(x_test)
+        # generate adversaries on the test set
+        x_test_adv = self._generate_adversaries(classifier, x_test, method=method, adversaries_path=adversaries_path)
 
         # evaluate the performance on the adversarial test set
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
@@ -149,16 +170,8 @@ class AdversarialClassifier(object):
     def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm'):
 
         # generate adversarial examples on train and test sets
-        if method == 'fgsm':
-            print("\nAdversarial training using FGSM method.")
-            attacker = FastGradientMethod(classifier, eps=0.5)
-            x_train_adv = attacker.generate(x_train)
-            x_test_adv = attacker.generate(x_test)
-        elif method == 'deepfool':
-            print("\nAdversarial training using DeepFool method.")
-            attacker = DeepFool(classifier)
-            x_train_adv = attacker.generate(x_train)
-            x_test_adv = attacker.generate(x_test)
+        x_train_adv = self._generate_adversaries(classifier, x_train, method=method)
+        x_test_adv = self._generate_adversaries(classifier, x_test, method=method)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
