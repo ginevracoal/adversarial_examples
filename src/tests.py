@@ -19,11 +19,7 @@ class Test(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(Test, self).__init__(*args, **kwargs)
         self.x_train, self.y_train, self.x_test, self.y_test, \
-            self.input_shape, self.num_classes = self._load_small_mnist(size=100)
-
-    def _load_small_mnist(self, size):
-        x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
-        return x_train[:size], y_train[:size], x_test[:size], y_test[:size], input_shape, num_classes
+            self.input_shape, self.num_classes = preprocess_mnist(test=True)
 
     def test_baseline(self):
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
