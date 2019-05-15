@@ -3,7 +3,8 @@
 import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
-from art.attacks import FastGradientMethod
+from art.attacks import FastGradientMethod, DeepFool
+# from art.metrics import clever_t, loss_sensitivity
 from utils import *
 
 
@@ -102,7 +103,9 @@ class AdversarialClassifier(object):
 
         acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
-        # TODO: use other measure to compute the results
+
+        # TODO: use other measures to compute the results
+        #print(clever_t(classifier=classifier, x=x_test, target_class=y_test, batch_size=100, nb_batches=10, radius=0.2, norm=2))
 
         return x_test_adv, x_test_adv_pred
 
@@ -129,3 +132,30 @@ class AdversarialClassifier(object):
         trained_model = load_model(TRAINED_MODELS+relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
+
+    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm'):
+
+        # generate adversarial examples on train and test sets
+        if method == 'fgsm':
+            print("Adversarial training using FGSM method.")
+            attacker = FastGradientMethod(classifier, eps=0.5)
+            x_train_adv = attacker.generate(x_train)
+            x_test_adv = attacker.generate(x_test)
+        elif method == 'deepfool':
+            print("Adversarial training using DeepFool method.")
+            attacker = DeepFool(classifier)
+            x_train_adv = attacker.generate(x_train)
+            x_test_adv = attacker.generate(x_test)
+
+        # Data augmentation: expand the training set with the adversarial samples
+        x_train_ext = np.append(x_train, x_train_adv, axis=0)
+        y_train_ext = np.append(y_train, y_train, axis=0)
+
+        # Retrain the CNN on the extended dataset
+        classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
+
+        # Evaluate the adversarially trained classifier on the test set
+        self.evaluate_test(classifier, x_test_adv, y_test)
+
+        return classifier
+

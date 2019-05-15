@@ -3,7 +3,7 @@ from utils import *
 from baseline_convnet import BaselineConvnet
 from random_ensemble import RandomEnsemble
 import time
-from random_adversarial_projection import RandomAdversarialProjection
+from adversarial_projections import AdversarialProjection
 
 
 BATCH_SIZE = 20
@@ -38,6 +38,10 @@ class Test(unittest.TestCase):
         convNet.evaluate_test(classifier, self.x_test, self.y_test)
         convNet.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
+        # adversarial training
+        convNet.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
+                                  batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+
     def test_random_ensemble(self):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
                                n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
@@ -45,7 +49,6 @@ class Test(unittest.TestCase):
         # train
         classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-        #TODO: questo va di schifo. Poi non sta usando la funzione predict che ho definito per la classe
         model.evaluate_test(classifiers, self.x_test, self.y_test)
         model.evaluate_adversaries(classifiers, self.x_test, self.y_test)
 
