@@ -97,9 +97,7 @@ class AdversarialClassifier(object):
         """
 
         if adversaries_path is not None:
-            attacker = DeepFool(classifier)
-            x_adv = attacker.generate(x)
-
+            x_adv = load_from_pickle(path=adversaries_path)
         else:
             if method == 'fgsm':
                 print("\nAdversarial evaluation using FGSM method.")
