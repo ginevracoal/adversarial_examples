@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 This model computes random projections of the input points in a lower dimensional space and performs classification
 separately on each projection, then it returns an ensemble classification on the original input data.
@@ -11,17 +13,21 @@ from keras.models import load_model
 from sklearn.random_projection import GaussianRandomProjection
 from utils import *
 import pickle as pkl
+import os
 
 
-SAVE_MODEL = False
-TEST = False
+SAVE = False
+TEST = True
 MODEL_NAME = "random_ensemble"
 TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
 TRAINED_MODELS = "../trained_models/"
+DEEPFOOL_PATH = "../data/mnist_x_test_deepfool.pkl"
+DATA_PATH = "../data/"
+RESULTS = "../results/"
 
 BATCH_SIZE = 128
 EPOCHS = 12
-N_PROJECTIONS = 5
+N_PROJECTIONS = 10
 SIZE_PROJECTION = 8
 SEED = 123
 
@@ -62,7 +68,7 @@ class RandomEnsemble(BaselineConvnet):
         :param y_train:
         :param batch_size:
         :param epochs:
-        :return: list of n_proj trained models
+        :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
 
         print("\nGaussianRandomProjector seed = ", SEED)
@@ -77,7 +83,6 @@ class RandomEnsemble(BaselineConvnet):
                       range(len(x_train_projected))]
 
         self.trained = True
-
         return classifier
 
     @staticmethod
@@ -107,10 +112,10 @@ class RandomEnsemble(BaselineConvnet):
                                                n_proj=self.n_proj, size_proj=self.size_proj)
 
         predictions = self._ensemble_classifier(classifier, x_test_projected)
-
         return predictions
 
     def old_evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
+        # TODO: I should overwrite this method to compute the test accuracy correctly
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications. Here FGSM is applied to
         the baseline classifier.
@@ -151,18 +156,20 @@ class RandomEnsemble(BaselineConvnet):
 
         return x_test_adv, x_test_adv_pred
 
-    def _generate_adversaries(self, classifier, x, method='fgsm', adversaries_path=None):
+    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
         """ Adversaries are generated on the baseline classifier """
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
-        x_adv = convNet._generate_adversaries(baseline_classifier, x, method=method, adversaries_path=adversaries_path)
+        x_adv = convNet._generate_adversaries(baseline_classifier, x, y, method=method, adversaries_path=adversaries_path)
         return x_adv
 
     def save_model(self, classifier, model_name):
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 proj_classifier.save(filename=model_name + "_" + str(i) + ".h5",
-                                     path=TRAINED_MODELS + time.strftime('%Y-%m-%d'))
+                                     path=RESULTS + time.strftime('%Y-%m-%d'))
+        else:
+            raise ValueError("Model has not been fitted!")
 
     def load_classifier(self, relative_path, model_name=MODEL_NAME):
         """
@@ -183,23 +190,34 @@ class RandomEnsemble(BaselineConvnet):
 
 def main():
 
-    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist()
+    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    classifier, projector = model.load_classifier(relative_path="../trained_models/random_ensemble/2019-05-14/")
+    classifier, projector = model.load_classifier(relative_path=TRAINED_MODELS +
+                                                                "random_ensemble/baseline_proj10_size8/")
 
-    model.evaluate_test(classifier, x_test, y_test)
-    x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
+    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+    # buggy
+    #x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
+    #                                                        adversaries_path=DEEPFOOL_PATH)
+    #print(np.argwhere(np.isnan(x_test_adv)))
 
-    # bug
-    print(np.argwhere(np.isnan(x_test_adv)))
-    exit()
+    x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test,
+                                                                     method='virtual_adversarial')
+    x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
 
-    if SAVE_MODEL is True:
-        model.save_model(classifier=classifier, model_name=MODEL_NAME)
+    if SAVE is True:
+        # convNet.save_model(classifier=classifier, model_name=MODEL_NAME)
+
+        carlini = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_carlini.pkl")
+        with open(carlini, 'wb') as f:
+            pkl.dump(x_test_carlini, f)
+
+        virtual = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_virtual.pkl")
+        with open(virtual, 'wb') as f:
+            pkl.dump(x_test_virtual, f)
 
 
 if __name__ == "__main__":

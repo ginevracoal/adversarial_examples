@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 Simple CNN model. This is out benchmark on the MNIST dataset.
 """
@@ -12,11 +14,12 @@ from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
 
 SAVE = False
-TEST = False
+TEST = True
 
 MODEL_NAME = "baseline_convnet"
 TRAINED_MODEL = "IBM-art/mnist_cnn_original.h5"
 DATA_PATH = "../data/"
+RESULTS = "../results/"
 
 BATCH_SIZE = 128
 EPOCHS = 12
@@ -44,7 +47,7 @@ class BaselineConvnet(AdversarialClassifier):
         #model.summary()
         return model
 
-    def _evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
+    def __evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
 
         if method == 'fgsm':
             print("\nAdversarial evaluation using FGSM method.")
@@ -75,22 +78,26 @@ def main():
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
-    convNet = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
+    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
+    classifier = model.load_classifier(relative_path=TRAINED_MODEL)
 
-    #classifier = convNet.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    classifier = convNet.load_classifier(relative_path=TRAINED_MODEL)
+    #model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+    #x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
+    #                                                         adversaries_path="../data/mnist_x_test_deepfool.pkl")
 
-    convNet.evaluate_test(classifier, x_test, y_test)
-    x_test_adv, x_test_adv_pred = convNet.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
-                                                               adversaries_path="../data/mnist_x_test_deepfool.pkl")
+    x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
 
     if SAVE is True:
         #convNet.save_model(classifier=classifier, model_name=MODEL_NAME)
 
-        filepath = os.path.join(DATA_PATH, time.strftime('%Y-%m-%d'), "/mnist_x_test_deepfool.pkl")
+        carlini = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_carlini.pkl")
+        with open(carlini, 'wb') as f:
+            pkl.dump(x_test_carlini, f)
 
-        with open(filepath, 'wb') as f:
-            pkl.dump(x_test_adv, f)
+        virtual = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_virtual.pkl")
+        with open(virtual, 'wb') as f:
+            pkl.dump(x_test_virtual, f)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from utils import *
 import pickle as pkl
 
 
+RESULTS = "../results/"
 TRAINED_MODELS = "../trained_models/"
 MIN = 0
 MAX = 255
@@ -165,7 +166,7 @@ class AdversarialClassifier(object):
             #classifier.save(filepath=TRAINED_MODELS + time.strftime('%Y-%m-%d') + "/"+model_name + ".h5")
 
             classifier.save(filename=model_name+".h5",  # "_"+time.strftime('%H:%M')+".h5",
-                            path=TRAINED_MODELS+time.strftime('%Y-%m-%d')+"/")
+                            path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     def load_classifier(self, relative_path):
         """
@@ -175,7 +176,7 @@ class AdversarialClassifier(object):
         returns: trained classifier
         """
         # load a trained model
-        trained_model = load_model(TRAINED_MODELS+relative_path)
+        trained_model = load_model(TRAINED_MODELS + relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 

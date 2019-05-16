@@ -4,17 +4,18 @@
 # settings #
 ############
 
-MODEL_NAME="random_ensemble"
-RESULTS="../trained_models/"
+MODEL_NAME="baseline_convnet"
+RESULTS="../results/"
 DATE=$(date +%Y-%m-%d)
-TIME=$(date +%H:%M)
+TIME=$(date +%H:%M:%S)
 
 ## clusterino
-# cd ~/adversarial_examples/src/
+rm screenlog.0
+cd ~/adversarial_examples/src/
 #export CUDA_VISIBLE_DEVICES=-1 # GPU
 
 ## local
-source ~/virtualenvs/venv/bin/activate
+#source ~/virtualenvs/venv/bin/activate
 
 ##############
 # run script #
