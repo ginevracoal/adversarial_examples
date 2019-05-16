@@ -3,7 +3,7 @@
 import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
-from art.attacks import FastGradientMethod, DeepFool
+from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method
 # from art.metrics import clever_t, loss_sensitivity
 from utils import *
 import pickle as pkl
@@ -84,7 +84,7 @@ class AdversarialClassifier(object):
 
         return x_test_pred
 
-    def _generate_adversaries(self, classifier, x, method='fgsm', adversaries_path=None):
+    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
 
@@ -94,20 +94,29 @@ class AdversarialClassifier(object):
         :param adversaries_path: path of saved pickle data
         :return: adversarially perturbed data
         """
-        if method == 'fgsm':
-            print("\nAdversarial evaluation using FGSM method.")
-            attacker = FastGradientMethod(classifier, eps=0.5)
+
+        if adversaries_path is not None:
+            attacker = DeepFool(classifier)
             x_adv = attacker.generate(x)
-        elif method == 'deepfool':
-            if adversaries_path is None:
+
+        else:
+            if method == 'fgsm':
+                print("\nAdversarial evaluation using FGSM method.")
+                attacker = FastGradientMethod(classifier, eps=0.5)
+                x_adv = attacker.generate(x)
+            elif method == 'deepfool':
                 print("\nAdversarial evaluation using DeepFool method.")
                 attacker = DeepFool(classifier)
                 x_adv = attacker.generate(x)
-            else:
-                with open(adversaries_path, 'rb') as f:
-                    u = pkl._Unpickler(f)
-                    u.encoding = 'latin1'
-                    x_adv = u.load()
+            elif method == 'virtual_adversarial':
+                print("\nAdversarial evaluation using Virtual Adversarial method.")
+                attacker = VirtualAdversarialMethod(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'carlini_l2':
+                print("\nAdversarial evaluation using Carlini l2 method.")
+                attacker = CarliniL2Method(classifier, targeted=True)
+                x_adv = attacker.generate(x=x, y=y)
+
         return x_adv
 
     def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
@@ -125,7 +134,8 @@ class AdversarialClassifier(object):
         """
 
         # generate adversaries on the test set
-        x_test_adv = self._generate_adversaries(classifier, x_test, method=method, adversaries_path=adversaries_path)
+        x_test_adv = self._generate_adversaries(classifier, x_test, y_test,
+                                                method=method, adversaries_path=adversaries_path)
 
         # evaluate the performance on the adversarial test set
         x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
@@ -152,6 +162,8 @@ class AdversarialClassifier(object):
         :param model_name: name of the model
         """
         if self.trained:
+            #classifier.save(filepath=TRAINED_MODELS + time.strftime('%Y-%m-%d') + "/"+model_name + ".h5")
+
             classifier.save(filename=model_name+".h5",  # "_"+time.strftime('%H:%M')+".h5",
                             path=TRAINED_MODELS+time.strftime('%Y-%m-%d')+"/")
 
@@ -170,8 +182,8 @@ class AdversarialClassifier(object):
     def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm'):
 
         # generate adversarial examples on train and test sets
-        x_train_adv = self._generate_adversaries(classifier, x_train, method=method)
-        x_test_adv = self._generate_adversaries(classifier, x_test, method=method)
+        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method)
+        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
