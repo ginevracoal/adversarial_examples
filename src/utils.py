@@ -2,6 +2,8 @@ import numpy as np
 import keras
 from keras import backend as K
 from keras.datasets import mnist
+import pickle as pkl
+import time
 
 IMG_ROWS = 28
 IMG_COLS = 28
@@ -9,11 +11,13 @@ MIN = 0
 MAX = 255
 
 SIZE = 100
+RESULTS = "../results/"
 
 
 def preprocess_mnist(test=False, img_rows=IMG_ROWS, img_cols=IMG_COLS):
     """Preprocess mnist dataset for keras training
 
+    :param test: If test is True, only load the first 100 images
     :param img_rows: input image n. rows
     :param img_cols: input image n. cols
     """
@@ -85,6 +89,24 @@ def compute_projections(input_data, projector, n_proj, size_proj=None):
     # print(predictions.shape, summed.shape, argmax_predictions.shape) # (3,100,10), (100,10), 100
 
     return projected_data
+
+
+# Pickle utils
+
+
+def save_to_pickle(data, filename):
+    """ saves data to pickle """
+    with open(RESULTS+time.strftime('%Y-%m-%d')+"/"+filename, 'wb') as f:
+        pkl.dump(data, f)
+
+
+def load_from_pickle(path):
+    """ loads data from pickle """
+    with open(path, 'rb') as f:
+        u = pkl._Unpickler(f)
+        u.encoding = 'latin1'
+        data = u.load()
+    return data
 
 
 ##############
