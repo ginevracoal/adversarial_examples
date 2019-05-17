@@ -16,8 +16,9 @@ import pickle as pkl
 import os
 
 
-SAVE = False
+SAVE = True
 TEST = True
+
 MODEL_NAME = "random_ensemble"
 TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
 TRAINED_MODELS = "../trained_models/"
@@ -160,7 +161,8 @@ class RandomEnsemble(BaselineConvnet):
         """ Adversaries are generated on the baseline classifier """
         convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
-        x_adv = convNet._generate_adversaries(baseline_classifier, x, y, method=method, adversaries_path=adversaries_path)
+        x_adv = convNet._generate_adversaries(baseline_classifier, x, y, method=method,
+                                              adversaries_path=adversaries_path)
         return x_adv
 
     def save_model(self, classifier, model_name):
@@ -195,29 +197,20 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    classifier, projector = model.load_classifier(relative_path=TRAINED_MODELS +
-                                                                "random_ensemble/baseline_proj10_size8/")
+    classifier, projector = model.load_classifier(relative_path=
+                                                  TRAINED_MODELS+"random_ensemble/baseline_proj10_size8/")
 
-    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+    x_test_deepfool = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
+                                                            #adversaries_path=DEEPFOOL_PATH)
     # buggy
-    #x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
-    #                                                        adversaries_path=DEEPFOOL_PATH)
     #print(np.argwhere(np.isnan(x_test_adv)))
 
-    x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test,
-                                                                     method='virtual_adversarial')
-    x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    # use saved pickles
+    #x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    #x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
 
     if SAVE is True:
-        # convNet.save_model(classifier=classifier, model_name=MODEL_NAME)
-
-        carlini = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_carlini.pkl")
-        with open(carlini, 'wb') as f:
-            pkl.dump(x_test_carlini, f)
-
-        virtual = os.path.join(RESULTS, time.strftime('%Y-%m-%d'), "/mnist_x_test_virtual.pkl")
-        with open(virtual, 'wb') as f:
-            pkl.dump(x_test_virtual, f)
+        save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
 
 
 if __name__ == "__main__":
