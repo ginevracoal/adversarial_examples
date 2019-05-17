@@ -20,19 +20,25 @@ class Test(unittest.TestCase):
             self.input_shape, self.num_classes = preprocess_mnist(test=True)
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
 
-    def test_baseline_training(self):
-        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+    def test_baseline(self):
+        model = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
 
         # model training
-        classifier = convNet.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-        convNet.evaluate_test(classifier, self.x_test, self.y_test)
-        convNet.evaluate_adversaries(classifier, self.x_test, self.y_test)
+        classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+        model.evaluate_test(classifier, self.x_test, self.y_test)
+        x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
         # model loading
-        classifier = convNet.load_classifier(relative_path="IBM-art/mnist_cnn_original.h5")
+        classifier = model.load_classifier(relative_path="IBM-art/mnist_cnn_original.h5")
+
+        x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, self.x_test, self.y_test,
+                                                                 method='deepfool',
+                                                                 adversaries_path='../data/mnist_x_test_deepfool.pkl')
+        # save to pickle
+        save_to_pickle(data=x_test_adv, filename="mnist_x_test_deepfool.pkl")
 
         # adversarial training
-        convNet.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
+        model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
                                   batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
 
     def test_random_ensemble(self):
@@ -44,12 +50,15 @@ class Test(unittest.TestCase):
 
         # evaluate
         model.evaluate_test(classifiers, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifiers, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='deepfool')
+        x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble")
-        model.load_classifier(relative_path=TRAINED_MODELS+time.strftime('%Y-%m-%d')+"/")
+        loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/")
+
+        # buggy
+        # x_test_adv, x_test_adv_pred = model.evaluate_adversaries(loaded_classifiers, self.x_test, self.y_test,
+        #                                                         method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
 
     def test_random_adversarial_projection(self):
         pass
@@ -65,6 +74,9 @@ class Test(unittest.TestCase):
         model.evaluate_test(classifier, self.x_test, self.y_test)
         model.evaluate_adversaries(classifier, self.x_test, self.y_test)
         """
+
+
+
 
 
 if __name__ == '__main__':
