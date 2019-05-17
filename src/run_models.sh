@@ -4,10 +4,7 @@
 # settings #
 ############
 
-MODEL_NAME="baseline_convnet"
-RESULTS="../results/"
-DATE=$(date +%Y-%m-%d)
-TIME=$(date +%H:%M:%S)
+MODEL_NAME="baseline_convnet" # this should be the name of the script
 
 ## clusterino
 rm screenlog.0
@@ -20,6 +17,10 @@ cd ~/adversarial_examples/src/
 ##############
 # run script #
 ##############
+
+RESULTS="../results/"
+DATE=$(date +%Y-%m-%d)
+TIME=$(date +%H:%M:%S)
 
 mkdir -p "$RESULTS/$DATE/"
 python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${MODEL_NAME}_${TIME}"_out.txt
