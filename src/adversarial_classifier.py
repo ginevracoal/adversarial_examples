@@ -91,7 +91,7 @@ class AdversarialClassifier(object):
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
         else:
-            x_adv = load_from_pickle(path=adversaries_path)
+            x_adv = load_from_pickle(path=adversaries_path)[0]
 
         #x_adv = list(itertools.chain.from_iterable(x_adv))
         #x_adv = List(x_adv, dtype=type(x_adv))
