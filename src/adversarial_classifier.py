@@ -3,11 +3,12 @@
 import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
-from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method
+from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method,\
+    ProjectedGradientDescent, NewtonFool
 # from art.metrics import clever_t, loss_sensitivity
 from utils import *
 import pickle as pkl
-
+import itertools
 
 RESULTS = "../results/"
 TRAINED_MODELS = "../trained_models/"
@@ -53,6 +54,49 @@ class AdversarialClassifier(object):
         self.trained = True
         return classifier
 
+    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
+        """
+        Generates adversaries on the input data x using a given method or loads saved data if available.
+
+        :param classifier: trained classifier
+        :param x: input data
+        :param method: art.attack method
+        :param adversaries_path: path of saved pickle data
+        :return: adversarially perturbed data
+        """
+
+        if adversaries_path is None:
+            if method == 'fgsm':
+                print("\nAdversarial evaluation using FGSM method.")
+                attacker = FastGradientMethod(classifier, eps=0.5)
+                x_adv = attacker.generate(x)
+            elif method == 'deepfool':
+                print("\nAdversarial evaluation using DeepFool method.")
+                attacker = DeepFool(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'virtual_adversarial':
+                print("\nAdversarial evaluation using Virtual Adversarial method.")
+                attacker = VirtualAdversarialMethod(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'carlini_l2':
+                print("\nAdversarial evaluation using Carlini l2 method.")
+                attacker = CarliniL2Method(classifier, targeted=True)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'projected_gradient':
+                print("\nAdversarial evaluation using Projected Gradient Descent method.")
+                attacker = ProjectedGradientDescent(classifier)
+                x_adv = attacker.generate(x=x)
+            elif method == 'newtonfool':
+                print("\nAdversarial evaluation using NewtonFool method.")
+                attacker = NewtonFool(classifier)
+                x_adv = attacker.generate(x=x)
+        else:
+            x_adv = load_from_pickle(path=adversaries_path)
+
+        #x_adv = list(itertools.chain.from_iterable(x_adv))
+        #x_adv = List(x_adv, dtype=type(x_adv))
+        return x_adv
+
     def predict(self, classifier, x):
         """
         This method is needed for calling the method predict on other objects than keras classifiers in the derived
@@ -85,39 +129,6 @@ class AdversarialClassifier(object):
 
         return x_test_pred
 
-    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
-        """
-        Generates adversaries on the input data x using a given method or loads saved data if available.
-
-        :param classifier: trained classifier
-        :param x: input data
-        :param method: art.attack method
-        :param adversaries_path: path of saved pickle data
-        :return: adversarially perturbed data
-        """
-
-        if adversaries_path is not None:
-            x_adv = load_from_pickle(path=adversaries_path)
-        else:
-            if method == 'fgsm':
-                print("\nAdversarial evaluation using FGSM method.")
-                attacker = FastGradientMethod(classifier, eps=0.5)
-                x_adv = attacker.generate(x)
-            elif method == 'deepfool':
-                print("\nAdversarial evaluation using DeepFool method.")
-                attacker = DeepFool(classifier)
-                x_adv = attacker.generate(x)
-            elif method == 'virtual_adversarial':
-                print("\nAdversarial evaluation using Virtual Adversarial method.")
-                attacker = VirtualAdversarialMethod(classifier)
-                x_adv = attacker.generate(x)
-            elif method == 'carlini_l2':
-                print("\nAdversarial evaluation using Carlini l2 method.")
-                attacker = CarliniL2Method(classifier, targeted=True)
-                x_adv = attacker.generate(x=x, y=y)
-
-        return x_adv
-
     def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications.
@@ -144,6 +155,7 @@ class AdversarialClassifier(object):
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
 
+        # TODO: why sometimes this calculation is wrong?
         acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
