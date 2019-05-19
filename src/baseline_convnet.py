@@ -4,22 +4,19 @@
 Simple CNN model. This is out benchmark on the MNIST dataset.
 """
 
-import os
-import pickle as pkl
-import time
 from adversarial_classifier import AdversarialClassifier
 from art.attacks import FastGradientMethod
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
 
-SAVE = True
+SAVE = False
 TEST = True
 
 MODEL_NAME = "baseline_convnet"
 TRAINED_MODEL = "IBM-art/mnist_cnn_original.h5"
 DATA_PATH = "../data/"
-RESULTS = "../results/"
+RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
 
 BATCH_SIZE = 128
 EPOCHS = 12
@@ -44,7 +41,7 @@ class BaselineConvnet(AdversarialClassifier):
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        #model.summary()
+        model.summary()
         return model
 
     def __evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
@@ -71,7 +68,7 @@ class BaselineConvnet(AdversarialClassifier):
         acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
-        return x_test_adv, x_test_adv_pred
+        return x_test_adv
 
 
 def main():
@@ -81,14 +78,20 @@ def main():
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
     classifier = model.load_classifier(relative_path=TRAINED_MODEL)
 
-    x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    #x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    #x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
+    #x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
 
     if SAVE is True:
-        #convNet.save_model(classifier=classifier, model_name=MODEL_NAME)
 
-        save_to_pickle(data=x_test_virtual, filename="mnist_x_test_virtual.pkl")
-        save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
+        #save_to_pickle(data=x_test_virtual, filename="mnist_x_test_virtual.pkl")
+        #save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
+        save_to_pickle(data=x_test_projected_gradient, filename="mnist_x_test_projected_gradient.pkl")
+        save_to_pickle(data=x_test_newtonfool, filename="mnist_x_test_newtonfool.pkl")
+
+    x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial',
+                                                adversaries_path='../data/2019-05-17/mnist_x_test_virtual.pkl')
 
 
 if __name__ == "__main__":
