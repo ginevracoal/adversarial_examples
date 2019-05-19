@@ -14,6 +14,7 @@ from sklearn.random_projection import GaussianRandomProjection
 from utils import *
 import pickle as pkl
 import os
+import random
 
 
 SAVE = True
@@ -57,6 +58,7 @@ class RandomEnsemble(BaselineConvnet):
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
+        self.random_states = random.sample(range(0, 100), self.n_proj)
         self.projector = None
         self.trained = False
 
@@ -72,19 +74,39 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
 
-        print("\nGaussianRandomProjector seed = ", SEED)
-        self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
-        x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
+        # old ########
+        # print("\nGaussianRandomProjector seed = ", SEED)
+        # self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj), random_state=SEED)
+        # x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
+        ##############
+
+        # new ########
+        x_train_projected = compute_projections(x_train, random_states=self.random_states,
+                                                n_proj=self.n_proj, size_proj=self.size_proj)
+        ##############
 
         # use the same model for all trainings
-        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
 
         # train n_proj classifiers on different training data
-        classifier = [convNet.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
-                      range(len(x_train_projected))]
+        classifier = [baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs) for i in
+                      range(len(x_train_projected))]  # len(x_train_projected) = self.n_proj
 
         self.trained = True
         return classifier
+
+    @staticmethod
+    def _old_ensemble_classifier(classifiers, projected_test_data):
+        """
+        :param classifiers: list of `n_proj` different GaussianRandomProjection objects
+        :param projected_test_data: array of test data projected on the different `n_proj` training random directions
+        (`size_proj` directions for each projection)
+        :return: sum of all the predicted probabilities among each class for the `n_proj` classifiers
+        """
+        predictions = np.array([classifier.predict(projected_test_data[i]) for i, classifier in enumerate(classifiers)])
+        # sum the probabilities across all predictors
+        summed_predictions = np.sum(predictions, axis=0)
+        return summed_predictions
 
     @staticmethod
     def _ensemble_classifier(classifiers, projected_test_data):
@@ -95,7 +117,10 @@ class RandomEnsemble(BaselineConvnet):
         :return: sum of all the predicted probabilities among each class for the `n_proj` classifiers
         """
         predictions = np.array([classifier.predict(projected_test_data[i]) for i, classifier in enumerate(classifiers)])
+        # sum the probabilities across all predictors
         summed_predictions = np.sum(predictions, axis=0)
+        result = np.argmax(summed_predictions, axis=1)
+        #print(predictions[:, 0], summed_predictions[0], result[0])
         return summed_predictions
 
     def predict(self, classifier, x_test):
@@ -106,56 +131,18 @@ class RandomEnsemble(BaselineConvnet):
         :param x_test: list of projected test data
         :return:
         """
-        if self.projector is None:
-            raise ValueError("There is no projector available. Train the model first.")
+        #if self.projector is None:
+        #    raise ValueError("There is no projector available. Train the model first.")
 
-        x_test_projected = compute_projections(x_test, projector=self.projector,
+        # old
+        #x_test_projected = compute_projections(x_test, projector=self.projector,n_proj=self.n_proj, size_proj=self.size_proj)
+
+        # new
+        x_test_projected = compute_projections(x_test, random_states=self.random_states,
                                                n_proj=self.n_proj, size_proj=self.size_proj)
 
         predictions = self._ensemble_classifier(classifier, x_test_projected)
         return predictions
-
-    def old_evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
-        # TODO: I should overwrite this method to compute the test accuracy correctly
-        """
-        Evaluates the trained model against FGSM and prints the number of misclassifications. Here FGSM is applied to
-        the baseline classifier.
-
-        :param classifier: trained classifier
-        :param x_test: test data
-        :param y_test: test labels
-        :return:
-        x_test_pred: test set predictions
-        x_test_adv: adversarial perturbations of test data
-        x_test_adv_pred: adversarial test set predictions
-        """
-        convNet = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
-        baseline_classifier = convNet.load_classifier(TRAINED_BASELINE)
-
-        if method == 'fgsm':
-            print("\nAdversarial evaluation using FGSM method.")
-            attacker = FastGradientMethod(baseline_classifier, eps=0.5)
-            x_test_adv = attacker.generate(x_test)
-
-        elif method == 'deepfool':
-            print("\nAdversarial evaluation using DeepFool method.")
-            with open('../data/mnist_x_test_deepfool.pkl', 'rb') as f:
-                u = pkl._Unpickler(f)
-                u.encoding = 'latin1'
-                x_test_adv = u.load()
-
-        # evaluate the performance on the list of trained classifiers
-        x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
-        nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
-
-        print("\nAdversarial test data:")
-        print("Correctly classified: {}".format(nb_correct_adv_pred))
-        print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
-
-        acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
-        print("Adversarial accuracy: %.2f%%" % (acc * 100))
-
-        return x_test_adv, x_test_adv_pred
 
     def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
         """ Adversaries are generated on the baseline classifier """
@@ -197,20 +184,25 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    classifier, projector = model.load_classifier(relative_path=
-                                                  TRAINED_MODELS+"random_ensemble/baseline_proj10_size8/")
+    # old #######
+    #classifier, projector = model.load_classifier(relative_path=
+    #                                              TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8/")
+    #############
 
-    x_test_deepfool = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
-                                                            #adversaries_path=DEEPFOOL_PATH)
-    # buggy
-    #print(np.argwhere(np.isnan(x_test_adv)))
+    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    model.evaluate_test(classifier, x_test, y_test)
+
+    #x_test_fgsm, x_test_fgsm_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+    #x_test_deepfool, x_test_deepfool_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
+                                                            #adversaries_path=DEEPFOOL_PATH) # buggy
 
     # use saved pickles
     #x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
     #x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
 
     if SAVE is True:
-        save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+        model.save_model(classifier=classifier, model_name="random_ensemble")
+        #save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
 
 
 if __name__ == "__main__":
