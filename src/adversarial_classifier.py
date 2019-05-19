@@ -65,29 +65,25 @@ class AdversarialClassifier(object):
         :return: adversarially perturbed data
         """
 
+        print("\nAdversarial evaluation using", method, "method.")
+
         if adversaries_path is None:
             if method == 'fgsm':
-                print("\nAdversarial evaluation using FGSM method.")
                 attacker = FastGradientMethod(classifier, eps=0.5)
                 x_adv = attacker.generate(x)
             elif method == 'deepfool':
-                print("\nAdversarial evaluation using DeepFool method.")
                 attacker = DeepFool(classifier)
                 x_adv = attacker.generate(x)
             elif method == 'virtual_adversarial':
-                print("\nAdversarial evaluation using Virtual Adversarial method.")
                 attacker = VirtualAdversarialMethod(classifier)
                 x_adv = attacker.generate(x)
             elif method == 'carlini_l2':
-                print("\nAdversarial evaluation using Carlini l2 method.")
                 attacker = CarliniL2Method(classifier, targeted=True)
                 x_adv = attacker.generate(x=x, y=y)
             elif method == 'projected_gradient':
-                print("\nAdversarial evaluation using Projected Gradient Descent method.")
                 attacker = ProjectedGradientDescent(classifier)
                 x_adv = attacker.generate(x=x)
             elif method == 'newtonfool':
-                print("\nAdversarial evaluation using NewtonFool method.")
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
         else:
