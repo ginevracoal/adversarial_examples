@@ -40,8 +40,7 @@ class BaselineConvnet(AdversarialClassifier):
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
-
-        model.summary()
+        #model.summary()
         return model
 
     def __evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
@@ -78,20 +77,17 @@ def main():
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
     classifier = model.load_classifier(relative_path=TRAINED_MODEL)
 
-    #x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
-    #x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
-    #x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
+    x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
+    x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
 
     if SAVE is True:
 
-        #save_to_pickle(data=x_test_virtual, filename="mnist_x_test_virtual.pkl")
-        #save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
+        save_to_pickle(data=x_test_virtual, filename="mnist_x_test_virtual.pkl")
+        save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
         save_to_pickle(data=x_test_projected_gradient, filename="mnist_x_test_projected_gradient.pkl")
         save_to_pickle(data=x_test_newtonfool, filename="mnist_x_test_newtonfool.pkl")
-
-    x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial',
-                                                adversaries_path='../data/2019-05-17/mnist_x_test_virtual.pkl')
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 # settings #
 ############
 
-MODEL_NAME="baseline_convnet" # this should be the name of the script
+MODEL_NAME="random_ensemble" # this should be the name of the script
 
 ## clusterino
 rm screenlog.0

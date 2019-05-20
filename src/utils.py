@@ -4,7 +4,6 @@ from keras import backend as K
 from keras.datasets import mnist
 import pickle as pkl
 import time
-import random
 from sklearn.random_projection import GaussianRandomProjection
 
 
@@ -12,8 +11,7 @@ IMG_ROWS = 28
 IMG_COLS = 28
 MIN = 0
 MAX = 255
-
-SIZE = 100
+TEST_SIZE = 100
 RESULTS = "../results/"
 
 
@@ -49,7 +47,7 @@ def preprocess_mnist(test=False, img_rows=IMG_ROWS, img_cols=IMG_COLS):
     y_test = keras.utils.to_categorical(y_test, 10)
 
     if test is True:
-        return x_train[:SIZE], y_train[:SIZE], x_test[:SIZE], y_test[:SIZE], input_shape, 10
+        return x_train[:TEST_SIZE], y_train[:TEST_SIZE], x_test[:TEST_SIZE], y_test[:TEST_SIZE], input_shape, 10
     else:
         return x_train, y_train, x_test, y_test, input_shape, 10
 
@@ -131,6 +129,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
 
     print("Projected data shape:", projected_data.shape)
+    #print(projected_data[0,0,1])
     return projected_data
 
 

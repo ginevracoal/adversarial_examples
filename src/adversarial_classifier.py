@@ -26,7 +26,6 @@ class AdversarialClassifier(object):
         self.num_classes = num_classes
         self.model = self._set_layers()
         self.trained = False
-        #self.classifier = None
 
     def _set_layers(self):
         """
@@ -89,8 +88,6 @@ class AdversarialClassifier(object):
         else:
             x_adv = load_from_pickle(path=adversaries_path)[0]
 
-        #x_adv = list(itertools.chain.from_iterable(x_adv))
-        #x_adv = List(x_adv, dtype=type(x_adv))
         return x_adv
 
     def predict(self, classifier, x):
@@ -101,7 +98,9 @@ class AdversarialClassifier(object):
         :param x: input data
         :return: predictions
         """
-        return classifier.predict(x)
+        predictions = classifier.predict(x)
+        #print(predictions[:, 0])
+        return predictions
 
     def evaluate_test(self, classifier, x_test, y_test):
         """
@@ -151,7 +150,6 @@ class AdversarialClassifier(object):
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
 
-        # TODO: why sometimes this calculation is wrong?
         acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
@@ -170,9 +168,7 @@ class AdversarialClassifier(object):
         """
         if self.trained:
             #classifier.save(filepath=TRAINED_MODELS + time.strftime('%Y-%m-%d') + "/"+model_name + ".h5")
-
-            classifier.save(filename=model_name+".h5",  # "_"+time.strftime('%H:%M')+".h5",
-                            path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+            classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     def load_classifier(self, relative_path):
         """
@@ -182,7 +178,7 @@ class AdversarialClassifier(object):
         returns: trained classifier
         """
         # load a trained model
-        trained_model = load_model(TRAINED_MODELS + relative_path)
+        trained_model = load_model(relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 

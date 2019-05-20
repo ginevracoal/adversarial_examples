@@ -8,7 +8,6 @@ BATCH_SIZE = 20
 EPOCHS = 3
 N_PROJECTIONS = 2
 SIZE_PROJECTION = 6
-
 TRAINED_MODELS = "../trained_models/"
 
 
@@ -26,16 +25,22 @@ class Test(unittest.TestCase):
         # model training
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
         model.evaluate_test(classifier, self.x_test, self.y_test)
-        x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, self.x_test, self.y_test)
+        x_test_adv = model.evaluate_adversaries(classifier, self.x_test, self.y_test)
 
-        # model loading
-        classifier = model.load_classifier(relative_path="IBM-art/mnist_cnn_original.h5")
-
-        x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifier, self.x_test, self.y_test,
-                                                                 method='deepfool',
-                                                                 adversaries_path='../data/mnist_x_test_deepfool.pkl')
         # save to pickle
-        #save_to_pickle(data=x_test_adv, filename="mnist_x_test_deepfool.pkl")
+        save_to_pickle(data=x_test_adv, filename="mnist_x_test_fgsm.pkl")
+
+        # save and load
+        model.save_model(classifier=classifier, model_name="baseline_convnet")
+        loaded_classifier = model.load_classifier(
+            relative_path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
+        model.evaluate_test(loaded_classifier, self.x_test, self.y_test)
+
+        # complete model loading
+        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"IBM-art/mnist_cnn_original.h5")
+
+        model.evaluate_adversaries(classifier, self.x_test, self.y_test,
+                                   method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
 
         # adversarial training
         model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
@@ -46,21 +51,20 @@ class Test(unittest.TestCase):
                                n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
         # train
-        classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS, save=True)
+        classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+        model.save_model(classifier=classifiers, model_name="random_ensemble")
 
         # evaluate
         x_test_pred = model.evaluate_test(classifiers, self.x_test, self.y_test)
-        #x_test_adv, x_test_adv_pred = model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
+        model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble")
         loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
 
-        # check equal predictions
+        # check equal test predictions
         np.array_equal(x_test_pred, x_test_pred_loaded)
-        # buggy
-        #x_test_adv, x_test_adv_pred = model.evaluate_adversaries(loaded_classifiers, self.x_test, self.y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
 
     def test_random_adversarial_projection(self):
         pass

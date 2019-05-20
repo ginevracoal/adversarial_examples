@@ -5,33 +5,25 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
-import time
 from art.classifiers import KerasClassifier
-from art.attacks import FastGradientMethod
 from baseline_convnet import BaselineConvnet
 from keras.models import load_model
-from sklearn.random_projection import GaussianRandomProjection
 from utils import *
-import pickle as pkl
-import os
-import random
 
-SAVE = False
-TEST = True
+# settings
+TEST = False
+SIZE_PROJECTION = 8
+N_PROJECTIONS = 1
 
+# defaults
 MODEL_NAME = "random_ensemble"
-TRAINED_BASELINE = "IBM-art/mnist_cnn_original.h5"
 TRAINED_MODELS = "../trained_models/"
+TRAINED_BASELINE = TRAINED_MODELS+"IBM-art/mnist_cnn_original.h5"
 DEEPFOOL_PATH = "../data/mnist_x_test_deepfool.pkl"
 DATA_PATH = "../data/"
 RESULTS = "../results/"
-
 BATCH_SIZE = 128
 EPOCHS = 12
-N_PROJECTIONS = 1
-SIZE_PROJECTION = 8
-SEED = 123
-
 MIN = 0
 MAX = 255
 
@@ -62,7 +54,7 @@ class RandomEnsemble(BaselineConvnet):
         self.projectors_params = None
         self.trained = False
 
-    def train(self, x_train, y_train, batch_size, epochs, save=False):
+    def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
         `(size_proj, size_proj, 1)`.
@@ -90,12 +82,9 @@ class RandomEnsemble(BaselineConvnet):
         classifiers = [baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs)
                        for i in range(self.n_proj)]
 
-        if SAVE is True:
-            [baseline.save_model(classifier=classifiers, model_name=MODEL_NAME+"_"+str(self.random_seeds[i]))
-             for i in range(self.n_proj)]
+        self.trained = True
         ###############
 
-        self.trained = True
         return classifiers
 
     @staticmethod
@@ -109,7 +98,7 @@ class RandomEnsemble(BaselineConvnet):
         predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
         # sum the probabilities across all predictors
         summed_predictions = np.sum(predictions, axis=0)  # / np.sqrt(np.sum(predictions**2))
-        #print(predictions[:, 0], summed_predictions[0])
+        #print("\nPredictions on the first element:\n", predictions[:, 0])
         return summed_predictions
 
     def predict(self, classifier, x_test):
@@ -120,11 +109,8 @@ class RandomEnsemble(BaselineConvnet):
         :param x_test: list of projected test data
         :return:
         """
-
-        # new ###########
-        x_test_projected = compute_projections(x_test, random_seeds=self.random_seeds, n_proj=self.n_proj, size_proj=self.size_proj)
-        #################
-
+        x_test_projected = compute_projections(x_test, random_seeds=self.random_seeds,
+                                               n_proj=self.n_proj, size_proj=self.size_proj)
         predictions = self._ensemble_classifier(classifier, x_test_projected)
         return predictions
 
@@ -144,7 +130,7 @@ class RandomEnsemble(BaselineConvnet):
         else:
             raise ValueError("Model has not been fitted!")
 
-    def load_classifier(self, relative_path, model_name=MODEL_NAME):
+    def load_classifier(self, relative_path, model_name):
         """
         Loads a pretrained classifier and sets the projector with the training seed.
         :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
@@ -162,10 +148,18 @@ class RandomEnsemble(BaselineConvnet):
         ####self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
 
         # new ######
-        trained_models = [load_model(relative_path + model_name + "_" + str(seed) + ".h5")
-                          for seed in self.random_seeds[:self.n_proj]]
-        classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
+        #trained_models = [load_model(relative_path + model_name + "_" + str(seed) + ".h5")
+        #                  for seed in self.random_seeds[0:self.n_proj]]
+        #classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
         ############
+
+        # new 2 #####
+        classifiers = []
+        for i in range(self.n_proj):
+            seed = self.random_seeds[i]
+            trained_model = load_model(relative_path + model_name + "_" + str(seed) + ".h5")
+            classifiers.append(KerasClassifier((MIN, MAX), trained_model, use_logits=False))
+        #############
 
         return classifiers  #, self.projector
 
@@ -177,29 +171,25 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS, save=SAVE)
-    model.evaluate_test(classifier, x_test, y_test)
+    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    #model.evaluate_test(classifier, x_test, y_test)
+    #model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     classifier = model.load_classifier(
-        relative_path=TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8_new/",
+        relative_path=TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8_c/",
         model_name=MODEL_NAME)
 
     model.evaluate_test(classifier, x_test, y_test)
-    #model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
-    #model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
-    #                           adversaries_path='../data/mnist_x_test_deepfool.pkl')
-    #model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient',
-    #                           adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
-    #x_test_deepfool = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool')
-                                                            #adversaries_path=DEEPFOOL_PATH) # buggy
 
-    # use saved pickles
-    #x_test_virtual, x_test_virtual_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    #x_test_carlini, x_test_carlini_pred = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    # todo: check these afterwards
+    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+    model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
+    model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
 
-    #if SAVE is True:
-        #model.save_model(classifier=classifier, model_name="random_ensemble")
-        #save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+    # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    # model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+
+    # save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
 
 
 if __name__ == "__main__":
