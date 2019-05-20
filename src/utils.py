@@ -4,6 +4,7 @@ from keras import backend as K
 from keras.datasets import mnist
 import pickle as pkl
 import time
+import random
 from sklearn.random_projection import GaussianRandomProjection
 
 
@@ -83,7 +84,6 @@ def old_compute_projections(input_data, projector, n_proj, size_proj=None):
     print("Input shape: ", input_data.shape)
 
     projected_data = [projector.fit_transform(flat_images) for i in range(n_proj)]
-
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
 
     print("Output shape:", projected_data.shape, "->", len(projected_data), "random projections of",
@@ -94,13 +94,7 @@ def old_compute_projections(input_data, projector, n_proj, size_proj=None):
     return projected_data
 
 
-# old ########
-# def compute_projections(input_data, projector, n_proj, size_proj=None):
-##############
-
-
-def compute_projections(input_data, random_states, n_proj, size_proj=None):
-
+def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given projector function `projector`.
 
@@ -125,29 +119,18 @@ def compute_projections(input_data, random_states, n_proj, size_proj=None):
 
     # TODO: dim proj deve essere inferiore a 28 e superiore a (vedi struttura layers)
 
-    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
     print("Input shape: ", input_data.shape)
+    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
 
-    # old #######
-    # projected_data = [projector.fit_transform(flat_images) for i in range(n_proj)]
-    # projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
-
-    # print("Output shape:", projected_data.shape, "->", len(projected_data), "random projections of",
-    #      projected_data.shape[1], "images whose shape is", projected_data.shape[2:])
-
-    # # print(predictions.shape, summed.shape, argmax_predictions.shape) # (3,100,10), (100,10), 100
-    #############
-
-    # new #######
     projected_data = []
     for i in range(n_proj):
         # cannot use list comprehension on GaussianRandomProjection objects
-        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_states[i])
+        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seeds[i])
         projected_data.append(projector.fit_transform(flat_images))
 
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
-    #############
 
+    print("Projected data shape:", projected_data.shape)
     return projected_data
 
 
