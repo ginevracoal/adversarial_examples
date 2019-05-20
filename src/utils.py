@@ -52,46 +52,6 @@ def preprocess_mnist(test=False, img_rows=IMG_ROWS, img_cols=IMG_COLS):
         return x_train, y_train, x_test, y_test, input_shape, 10
 
 
-def old_compute_projections(input_data, projector, n_proj, size_proj=None):
-
-    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
-    given projector function `projector`.
-
-    :param input_data: full dimension input data
-    :type input_data: numpy array
-    :param projector: projector function
-    :type projector: GaussianRandomProjection object
-    :param n_proj: number of projections
-    :type n_proj: int
-    :param size_proj: size of a projection
-    :type size_proj: int
-    :param random_state: pseudo random number generator
-    :type random_state: int
-    :return: array containing m random projections
-    """
-
-    print("\nComputing random projections.")
-
-    # TODO: non funziona il metodo di johns-lind
-    if size_proj is None:
-        size_proj = 'auto'
-
-    # TODO: dim proj deve essere inferiore a 28 e superiore a (vedi struttura layers)
-
-    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
-    print("Input shape: ", input_data.shape)
-
-    projected_data = [projector.fit_transform(flat_images) for i in range(n_proj)]
-    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
-
-    print("Output shape:", projected_data.shape, "->", len(projected_data), "random projections of",
-          projected_data.shape[1], "images whose shape is", projected_data.shape[2:])
-
-    # print(predictions.shape, summed.shape, argmax_predictions.shape) # (3,100,10), (100,10), 100
-
-    return projected_data
-
-
 def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given projector function `projector`.
@@ -115,8 +75,6 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
     if size_proj is None:
         size_proj = 'auto'
 
-    # TODO: dim proj deve essere inferiore a 28 e superiore a (vedi struttura layers)
-
     print("Input shape: ", input_data.shape)
     flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
 
@@ -129,7 +87,6 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
 
     print("Projected data shape:", projected_data.shape)
-    #print(projected_data[0,0,1])
     return projected_data
 
 

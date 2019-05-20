@@ -167,7 +167,6 @@ class AdversarialClassifier(object):
         :param model_name: name of the model
         """
         if self.trained:
-            #classifier.save(filepath=TRAINED_MODELS + time.strftime('%Y-%m-%d') + "/"+model_name + ".h5")
             classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     def load_classifier(self, relative_path):

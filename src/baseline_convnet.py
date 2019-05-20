@@ -5,7 +5,6 @@ Simple CNN model. This is out benchmark on the MNIST dataset.
 """
 
 from adversarial_classifier import AdversarialClassifier
-from art.attacks import FastGradientMethod
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
@@ -42,32 +41,6 @@ class BaselineConvnet(AdversarialClassifier):
                       metrics=['accuracy'])
         #model.summary()
         return model
-
-    def __evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm'):
-
-        if method == 'fgsm':
-            print("\nAdversarial evaluation using FGSM method.")
-            attacker = FastGradientMethod(classifier, eps=0.5)
-            x_test_adv = attacker.generate(x_test)
-        elif method == 'deepfool':
-            print("\nAdversarial evaluation using DeepFool method.")
-            with open('../data/mnist_x_test_deepfool.pkl', 'rb') as f:
-                u = pkl._Unpickler(f)
-                u.encoding = 'latin1'
-                x_test_adv = u.load()
-
-        # evaluate the performance on the adversarial test set
-        x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
-        nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
-
-        print("Adversarial test data.")
-        print("Correctly classified: {}".format(nb_correct_adv_pred))
-        print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
-
-        acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
-        print("Adversarial accuracy: %.2f%%" % (acc * 100))
-
-        return x_test_adv
 
 
 def main():

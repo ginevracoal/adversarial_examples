@@ -60,7 +60,8 @@ class Test(unittest.TestCase):
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble")
-        loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/")
+        loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
+                                                   model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
 
         # check equal test predictions

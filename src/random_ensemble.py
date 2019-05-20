@@ -11,9 +11,9 @@ from keras.models import load_model
 from utils import *
 
 # settings
-TEST = False
+TEST = True
 SIZE_PROJECTION = 8
-N_PROJECTIONS = 1
+N_PROJECTIONS = 10
 
 # defaults
 MODEL_NAME = "random_ensemble"
@@ -66,25 +66,14 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
 
-        # old ########
-        # print("\nGaussianRandomProjector seed = ", SEED)
-        # self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
-        # x_train_projected = compute_projections(x_train, self.projector, n_proj=self.n_proj, size_proj=self.size_proj)
-        ##############
-
-        # new ########
         x_train_projected = compute_projections(x_train, random_seeds=self.random_seeds,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
-
         # use the same model for all trainings
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         # train n_proj classifiers on different training data
         classifiers = [baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs)
                        for i in range(self.n_proj)]
-
         self.trained = True
-        ###############
-
         return classifiers
 
     @staticmethod
@@ -97,7 +86,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
         # sum the probabilities across all predictors
-        summed_predictions = np.sum(predictions, axis=0)  # / np.sqrt(np.sum(predictions**2))
+        summed_predictions = np.sum(predictions, axis=0)
         #print("\nPredictions on the first element:\n", predictions[:, 0])
         return summed_predictions
 
@@ -137,31 +126,11 @@ class RandomEnsemble(BaselineConvnet):
         :param model_name: name of the model used when files were saved
         :return: list of trained classifiers
         """
-        # old ######
         # load all trained models
-        #trained_models = [load_model(relative_path + model_name + "_" + str(i) + ".h5") for i in range(self.n_proj)]
-        #classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
-        ############
-
-        # build a random projector with the same original seed
-        # this is completely wrong
-        ####self.projector = GaussianRandomProjection(n_components=self.size_proj * self.size_proj, random_state=SEED)
-
-        # new ######
-        #trained_models = [load_model(relative_path + model_name + "_" + str(seed) + ".h5")
-        #                  for seed in self.random_seeds[0:self.n_proj]]
-        #classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
-        ############
-
-        # new 2 #####
-        classifiers = []
-        for i in range(self.n_proj):
-            seed = self.random_seeds[i]
-            trained_model = load_model(relative_path + model_name + "_" + str(seed) + ".h5")
-            classifiers.append(KerasClassifier((MIN, MAX), trained_model, use_logits=False))
-        #############
-
-        return classifiers  #, self.projector
+        trained_models = [load_model(relative_path + model_name + "_" + str(seed) + ".h5")
+                          for seed in self.random_seeds[:self.n_proj]]
+        classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
+        return classifiers
 
 
 def main():
@@ -171,17 +140,16 @@ def main():
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    #model.evaluate_test(classifier, x_test, y_test)
+    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    model.evaluate_test(classifier, x_test, y_test)
     #model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     classifier = model.load_classifier(
-        relative_path=TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8_c/",
+        relative_path=TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8_new/",
         model_name=MODEL_NAME)
 
     model.evaluate_test(classifier, x_test, y_test)
 
-    # todo: check these afterwards
     model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
     model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
     model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
