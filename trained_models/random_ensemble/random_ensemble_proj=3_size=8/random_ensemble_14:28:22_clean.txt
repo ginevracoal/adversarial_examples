@@ -1,0 +1,138 @@
+
+Loading mnist.
+('x_train shape:', (60000, 28, 28, 1), '\nx_test shape:', (10000, 28, 28, 1))
+
+Computing random projections.
+('Input shape: ', (60000, 28, 28, 1))
+('Projected data shape:', (3, 60000, 8, 8, 1))
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 3s 5ms/step - loss: 0.8174 - acc: 0.7358
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4771 - acc: 0.8522
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4062 - acc: 0.8737
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3641 - acc: 0.8873
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3405 - acc: 0.8951
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3087 - acc: 0.9046
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3040 - acc: 0.9054
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2871 - acc: 0.9099
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2807 - acc: 0.9131
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2684 - acc: 0.9157
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2562 - acc: 0.9203
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2559 - acc: 0.9190
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.8976 - acc: 0.7071
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.5445 - acc: 0.8266
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4538 - acc: 0.8574
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4148 - acc: 0.8695
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3731 - acc: 0.8844
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3603 - acc: 0.8863
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3312 - acc: 0.8960
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3207 - acc: 0.8986
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3117 - acc: 0.9023
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3038 - acc: 0.9045
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2880 - acc: 0.9101
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2801 - acc: 0.9111
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.9139 - acc: 0.7049
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.5436 - acc: 0.8285
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4621 - acc: 0.8561
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4148 - acc: 0.8723
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3879 - acc: 0.8803
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3612 - acc: 0.8878
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3432 - acc: 0.8942
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3283 - acc: 0.8980
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3217 - acc: 0.9007
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3093 - acc: 0.9033
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2967 - acc: 0.9096
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2874 - acc: 0.9099
+('\nTesting infos:\nx_test.shape = ', (10000, 28, 28, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (3, 10000, 8, 8, 1))
+
+Original test data.
+Correctly classified: 8125
+Incorrectly classified: 1875
+Test accuracy: 0.00%
+('\nAdversarial evaluation using', 'fgsm', 'method.')
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (3, 10000, 8, 8, 1))
+
+Adversarial test data.
+Correctly classified: 3244
+Incorrectly classified: 6756
+Adversarial accuracy: 0.00%
