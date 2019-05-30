@@ -5,7 +5,7 @@ from keras.datasets import mnist
 import pickle as pkl
 import time
 from sklearn.random_projection import GaussianRandomProjection
-
+import os
 
 IMG_ROWS = 28
 IMG_COLS = 28
@@ -95,6 +95,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj=None):
 
 def save_to_pickle(data, filename):
     """ saves data to pickle """
+    os.makedirs(os.path.dirname(RESULTS+time.strftime('%Y-%m-%d')+"/"+filename), exist_ok=True)
     with open(RESULTS+time.strftime('%Y-%m-%d')+"/"+filename, 'wb') as f:
         pkl.dump(data, f)
 
