@@ -13,7 +13,7 @@ from utils import *
 # settings
 TEST = True
 SIZE_PROJECTION = 8
-N_PROJECTIONS = 10
+N_PROJECTIONS = 3
 
 # defaults
 MODEL_NAME = "random_ensemble"
@@ -49,7 +49,7 @@ class RandomEnsemble(BaselineConvnet):
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
-        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67])
+        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67])  # np.repeat(123, 10)
         self.projector = None
         self.projectors_params = None
         self.trained = False
@@ -77,17 +77,86 @@ class RandomEnsemble(BaselineConvnet):
         return classifiers
 
     @staticmethod
-    def _ensemble_classifier(classifiers, projected_data):
+    def _sum_ensemble_classifier(classifiers, projected_data):
         """
         :param classifiers: list of `n_proj` different GaussianRandomProjection objects
         :param projected_test_data: array of test data projected on the different `n_proj` training random directions
         (`size_proj` directions for each projection)
         :return: sum of all the predicted probabilities among each class for the `n_proj` classifiers
+
+        ```
+        # Predictions on the first element by each single classifier
+        predictions[:, 0] =
+         [[0.04745529 0.00188083 0.01035858 0.21188359 0.00125252 0.44483757
+          0.00074033 0.13916749 0.01394993 0.1284739 ]
+         [0.00259137 0.00002327 0.48114488 0.42658636 0.00003032 0.01012747
+          0.00002206 0.03735029 0.02623402 0.0158899 ]
+         [0.00000004 0.00000041 0.00000277 0.00001737 0.00000067 0.00000228
+          0.         0.9995009  0.00000014 0.0004754 ]]
+
+        # Ensemble prediction vector on the first element
+        summed_predictions[0] =
+         [0.05004669 0.00190451 0.49150622 0.6384873  0.0012835  0.45496735
+         0.0007624  1.1760187  0.04018409 0.14483918]
         """
+        # compute predictions for each projection
         predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
         # sum the probabilities across all predictors
         summed_predictions = np.sum(predictions, axis=0)
-        #print("\nPredictions on the first element:\n", predictions[:, 0])
+        return summed_predictions
+
+    @staticmethod
+    def _mode_ensemble_classifier(classifiers, projected_data):
+        """
+        :param classifiers: list of `n_proj` different GaussianRandomProjection objects
+        :param projected_test_data: array of test data projected on the different `n_proj` training random directions
+        (`size_proj` directions for each projection)
+        :return: compute the argmax of the probability vectors and then, for each points, choose the mode over all
+        classes as the predicted label
+
+        Example on sample 0.
+        ```
+        Computing random projections.
+        Input shape:  (100, 28, 28, 1)
+        Projected data shape: (3, 100, 8, 8, 1)
+
+        # Predictions on the first element by each single classifier
+        predictions[:, 0] =
+        [[0.09603461 0.08185963 0.03264992 0.07047556 0.2478332  0.03418195
+          0.13880958 0.19712913 0.04649669 0.05452974]
+         [0.0687536  0.14464664 0.0766349  0.09082405 0.1066305  0.01555605
+          0.03265413 0.12625733 0.14203466 0.19600812]
+         [0.16379683 0.0895557  0.07057846 0.09945401 0.25141633 0.04555665
+          0.08481159 0.0610559  0.06158736 0.07218721]]
+
+        argmax_predictions[:, 0] =
+        [[0. 0. 0. 0. 1. 0. 0. 0. 0. 0.]
+         [0. 0. 0. 0. 0. 0. 0. 0. 0. 1.]
+         [0. 0. 0. 0. 1. 0. 0. 0. 0. 0.]]
+
+        # Ensemble prediction vector on the first element
+        summed_predictions[0] =
+        [0.         0.         0.         0.         0.66666667 0.
+         0.         0.         0.         0.33333333]
+        ```
+        """
+        # compute predictions for each projection
+        predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
+        # convert probability vectors into target vectors
+        argmax_predictions = np.zeros(predictions.shape)
+        for i in range(predictions.shape[0]):
+            idx = np.argmax(predictions[i], axis=-1)
+            argmax_predictions[i, np.arange(predictions.shape[1]), idx] = 1
+        # sum the probabilities across all predictors
+        summed_predictions = np.sum(argmax_predictions, axis=0)
+        # normalize
+        summed_predictions = summed_predictions / summed_predictions.sum(axis=1)[:, None]
+
+        # debug
+        # print(predictions[:, 0])
+        # print(argmax_predictions[:, 0])
+        # print(summed_predictions[0])
+
         return summed_predictions
 
     def predict(self, classifier, x_test):
@@ -100,7 +169,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         x_test_projected = compute_projections(x_test, random_seeds=self.random_seeds,
                                                n_proj=self.n_proj, size_proj=self.size_proj)
-        predictions = self._ensemble_classifier(classifier, x_test_projected)
+        predictions = self._mode_ensemble_classifier(classifier, x_test_projected)
         return predictions
 
     def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
@@ -119,7 +188,7 @@ class RandomEnsemble(BaselineConvnet):
         else:
             raise ValueError("Model has not been fitted!")
 
-    def load_classifier(self, relative_path, model_name):
+    def load_classifier(self, relative_path, model_name="random_ensemble"):
         """
         Loads a pretrained classifier and sets the projector with the training seed.
         :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
@@ -141,18 +210,16 @@ def main():
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-    model.evaluate_test(classifier, x_test, y_test)
-    #model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
-    classifier = model.load_classifier(
-        relative_path=TRAINED_MODELS+"random_ensemble/random_ensemble_proj10_size8_new/",
-        model_name=MODEL_NAME)
+    #classifier = model.load_classifier(
+    #    relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_proj=3_size=8/",
+    #    model_name=MODEL_NAME)
 
     model.evaluate_test(classifier, x_test, y_test)
-
     model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
-    model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
-    model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
+
+    #model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
+    #model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
 
     # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
     # model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
