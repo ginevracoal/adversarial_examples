@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import time
 from keras.models import load_model
 from art.classifiers import KerasClassifier
 from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method,\
     ProjectedGradientDescent, NewtonFool
-# from art.metrics import clever_t, loss_sensitivity
+from sklearn.metrics import classification_report
 from utils import *
-import pickle as pkl
-import itertools
 
 RESULTS = "../results/"
 TRAINED_MODELS = "../trained_models/"
@@ -99,7 +96,7 @@ class AdversarialClassifier(object):
         :return: predictions
         """
         predictions = classifier.predict(x)
-        #print(predictions[:, 0])
+        print(predictions[:, 0])
         return predictions
 
     def evaluate_test(self, classifier, x_test, y_test):
@@ -112,17 +109,20 @@ class AdversarialClassifier(object):
         """
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        x_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
-        correct_preds = np.sum(x_test_pred == np.argmax(y_test, axis=1))
+        y_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+        correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
 
         print("\nOriginal test data.")
         print("Correctly classified: {}".format(correct_preds))
         print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
 
-        acc = np.sum(x_test_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        acc = np.sum(y_test_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Test accuracy: %.2f%%" % (acc * 100))
 
-        return x_test_pred
+        # classification report over single classes
+        print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
+
+        return y_test_pred
 
     def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
         """
@@ -135,7 +135,7 @@ class AdversarialClassifier(object):
         :return:
         x_test_pred: test set predictions
         x_test_adv: adversarial perturbations of test data
-        x_test_adv_pred: adversarial test set predictions
+        y_test_adv: adversarial test set predictions
         """
 
         # generate adversaries on the test set
@@ -143,20 +143,20 @@ class AdversarialClassifier(object):
                                                 method=method, adversaries_path=adversaries_path)
 
         # evaluate the performance on the adversarial test set
-        x_test_adv_pred = np.argmax(self.predict(classifier, x_test_adv), axis=1)
-        nb_correct_adv_pred = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1))
+        y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
+        nb_correct_adv_pred = np.sum(y_test_adv == np.argmax(y_test, axis=1))
 
         print("\nAdversarial test data.")
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
 
-        acc = np.sum(x_test_adv_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        acc = np.sum(y_test_adv == np.argmax(y_test, axis=1)) / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
-        # TODO: use other measures to compute the results
-        #print(clever_t(classifier=classifier, x=x_test, target_class=y_test, batch_size=100, nb_batches=10, radius=0.2, norm=2))
+        # classification report
+        print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
 
-        return x_test_adv, x_test_adv_pred
+        return x_test_adv, y_test_adv
 
     def save_model(self, classifier, model_name):
         """
