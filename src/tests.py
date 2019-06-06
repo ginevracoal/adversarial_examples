@@ -40,7 +40,7 @@ class Test(unittest.TestCase):
         classifier = model.load_classifier(relative_path=TRAINED_MODELS+"IBM-art/mnist_cnn_original.h5")
 
         model.evaluate_adversaries(classifier, self.x_test, self.y_test,
-                                   method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
+                                   method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl', test=True)
 
         # adversarial training
         model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
