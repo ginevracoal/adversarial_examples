@@ -39,7 +39,7 @@ class BaselineConvnet(AdversarialClassifier):
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
-        #model.summary()
+        # model.summary()
         return model
 
 
