@@ -100,12 +100,14 @@ def save_to_pickle(data, filename):
         pkl.dump(data, f)
 
 
-def load_from_pickle(path):
+def load_from_pickle(path, test):
     """ loads data from pickle """
     with open(path, 'rb') as f:
         u = pkl._Unpickler(f)
         u.encoding = 'latin1'
-        data = u.load()
+        data = u.load()[0]
+    if test is True:
+        data = data[:100]
     return data
 
 ##############
