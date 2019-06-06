@@ -1,0 +1,376 @@
+
+Loading mnist.
+('x_train shape:', (60000, 28, 28, 1), '\nx_test shape:', (10000, 28, 28, 1))
+
+Computing random projections.
+('Input shape: ', (60000, 28, 28, 1))
+('Projected data shape:', (5, 60000, 8, 8, 1))
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.8166 - acc: 0.7379
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4661 - acc: 0.8530
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4068 - acc: 0.8741
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3529 - acc: 0.8908
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3330 - acc: 0.8949
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3119 - acc: 0.9046
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3024 - acc: 0.9058
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2876 - acc: 0.9101
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2756 - acc: 0.9143
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2648 - acc: 0.9171
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2559 - acc: 0.9203
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2536 - acc: 0.9207
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.8225 - acc: 0.7349
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4616 - acc: 0.8548
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4016 - acc: 0.8751
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3590 - acc: 0.8884
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3374 - acc: 0.8940
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3167 - acc: 0.9010
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3008 - acc: 0.9066
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2804 - acc: 0.9122
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2725 - acc: 0.9140
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2724 - acc: 0.9156
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2535 - acc: 0.9203
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2534 - acc: 0.9199
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 3s 5ms/step - loss: 0.8392 - acc: 0.7249
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4710 - acc: 0.8542
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4015 - acc: 0.8759
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3539 - acc: 0.8899
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3409 - acc: 0.8938
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3148 - acc: 0.9019
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3012 - acc: 0.9059
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2903 - acc: 0.9097
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2775 - acc: 0.9131
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2666 - acc: 0.9165
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2624 - acc: 0.9187
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2527 - acc: 0.9190
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 3s 6ms/step - loss: 0.8629 - acc: 0.7210
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4793 - acc: 0.8507
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4053 - acc: 0.8740
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3733 - acc: 0.8835
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3377 - acc: 0.8952
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3226 - acc: 0.8989
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3030 - acc: 0.9053
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2941 - acc: 0.9072
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2778 - acc: 0.9129
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2737 - acc: 0.9139
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2632 - acc: 0.9175
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2560 - acc: 0.9196
+('\nTraining infos:\nbatch_size = ', 128, '\nepochs =', 12, '\nx_train.shape = ', (60000, 8, 8, 1), '\ny_train.shape = ', (60000, 10), '\n')
+Epoch 1/12
+
+469/468 [==============================] - 3s 6ms/step - loss: 0.8103 - acc: 0.7425
+Epoch 2/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.4675 - acc: 0.8542
+Epoch 3/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3995 - acc: 0.8736
+Epoch 4/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3643 - acc: 0.8885
+Epoch 5/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3346 - acc: 0.8960
+Epoch 6/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3133 - acc: 0.9034
+Epoch 7/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.3000 - acc: 0.9048
+Epoch 8/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2930 - acc: 0.9095
+Epoch 9/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2769 - acc: 0.9118
+Epoch 10/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2673 - acc: 0.9166
+Epoch 11/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2643 - acc: 0.9176
+Epoch 12/12
+
+469/468 [==============================] - 2s 5ms/step - loss: 0.2530 - acc: 0.9196
+('\nTesting infos:\nx_test.shape = ', (10000, 28, 28, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (5, 10000, 8, 8, 1))
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (5, 10000, 8, 8, 1))
+('Test evaluation on projection ', 123)
+('\nTesting infos:\nx_test.shape = ', (10000, 8, 8, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Original test data.
+Correctly classified: 9363
+Incorrectly classified: 637
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.95      0.97      0.96       980
+           1       0.99      0.99      0.99      1135
+           2       0.93      0.93      0.93      1032
+           3       0.91      0.93      0.92      1010
+           4       0.93      0.94      0.94       982
+           5       0.93      0.89      0.91       892
+           6       0.93      0.96      0.94       958
+           7       0.95      0.94      0.94      1028
+           8       0.92      0.90      0.91       974
+           9       0.92      0.91      0.92      1009
+
+   micro avg       0.94      0.94      0.94     10000
+   macro avg       0.94      0.94      0.94     10000
+weighted avg       0.94      0.94      0.94     10000
+
+('Test evaluation on projection ', 45)
+('\nTesting infos:\nx_test.shape = ', (10000, 8, 8, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Original test data.
+Correctly classified: 9342
+Incorrectly classified: 658
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.95      0.97      0.96       980
+           1       0.98      0.98      0.98      1135
+           2       0.94      0.93      0.93      1032
+           3       0.90      0.94      0.92      1010
+           4       0.92      0.93      0.93       982
+           5       0.92      0.91      0.91       892
+           6       0.95      0.93      0.94       958
+           7       0.95      0.91      0.93      1028
+           8       0.92      0.92      0.92       974
+           9       0.90      0.91      0.91      1009
+
+   micro avg       0.93      0.93      0.93     10000
+   macro avg       0.93      0.93      0.93     10000
+weighted avg       0.93      0.93      0.93     10000
+
+('Test evaluation on projection ', 180)
+('\nTesting infos:\nx_test.shape = ', (10000, 8, 8, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Original test data.
+Correctly classified: 9390
+Incorrectly classified: 610
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.96      0.97      0.96       980
+           1       0.98      0.99      0.99      1135
+           2       0.94      0.93      0.93      1032
+           3       0.91      0.92      0.92      1010
+           4       0.90      0.96      0.93       982
+           5       0.91      0.91      0.91       892
+           6       0.97      0.96      0.96       958
+           7       0.95      0.93      0.94      1028
+           8       0.92      0.91      0.92       974
+           9       0.94      0.91      0.92      1009
+
+   micro avg       0.94      0.94      0.94     10000
+   macro avg       0.94      0.94      0.94     10000
+weighted avg       0.94      0.94      0.94     10000
+
+('Test evaluation on projection ', 172)
+('\nTesting infos:\nx_test.shape = ', (10000, 8, 8, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Original test data.
+Correctly classified: 9383
+Incorrectly classified: 617
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.97      0.98      0.97       980
+           1       0.98      0.99      0.98      1135
+           2       0.95      0.91      0.93      1032
+           3       0.93      0.93      0.93      1010
+           4       0.92      0.95      0.93       982
+           5       0.93      0.89      0.91       892
+           6       0.97      0.95      0.96       958
+           7       0.94      0.94      0.94      1028
+           8       0.89      0.93      0.91       974
+           9       0.91      0.91      0.91      1009
+
+   micro avg       0.94      0.94      0.94     10000
+   macro avg       0.94      0.94      0.94     10000
+weighted avg       0.94      0.94      0.94     10000
+
+('Test evaluation on projection ', 61)
+('\nTesting infos:\nx_test.shape = ', (10000, 8, 8, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Original test data.
+Correctly classified: 9366
+Incorrectly classified: 634
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.96      0.96      0.96       980
+           1       0.98      0.99      0.98      1135
+           2       0.95      0.91      0.93      1032
+           3       0.91      0.94      0.92      1010
+           4       0.93      0.94      0.94       982
+           5       0.93      0.89      0.91       892
+           6       0.95      0.95      0.95       958
+           7       0.93      0.95      0.94      1028
+           8       0.90      0.92      0.91       974
+           9       0.93      0.91      0.92      1009
+
+   micro avg       0.94      0.94      0.94     10000
+   macro avg       0.94      0.94      0.94     10000
+weighted avg       0.94      0.94      0.94     10000
+
+('\nTesting infos:\nx_test.shape = ', (10000, 28, 28, 1), '\ny_test.shape = ', (10000, 10), '\n')
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (5, 10000, 8, 8, 1))
+
+Original test data.
+Correctly classified: 9661
+Incorrectly classified: 339
+Test accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.97      0.98      0.98       980
+           1       0.98      0.99      0.99      1135
+           2       0.97      0.96      0.96      1032
+           3       0.96      0.97      0.96      1010
+           4       0.96      0.98      0.97       982
+           5       0.96      0.95      0.96       892
+           6       0.97      0.97      0.97       958
+           7       0.97      0.96      0.96      1028
+           8       0.95      0.96      0.95       974
+           9       0.96      0.94      0.95      1009
+
+   micro avg       0.97      0.97      0.97     10000
+   macro avg       0.97      0.97      0.97     10000
+weighted avg       0.97      0.97      0.97     10000
+
+('\nAdversarial evaluation using', 'fgsm', 'method.')
+(10000, 10000)
+
+Computing random projections.
+('Input shape: ', (10000, 28, 28, 1))
+('Projected data shape:', (5, 10000, 8, 8, 1))
+
+Adversarial test data.
+Correctly classified: 5292
+Incorrectly classified: 4708
+Adversarial accuracy: 0.00%
+              precision    recall  f1-score   support
+
+           0       0.87      0.75      0.81       980
+           1       1.00      0.02      0.03      1135
+           2       0.62      0.75      0.68      1032
+           3       0.46      0.75      0.57      1010
+           4       0.65      0.51      0.57       982
+           5       0.64      0.58      0.61       892
+           6       0.82      0.67      0.74       958
+           7       0.90      0.28      0.42      1028
+           8       0.27      0.85      0.41       974
+           9       0.50      0.23      0.32      1009
+
+   micro avg       0.53      0.53      0.53     10000
+   macro avg       0.67      0.54      0.52     10000
+weighted avg       0.68      0.53      0.51     10000
+

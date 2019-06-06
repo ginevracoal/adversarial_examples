@@ -235,28 +235,27 @@ class RandomEnsemble(BaselineConvnet):
 
 
 def main():
-
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
 
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    #classifier = model.load_classifier(
-    #    relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_proj=3_size=8/",
-    #    model_name=MODEL_NAME)
+    classifier = model.load_classifier(
+        relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=10_size=8/",
+        model_name=MODEL_NAME)
 
-    #model.adversarial_train(classifier, x_train,y_train, x_test, y_test, batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, batch_size=BATCH_SIZE,
+                                                epochs=EPOCHS, method='fgsm')
 
-    model.evaluate_test(classifier, x_test, y_test)
-    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
-    #model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
-    #                                                   "_size=" + str(model.size_proj))
+    model.evaluate_test(robust_classifier, x_test, y_test)
+    model.evaluate_adversaries(robust_classifier, x_test, y_test, method='fgsm')
+    model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+                                                              "_size=" + str(model.size_proj))
 
-    #model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
-    #model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
-
+    # model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
+    # model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
     # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
     # model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
 
