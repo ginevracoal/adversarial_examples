@@ -59,7 +59,8 @@ class Test(unittest.TestCase):
         model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
 
         # save and load
-        model.save_model(classifier=classifiers, model_name="random_ensemble")
+        model.save_model(classifier=classifiers, model_name="random_ensemble_proj=" + str(model.n_proj) +
+                                                            "_size=" + str(model.size_proj))
         loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
                                                    model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
