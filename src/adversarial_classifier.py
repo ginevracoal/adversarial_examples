@@ -50,7 +50,7 @@ class AdversarialClassifier(object):
         self.trained = True
         return classifier
 
-    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None):
+    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None, test=False):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
 
@@ -83,11 +83,11 @@ class AdversarialClassifier(object):
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
         else:
-            x_adv = load_from_pickle(path=adversaries_path)[0]
+            x_adv = load_from_pickle(path=adversaries_path, test=test)#[0]
 
         return x_adv
 
-    def predict(self, classifier, x):
+    def predict(self, classifier, x, *args, **kwargs):
         """
         This method is needed for calling the method predict on other objects than keras classifiers in the derived
         classes.
@@ -96,7 +96,7 @@ class AdversarialClassifier(object):
         :return: predictions
         """
         predictions = classifier.predict(x)
-        print(predictions[:, 0])
+        # print(predictions[:, 0])
         return predictions
 
     def evaluate_test(self, classifier, x_test, y_test):
@@ -110,13 +110,14 @@ class AdversarialClassifier(object):
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
         y_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
+        y_test_true = np.argmax(y_test, axis=1)
         correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
 
         print("\nOriginal test data.")
         print("Correctly classified: {}".format(correct_preds))
         print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
 
-        acc = np.sum(y_test_pred == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
         print("Test accuracy: %.2f%%" % (acc * 100))
 
         # classification report over single classes
@@ -124,7 +125,7 @@ class AdversarialClassifier(object):
 
         return y_test_pred
 
-    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None):
+    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None, test=False):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications.
         :param classifier: trained classifier
@@ -140,17 +141,18 @@ class AdversarialClassifier(object):
 
         # generate adversaries on the test set
         x_test_adv = self._generate_adversaries(classifier, x_test, y_test,
-                                                method=method, adversaries_path=adversaries_path)
-
+                                                method=method, adversaries_path=adversaries_path, test=test)
+        print(len(x_test), len(x_test_adv))
         # evaluate the performance on the adversarial test set
         y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
-        nb_correct_adv_pred = np.sum(y_test_adv == np.argmax(y_test, axis=1))
+        y_test_true = np.argmax(y_test, axis=1)
+        nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
 
         print("\nAdversarial test data.")
         print("Correctly classified: {}".format(nb_correct_adv_pred))
-        print("Incorrectly classified: {}".format(len(x_test) - nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
 
-        acc = np.sum(y_test_adv == np.argmax(y_test, axis=1)) / y_test.shape[0]
+        acc = nb_correct_adv_pred / y_test.shape[0]
         print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
         # classification report
