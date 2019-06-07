@@ -4,5 +4,5 @@ adversarial-robustness-toolbox/
 *.csv
 data/
 */__pycache__/*
-results/*
+results/2019*
 old_requirements.txt
