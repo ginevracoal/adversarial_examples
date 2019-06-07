@@ -14,7 +14,9 @@ then classifies the original high dimensional data with a voting technique on th
 
 - data
 - notebooks
+- results
 - src
 - trained_models
+    - baseline
     - IBM-art
-
+    - random_ensemble
