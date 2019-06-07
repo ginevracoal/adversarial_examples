@@ -106,7 +106,7 @@ def load_from_pickle(path, test):
         u.encoding = 'latin1'
         data = u.load()[0]
     if test is True:
-        data = data[:100]
+        data = data[:TEST_SIZE]
     return data
 
 ##############

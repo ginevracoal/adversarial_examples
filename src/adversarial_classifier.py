@@ -50,7 +50,7 @@ class AdversarialClassifier(object):
         self.trained = True
         return classifier
 
-    def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None, test=False):
+    def _generate_adversaries(self, classifier, x, y, test, method='fgsm', adversaries_path=None):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
 
@@ -83,7 +83,7 @@ class AdversarialClassifier(object):
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
         else:
-            x_adv = load_from_pickle(path=adversaries_path, test=test)#[0]
+            x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
 
         return x_adv
 
@@ -113,7 +113,6 @@ class AdversarialClassifier(object):
         y_test_true = np.argmax(y_test, axis=1)
         correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
 
-        print("\nOriginal test data.")
         print("Correctly classified: {}".format(correct_preds))
         print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
 
@@ -133,6 +132,7 @@ class AdversarialClassifier(object):
         :param y_test: test labels
         :param method: art.attack method
         :param adversaries_path: path of saved pickle data
+        :param test: if true only takes TEST_SIZE samples
         :return:
         x_test_pred: test set predictions
         x_test_adv: adversarial perturbations of test data
@@ -142,7 +142,9 @@ class AdversarialClassifier(object):
         # generate adversaries on the test set
         x_test_adv = self._generate_adversaries(classifier, x_test, y_test,
                                                 method=method, adversaries_path=adversaries_path, test=test)
-        print(len(x_test), len(x_test_adv))
+        # debug
+        # print(len(x_test), len(x_test_adv))
+
         # evaluate the performance on the adversarial test set
         y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
         y_test_true = np.argmax(y_test, axis=1)
@@ -186,8 +188,8 @@ class AdversarialClassifier(object):
     def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm'):
 
         # generate adversarial examples on train and test sets
-        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method)
-        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method)
+        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method, test=False)
+        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, test=False)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)

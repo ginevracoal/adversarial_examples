@@ -9,11 +9,12 @@ from art.classifiers import KerasClassifier
 from baseline_convnet import BaselineConvnet
 from keras.models import load_model
 from utils import *
+import time
 
 # settings
-TEST = True
-SIZE_PROJECTION = 8
-N_PROJECTIONS = 3
+TEST = False  # if True takes only 100 samples
+N_PROJECTIONS = [6, 9, 12, 15]  # it has to be a list
+SIZE_PROJECTION = [8, 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
 
 # defaults
@@ -51,7 +52,7 @@ class RandomEnsemble(BaselineConvnet):
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
-        self.random_seed = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67])  # np.repeat(123, 10)
+        self.random_seed = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         self.projector = None
         self.projectors_params = None
         self.trained = False
@@ -178,9 +179,9 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def evaluate_test(self, classifiers, x_test, y_test):
+    def evaluate_test_projections(self, classifiers, x_test, y_test):
         """
-        Overwrites base class evaluation method by also performing an evaluation on each projected version of the data.
+        Performs a test evaluation on each projected version of the data and also on the final predictions.
         :param classifiers: list of trained classifiers over different projections
         :param x_test: test data
         :param y_test: test labels
@@ -196,10 +197,11 @@ class RandomEnsemble(BaselineConvnet):
         # evaluate each classifier on its projected test set
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         for i, classifier in enumerate(classifiers):
-            print("Test evaluation on projection ", self.random_seed[i])  # i
+            print("\nTest evaluation on projection ", self.random_seed[i])  # i
             baseline.evaluate_test(classifier, x_test_proj[i], y_test)
 
         # final classifier evaluation on the original test set
+        print("\nFinal test evaluation")
         super(BaselineConvnet, self).evaluate_test(classifiers, x_test, y_test)
         return y_test_pred
 
@@ -208,7 +210,7 @@ class RandomEnsemble(BaselineConvnet):
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         baseline_classifier = baseline.load_classifier(TRAINED_BASELINE)
         x_adv = baseline._generate_adversaries(baseline_classifier, x, y, method=method,
-                                               adversaries_path=adversaries_path)
+                                               adversaries_path=adversaries_path, test=test)
         return x_adv
 
     def save_model(self, classifier, model_name):
@@ -234,32 +236,88 @@ class RandomEnsemble(BaselineConvnet):
         return classifiers
 
 
-def main():
+###################
+# MAIN EXECUTIONS #
+###################
+
+
+def train_all(n_projections, size_projections):
+    """Trains a model for each combinations of the given n_projections, size_projections"""
+
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
-    model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
+    for n_proj in n_projections:
+        for size_proj in size_projections:
+            model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+                                   n_proj=n_proj, size_proj=size_proj)
 
-    # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+            start_time = time.time()
+            classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    classifier = model.load_classifier(
-        relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=10_size=8/",
-        model_name=MODEL_NAME)
+            print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
+                  "): --- %s seconds ---" % (time.time() - start_time))
 
-    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, batch_size=BATCH_SIZE,
-                                                epochs=EPOCHS, method='fgsm')
+            model.evaluate_test(classifier, x_test, y_test)
+            model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
+            model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+                                                               "_size=" + str(model.size_proj))
 
-    model.evaluate_test(robust_classifier, x_test, y_test)
-    model.evaluate_adversaries(robust_classifier, x_test, y_test, method='fgsm')
-    model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
-                                                              "_size=" + str(model.size_proj))
 
-    # model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl')
-    # model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
-    # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    # model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+def adversarially_train_all(n_projections, size_projections):
+    """ Performs FGSM adversarial training on each models """
 
-    # save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
+
+    for n_proj in n_projections:
+        for size_proj in size_projections:
+            model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+                                   n_proj=n_proj, size_proj=size_proj)
+
+            classifier = model.load_classifier(
+                relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
+                                               "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
+
+            start_time = time.time()
+            classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
+                                                 batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+            print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
+                  "): --- %s seconds ---" % (time.time() - start_time))
+
+            model.evaluate_test(classifier, x_test, y_test)
+            model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST)
+            model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+                                                               "_size=" + str(model.size_proj))
+
+
+def evaluate_all_attacks(n_projections, size_projections):
+    """ Evaluates each model on each attack"""
+    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
+
+    for n_proj in n_projections:
+        for size_proj in size_projections:
+            model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+                                   n_proj=n_proj, size_proj=size_proj)
+
+            classifier = model.load_classifier(
+                relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
+                                               "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
+
+            # model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST)
+            model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
+                                       adversaries_path='../data/mnist_x_test_deepfool.pkl', test=TEST)
+            model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient',
+                                       adversaries_path='../data/mnist_x_test_projected_gradient.pkl', test=TEST)
+
+            # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+            # model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+            # save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+
+
+def main():
+
+    # train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
+    # adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
+    evaluate_all_attacks(n_projections=[15], size_projections=SIZE_PROJECTION)
 
 
 if __name__ == "__main__":

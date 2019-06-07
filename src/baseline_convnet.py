@@ -8,6 +8,7 @@ from adversarial_classifier import AdversarialClassifier
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
+import time
 
 SAVE = False
 TEST = True
@@ -48,19 +49,18 @@ def main():
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
-    classifier = model.load_classifier(relative_path=TRAINED_MODEL)
 
-    x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
-    x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
-    x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
+    start_time = time.time()
+    #classifier = model.load_classifier(relative_path=TRAINED_MODEL)
+    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    if SAVE is True:
+    print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
+          "): --- %s seconds ---" % (time.time() - start_time))
 
-        save_to_pickle(data=x_test_virtual, filename="mnist_x_test_virtual.pkl")
-        save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
-        save_to_pickle(data=x_test_projected_gradient, filename="mnist_x_test_projected_gradient.pkl")
-        save_to_pickle(data=x_test_newtonfool, filename="mnist_x_test_newtonfool.pkl")
+    #x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
+    #x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
+    #x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
 
 
 if __name__ == "__main__":
