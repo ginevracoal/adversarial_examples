@@ -1,0 +1,228 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Adversarial evaluation using deepfool method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 8, 8, 1)
+
+Adversarial test data.
+Correctly classified: 9620
+Incorrectly classified: 380
+Adversarial accuracy: 96.20%
+              precision    recall  f1-score   support
+
+           0       0.97      0.99      0.98       980
+           1       0.98      0.99      0.99      1135
+           2       0.96      0.96      0.96      1032
+           3       0.96      0.96      0.96      1010
+           4       0.95      0.96      0.96       982
+           5       0.97      0.96      0.96       892
+           6       0.97      0.97      0.97       958
+           7       0.97      0.94      0.95      1028
+           8       0.94      0.96      0.95       974
+           9       0.94      0.93      0.94      1009
+
+   micro avg       0.96      0.96      0.96     10000
+   macro avg       0.96      0.96      0.96     10000
+weighted avg       0.96      0.96      0.96     10000
+
+
+Adversarial evaluation using projected_gradient method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 8, 8, 1)
+
+Adversarial test data.
+Correctly classified: 7961
+Incorrectly classified: 2039
+Adversarial accuracy: 79.61%
+              precision    recall  f1-score   support
+
+           0       0.95      0.93      0.94       980
+           1       1.00      0.53      0.69      1135
+           2       0.74      0.92      0.82      1032
+           3       0.78      0.88      0.83      1010
+           4       0.80      0.85      0.82       982
+           5       0.86      0.77      0.81       892
+           6       0.95      0.86      0.90       958
+           7       0.95      0.70      0.81      1028
+           8       0.50      0.93      0.65       974
+           9       0.84      0.62      0.71      1009
+
+   micro avg       0.80      0.80      0.80     10000
+   macro avg       0.84      0.80      0.80     10000
+weighted avg       0.84      0.80      0.80     10000
+
+
+Adversarial evaluation using deepfool method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 12, 12, 1)
+
+Adversarial test data.
+Correctly classified: 9722
+Incorrectly classified: 278
+Adversarial accuracy: 97.22%
+              precision    recall  f1-score   support
+
+           0       0.97      0.99      0.98       980
+           1       0.99      0.99      0.99      1135
+           2       0.97      0.97      0.97      1032
+           3       0.97      0.97      0.97      1010
+           4       0.97      0.97      0.97       982
+           5       0.98      0.97      0.97       892
+           6       0.97      0.98      0.97       958
+           7       0.97      0.97      0.97      1028
+           8       0.96      0.97      0.96       974
+           9       0.97      0.95      0.96      1009
+
+   micro avg       0.97      0.97      0.97     10000
+   macro avg       0.97      0.97      0.97     10000
+weighted avg       0.97      0.97      0.97     10000
+
+
+Adversarial evaluation using projected_gradient method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 12, 12, 1)
+
+Adversarial test data.
+Correctly classified: 8269
+Incorrectly classified: 1731
+Adversarial accuracy: 82.69%
+              precision    recall  f1-score   support
+
+           0       0.97      0.93      0.95       980
+           1       0.99      0.55      0.71      1135
+           2       0.78      0.94      0.86      1032
+           3       0.86      0.89      0.87      1010
+           4       0.84      0.84      0.84       982
+           5       0.89      0.83      0.86       892
+           6       0.93      0.91      0.92       958
+           7       0.96      0.78      0.86      1028
+           8       0.52      0.94      0.67       974
+           9       0.88      0.69      0.77      1009
+
+   micro avg       0.83      0.83      0.83     10000
+   macro avg       0.86      0.83      0.83     10000
+weighted avg       0.86      0.83      0.83     10000
+
+
+Adversarial evaluation using deepfool method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 16, 16, 1)
+
+Adversarial test data.
+Correctly classified: 9769
+Incorrectly classified: 231
+Adversarial accuracy: 97.69%
+              precision    recall  f1-score   support
+
+           0       0.98      0.99      0.98       980
+           1       0.99      0.99      0.99      1135
+           2       0.98      0.97      0.98      1032
+           3       0.98      0.98      0.98      1010
+           4       0.97      0.97      0.97       982
+           5       0.99      0.97      0.98       892
+           6       0.98      0.98      0.98       958
+           7       0.97      0.97      0.97      1028
+           8       0.96      0.98      0.97       974
+           9       0.97      0.96      0.97      1009
+
+   micro avg       0.98      0.98      0.98     10000
+   macro avg       0.98      0.98      0.98     10000
+weighted avg       0.98      0.98      0.98     10000
+
+
+Adversarial evaluation using projected_gradient method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 16, 16, 1)
+
+Adversarial test data.
+Correctly classified: 7945
+Incorrectly classified: 2055
+Adversarial accuracy: 79.45%
+              precision    recall  f1-score   support
+
+           0       0.97      0.95      0.96       980
+           1       1.00      0.34      0.50      1135
+           2       0.78      0.95      0.86      1032
+           3       0.81      0.90      0.85      1010
+           4       0.87      0.80      0.83       982
+           5       0.89      0.83      0.86       892
+           6       0.95      0.89      0.92       958
+           7       0.96      0.71      0.82      1028
+           8       0.45      0.96      0.62       974
+           9       0.84      0.70      0.77      1009
+
+   micro avg       0.79      0.79      0.79     10000
+   macro avg       0.85      0.80      0.80     10000
+weighted avg       0.85      0.79      0.79     10000
+
+
+Adversarial evaluation using deepfool method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 20, 20, 1)
+
+Adversarial test data.
+Correctly classified: 9791
+Incorrectly classified: 209
+Adversarial accuracy: 97.91%
+              precision    recall  f1-score   support
+
+           0       0.98      0.99      0.99       980
+           1       0.99      0.99      0.99      1135
+           2       0.98      0.98      0.98      1032
+           3       0.98      0.98      0.98      1010
+           4       0.98      0.98      0.98       982
+           5       0.98      0.98      0.98       892
+           6       0.99      0.98      0.98       958
+           7       0.98      0.97      0.97      1028
+           8       0.97      0.98      0.97       974
+           9       0.97      0.97      0.97      1009
+
+   micro avg       0.98      0.98      0.98     10000
+   macro avg       0.98      0.98      0.98     10000
+weighted avg       0.98      0.98      0.98     10000
+
+
+Adversarial evaluation using projected_gradient method.
+
+Computing random projections.
+Input shape:  (10000, 28, 28, 1)
+Projected data shape: (12, 10000, 20, 20, 1)
+
+Adversarial test data.
+Correctly classified: 7964
+Incorrectly classified: 2036
+Adversarial accuracy: 79.64%
+              precision    recall  f1-score   support
+
+           0       0.98      0.93      0.96       980
+           1       0.99      0.39      0.56      1135
+           2       0.81      0.93      0.86      1032
+           3       0.83      0.91      0.87      1010
+           4       0.84      0.85      0.84       982
+           5       0.90      0.81      0.85       892
+           6       0.95      0.89      0.92       958
+           7       0.96      0.70      0.81      1028
+           8       0.45      0.96      0.61       974
+           9       0.84      0.67      0.74      1009
+
+   micro avg       0.80      0.80      0.80     10000
+   macro avg       0.85      0.80      0.80     10000
+weighted avg       0.86      0.80      0.80     10000
+
