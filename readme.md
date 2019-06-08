@@ -10,6 +10,12 @@ Models:
 - The model `random_ensemble` computes n_proj random projections of the training data in a lower dimensional space,
 then classifies the original high dimensional data with a voting technique on the single classifications.
 
+### Current results
+
+![](results/randsens_test_accuracy.png)
+![](results/randens_adversarial_accuracy.png)
+![](results/randens_complexity.png)
+
 ### Folders structure
 
 - data
