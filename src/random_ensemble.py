@@ -12,7 +12,7 @@ from utils import *
 import time
 
 # settings
-TEST = False  # if True takes only 100 samples
+TEST = True  # if True takes only 100 samples
 N_PROJECTIONS = [6, 9, 12, 15]  # it has to be a list
 SIZE_PROJECTION = [8, 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
@@ -315,7 +315,7 @@ def evaluate_all_attacks(n_projections, size_projections):
 
 def main():
 
-    # train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
+    train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
     # adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
     evaluate_all_attacks(n_projections=[15], size_projections=SIZE_PROJECTION)
 

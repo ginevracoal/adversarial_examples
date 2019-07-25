@@ -1,0 +1,76 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Adversarial evaluation using fgsm method.
+
+Adversarial test data.
+Correctly classified: 8145
+Incorrectly classified: 1855
+Adversarial accuracy: 81.45%
+              precision    recall  f1-score   support
+
+           0       0.96      0.91      0.93       980
+           1       0.97      0.68      0.80      1135
+           2       0.92      0.84      0.88      1032
+           3       0.86      0.90      0.88      1010
+           4       0.70      0.88      0.78       982
+           5       0.78      0.79      0.78       892
+           6       0.91      0.85      0.88       958
+           7       0.82      0.77      0.80      1028
+           8       0.68      0.83      0.75       974
+           9       0.66      0.71      0.69      1009
+
+   micro avg       0.81      0.81      0.81     10000
+   macro avg       0.83      0.82      0.82     10000
+weighted avg       0.83      0.81      0.82     10000
+
+
+Adversarial evaluation using deepfool method.
+
+Adversarial test data.
+Correctly classified: 9746
+Incorrectly classified: 254
+Adversarial accuracy: 97.46%
+              precision    recall  f1-score   support
+
+           0       0.99      0.99      0.99       980
+           1       1.00      0.99      0.99      1135
+           2       0.98      0.96      0.97      1032
+           3       0.98      0.96      0.97      1010
+           4       0.97      0.98      0.98       982
+           5       0.97      0.97      0.97       892
+           6       1.00      0.98      0.99       958
+           7       0.96      0.97      0.97      1028
+           8       0.97      0.96      0.96       974
+           9       0.93      0.98      0.95      1009
+
+   micro avg       0.97      0.97      0.97     10000
+   macro avg       0.97      0.97      0.97     10000
+weighted avg       0.97      0.97      0.97     10000
+
+
+Adversarial evaluation using projected_gradient method.
+
+Adversarial test data.
+Correctly classified: 2592
+Incorrectly classified: 7408
+Adversarial accuracy: 25.92%
+              precision    recall  f1-score   support
+
+           0       0.50      0.20      0.28       980
+           1       0.44      0.08      0.14      1135
+           2       0.31      0.34      0.32      1032
+           3       0.21      0.23      0.22      1010
+           4       0.22      0.33      0.27       982
+           5       0.17      0.23      0.20       892
+           6       0.54      0.36      0.43       958
+           7       0.29      0.31      0.30      1028
+           8       0.28      0.51      0.37       974
+           9       0.04      0.04      0.04      1009
+
+   micro avg       0.26      0.26      0.26     10000
+   macro avg       0.30      0.26      0.26     10000
+weighted avg       0.30      0.26      0.25     10000
+

@@ -11,10 +11,11 @@ from utils import *
 import time
 
 SAVE = False
-TEST = True
+TEST = False
 
 MODEL_NAME = "baseline_convnet"
-TRAINED_MODEL = "IBM-art/mnist_cnn_original.h5"
+TRAINED_MODELS = "../trained_models/"
+TRAINED_MODEL = TRAINED_MODELS+"IBM-art/mnist_cnn_robust.h5"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
 
@@ -50,16 +51,23 @@ def main():
 
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
 
-    start_time = time.time()
-    #classifier = model.load_classifier(relative_path=TRAINED_MODEL)
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    #start_time = time.time()
+    classifier = model.load_classifier(relative_path=TRAINED_MODEL)
+    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
-          "): --- %s seconds ---" % (time.time() - start_time))
+    #model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
+    #                        batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+
+    #print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
+
+    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST)
+    model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
+                               adversaries_path='../data/mnist_x_test_deepfool.pkl', test=TEST)
+    model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient',
+                               adversaries_path='../data/mnist_x_test_projected_gradient.pkl', test=TEST)
 
     #x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
     #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
-    #x_test_projected_gradient = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient')
     #x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
 
 
