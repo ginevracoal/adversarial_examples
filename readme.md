@@ -13,7 +13,7 @@ single classifications.
 
 ### Current results
 
-![](results/randsens_test_accuracy.png)
+![](results/randens_test_accuracy.png)
 ![](results/randens_adversarial_accuracy.png)
 ![](results/randens_complexity.png)
 
