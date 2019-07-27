@@ -1,0 +1,138 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Loading the model.
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with fgsm method.
+
+Adversarial test data.
+Correctly classified: 591
+Incorrectly classified: 9409
+Adversarial accuracy: 5.91%
+              precision    recall  f1-score   support
+
+           0       0.16      0.05      0.08       980
+           1       0.00      0.00      0.00      1135
+           2       0.14      0.16      0.15      1032
+           3       0.06      0.08      0.07      1010
+           4       0.05      0.02      0.03       982
+           5       0.02      0.02      0.02       892
+           6       0.17      0.05      0.07       958
+           7       0.07      0.01      0.02      1028
+           8       0.05      0.20      0.07       974
+           9       0.01      0.01      0.01      1009
+
+   micro avg       0.06      0.06      0.06     10000
+   macro avg       0.07      0.06      0.05     10000
+weighted avg       0.07      0.06      0.05     10000
+
+
+===== Adversarial training =====
+
+Generating adversaries with fgsm method.
+
+Generating adversaries with fgsm method.
+
+Training infos:
+batch_size =  128 
+epochs = 12 
+x_train.shape =  (120000, 28, 28, 1) 
+y_train.shape =  (120000, 10) 
+
+Epoch 1/12
+
+938/937 [==============================] - 41s 43ms/step - loss: 0.2618 - acc: 0.9199
+Epoch 2/12
+
+938/937 [==============================] - 40s 43ms/step - loss: 0.0871 - acc: 0.9757
+Epoch 3/12
+
+938/937 [==============================] - 40s 42ms/step - loss: 0.0626 - acc: 0.9824
+Epoch 4/12
+
+938/937 [==============================] - 40s 43ms/step - loss: 0.0535 - acc: 0.9853
+Epoch 5/12
+
+938/937 [==============================] - 40s 42ms/step - loss: 0.0492 - acc: 0.9865
+Epoch 6/12
+
+938/937 [==============================] - 40s 43ms/step - loss: 0.0437 - acc: 0.9881
+Epoch 7/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0389 - acc: 0.9893
+Epoch 8/12
+
+938/937 [==============================] - 41s 43ms/step - loss: 0.0378 - acc: 0.9900
+Epoch 9/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0359 - acc: 0.9902
+Epoch 10/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0347 - acc: 0.9905
+Epoch 11/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0346 - acc: 0.9906
+Epoch 12/12
+
+938/937 [==============================] - 43s 46ms/step - loss: 0.0318 - acc: 0.9912
+
+Evaluating on adversarial test set generated on the original classifier:
+
+===== Test set evaluation =====
+
+Testing infos:
+x_test.shape =  (10000, 28, 28, 1) 
+y_test.shape =  (10000, 10) 
+
+Correctly classified: 9891
+Incorrectly classified: 109
+Test accuracy: 98.91%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.98      0.99      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       0.99      0.98      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.98      0.99       974
+           9       0.99      0.98      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+Eval on x_test_fgsm.pkl
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with fgsm method.
+
+Adversarial test data.
+Correctly classified: 9891
+Incorrectly classified: 109
+Adversarial accuracy: 98.91%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.98      0.99      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       0.99      0.98      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.98      0.99       974
+           9       0.99      0.98      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+

@@ -1,0 +1,28 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Adversarial evaluation using fgsm method.
+
+Adversarial test data.
+Correctly classified: 591
+Incorrectly classified: 9409
+Adversarial accuracy: 5.91%
+              precision    recall  f1-score   support
+
+           0       0.16      0.05      0.08       980
+           1       0.00      0.00      0.00      1135
+           2       0.14      0.16      0.15      1032
+           3       0.06      0.08      0.07      1010
+           4       0.05      0.02      0.03       982
+           5       0.02      0.02      0.02       892
+           6       0.17      0.05      0.07       958
+           7       0.07      0.01      0.02      1028
+           8       0.05      0.20      0.07       974
+           9       0.01      0.01      0.01      1009
+
+   micro avg       0.06      0.06      0.06     10000
+   macro avg       0.07      0.06      0.05     10000
+weighted avg       0.07      0.06      0.05     10000
+
