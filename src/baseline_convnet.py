@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Simple CNN model. This is out benchmark on the MNIST dataset.
+Simple CNN model. This is our benchmark on the MNIST dataset.
 """
 
 from adversarial_classifier import AdversarialClassifier
@@ -11,11 +11,11 @@ from utils import *
 import time
 
 SAVE = False
-TEST = False
+TEST = True
 
 MODEL_NAME = "baseline_convnet"
 TRAINED_MODELS = "../trained_models/"
-TRAINED_MODEL = TRAINED_MODELS+"IBM-art/mnist_cnn_robust.h5"
+TRAINED_MODEL = TRAINED_MODELS+"baseline/baseline.h5"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
 
@@ -44,31 +44,43 @@ class BaselineConvnet(AdversarialClassifier):
         # model.summary()
         return model
 
-
 def main():
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/baseline.h5")
 
-    #start_time = time.time()
-    classifier = model.load_classifier(relative_path=TRAINED_MODEL)
-    #classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    #model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
-    #                        batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST,
+                                             adversaries_path="../data/mnist_x_test_fgsm.pkl")
 
-    #print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
+    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=TEST,
+                                                batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+    model.save_model(classifier=robust_classifier, model_name="baseline_robust")
 
-    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST)
-    model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool',
-                               adversaries_path='../data/mnist_x_test_deepfool.pkl', test=TEST)
-    model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient',
-                               adversaries_path='../data/mnist_x_test_projected_gradient.pkl', test=TEST)
+    # todo: debug, this output should be the same as the one given at the end of adversarial training! check
+    print("\nEval on x_test_fgsm.pkl")
+    model.evaluate_adversaries(robust_classifier, x_test, y_test, method='fgsm', test=TEST,
+                                             adversaries_path="../data/mnist_x_test_fgsm.pkl")
 
-    #x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_l2')
-    #x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
+    #save_to_pickle(data=x_test_fgsm, filename="mnist_x_test_fgsm.pkl")
+
+    #x_test_deepfool = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', test=TEST,
+    #                                             adversaries_path='../data/mnist_x_test_deepfool.pkl')
+    #save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+
+    #x_test_pgd = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', test=TEST,
+    #                                        adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
+    #save_to_pickle(data=x_test_pgd, filename="mnist_x_test_pgd.pkl")
+
+    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_linf', test=TEST,
+    #                                            adversaries_path=DATA_PATH+'mnist_x_test_carlini.pkl')
+    #save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
+
+    # x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
+    # x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
 
 
 if __name__ == "__main__":

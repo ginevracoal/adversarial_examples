@@ -3,9 +3,10 @@
 from keras.models import load_model
 from art.classifiers import KerasClassifier
 from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method,\
-    ProjectedGradientDescent, NewtonFool
+    ProjectedGradientDescent, NewtonFool, CarliniLInfMethod
 from sklearn.metrics import classification_report
 from utils import *
+import time
 
 RESULTS = "../results/"
 TRAINED_MODELS = "../trained_models/"
@@ -45,7 +46,10 @@ class AdversarialClassifier(object):
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
+
+        start_time = time.time()
         classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
+        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
 
         self.trained = True
         return classifier
@@ -61,9 +65,8 @@ class AdversarialClassifier(object):
         :return: adversarially perturbed data
         """
 
-        print("\nAdversarial evaluation using", method, "method.")
-
         if adversaries_path is None:
+            print("\nGenerating adversaries with", method, "method.")
             if method == 'fgsm':
                 attacker = FastGradientMethod(classifier, eps=0.5)
                 x_adv = attacker.generate(x)
@@ -74,7 +77,10 @@ class AdversarialClassifier(object):
                 attacker = VirtualAdversarialMethod(classifier)
                 x_adv = attacker.generate(x)
             elif method == 'carlini_l2':
-                attacker = CarliniL2Method(classifier, targeted=True)
+                attacker = CarliniL2Method(classifier, targeted=False)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'carlini_linf':
+                attacker = CarliniLInfMethod(classifier, targeted=False)
                 x_adv = attacker.generate(x=x, y=y)
             elif method == 'projected_gradient':
                 attacker = ProjectedGradientDescent(classifier)
@@ -83,6 +89,7 @@ class AdversarialClassifier(object):
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
         else:
+            print("\nLoading adversaries generated with", method, "method.")
             x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
 
         return x_adv
@@ -107,6 +114,7 @@ class AdversarialClassifier(object):
         :param y_test: test labels
         :return: x_test predictions
         """
+        print("\n===== Test set evaluation =====")
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
         y_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
@@ -138,6 +146,7 @@ class AdversarialClassifier(object):
         x_test_adv: adversarial perturbations of test data
         y_test_adv: adversarial test set predictions
         """
+        print("\n===== Adversarial evaluation =====")
 
         # generate adversaries on the test set
         x_test_adv = self._generate_adversaries(classifier, x_test, y_test,
@@ -180,26 +189,44 @@ class AdversarialClassifier(object):
         from save_model()
         returns: trained classifier
         """
+        print("\nLoading the model.")
         # load a trained model
         trained_model = load_model(relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 
-    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm'):
+    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm',
+                          test=False):
+        """
+        Performs adversarial training on the given classifier using an attack method.
+        :param classifier: trained classifier
+        :param method: attack method
+        :return: robust classifier
+        """
 
+        print("\n===== Adversarial training =====")
         # generate adversarial examples on train and test sets
-        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method, test=False)
-        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, test=False)
+        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method, test=test)
+        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, test=test)
+
+        # todo:debug
+        save_to_pickle(data=x_test_adv, filename="mnist_x_test_fgsm_advtraining.pkl")
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
         y_train_ext = np.append(y_train, y_train, axis=0)
 
         # Retrain the CNN on the extended dataset
-        classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
+        start_time = time.time()
+        robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
+        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
 
-        # Evaluate the adversarially trained classifier on the test set
-        self.evaluate_test(classifier, x_test_adv, y_test)
+        # Evaluate the adversarially trained classifier on the original + adversarial test sets
+        print("\nEvaluating on original test set:")
+        self.evaluate_test(classifier, x_test, y_test)
 
-        return classifier
+        print("\nEvaluating on adversarial test set generated on the original classifier:")
+        self.evaluate_test(robust_classifier, x_test_adv, y_test)
+
+        return robust_classifier
 

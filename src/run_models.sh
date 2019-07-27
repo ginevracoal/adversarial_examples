@@ -5,14 +5,12 @@
 ############
 
 MODEL_NAME="random_ensemble" # this should be the name of the script
+source ~/virtualenvs/venv/bin/activate
 
-## clusterino
+## only for clusterino:
 rm screenlog.0
 cd ~/adversarial_examples/src/
 #export CUDA_VISIBLE_DEVICES=-1 # GPU
-
-## local
-#source ~/virtualenvs/venv/bin/activate
 
 ##############
 # run script #

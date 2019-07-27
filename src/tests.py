@@ -34,17 +34,25 @@ class Test(unittest.TestCase):
         model.save_model(classifier=classifier, model_name="baseline_convnet")
         loaded_classifier = model.load_classifier(
             relative_path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
+
         model.evaluate_test(loaded_classifier, self.x_test, self.y_test)
+        model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True,
+                                   adversaries_path=RESULTS+time.strftime('%Y-%m-%d')+"/mnist_x_test_fgsm.pkl")
 
         # complete model loading
-        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"IBM-art/mnist_cnn_original.h5")
+        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/baseline.h5")
 
         model.evaluate_adversaries(classifier, self.x_test, self.y_test,
                                    method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl', test=True)
 
         # adversarial training
-        model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
-                                batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+        robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
+                                                  batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True)
+        # todo: capire perché questo non funziona
+        #model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True,
+        #                           adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm_advtraining.pkl")
+        model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True,
+                                   adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm.pkl")
 
     def test_random_ensemble(self):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
