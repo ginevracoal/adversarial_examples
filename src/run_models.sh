@@ -5,7 +5,7 @@
 ############
 
 MODEL_NAME="random_ensemble" # this should be the name of the script
-source ~/virtualenvs/venv/bin/activate
+FILENAME="" # this should be the name of the output file
 
 ## only for clusterino:
 rm screenlog.0
@@ -20,8 +20,9 @@ RESULTS="../results/"
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M:%S)
 
+source ~/virtualenvs/venv/bin/activate
 mkdir -p "$RESULTS/$DATE/"
-python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${MODEL_NAME}_${TIME}"_out.txt
+python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt
 
 ## remove the unnecessary infos from output text
-sed -n '/ETA:/!p' "$RESULTS/$DATE/${MODEL_NAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${MODEL_NAME}_${TIME}_clean.txt"
+sed -n '/ETA:/!p' "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${FILENAME}_${TIME}_clean.txt"

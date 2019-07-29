@@ -11,17 +11,23 @@ from keras.models import load_model
 from utils import *
 import time
 from keras import backend as K
+from multiprocessing import Pool
 
-# settings
-TEST = True  # if True takes only 100 samples
-N_PROJECTIONS = [6, 9, 12, 15]  # it has to be a list
-SIZE_PROJECTION = [8, 12, 16, 20]  # it has to be a list
+############
+# settings #
+############
+TEST = True # if True takes only 100 samples
+N_PROJECTIONS = [6]# 9, 12, 15]  # it has to be a list
+SIZE_PROJECTION = [8]# 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
+ATTACK = "fgsm" # available attacks: fgsm, deepfool, virtual_adversarial, projected_gradient, carlini_linf, newtonfool
 
-# defaults
+############
+# defaults #
+############
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/"
-TRAINED_BASELINE = TRAINED_MODELS+"IBM-art/mnist_cnn_original.h5"
+TRAINED_BASELINE = TRAINED_MODELS+"baseline/baseline.h5"
 DEEPFOOL_PATH = "../data/mnist_x_test_deepfool.pkl"
 DATA_PATH = "../data/"
 RESULTS = "../results/"
@@ -59,6 +65,9 @@ class RandomEnsemble(BaselineConvnet):
         self.projectors_params = None
         self.trained = False
 
+    ###################
+    # serial training #
+    ###################
     def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
@@ -80,9 +89,48 @@ class RandomEnsemble(BaselineConvnet):
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
             # train n_proj classifiers on different training data
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
+            del baseline
 
         self.trained = True
         return classifiers
+
+    #####################
+    # parallel training #
+    #####################
+    # todo: solve buggy parallel implementation. TF sessions do not like multiprocessing...
+    def proj_train(self, args):
+        x_train_projected, y_train, batch_size, epochs = args
+        K.clear_session()
+        # use the same model architecture (not weights) for all trainings
+        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        # train n_proj classifiers on different training data
+        classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
+        return classifier
+
+    def new_train(self, x_train, y_train, batch_size, epochs):
+        """
+        Trains the baseline model over `n_proj` random projections of the training data whose input shape is
+        `(size_proj, size_proj, 1)`.
+
+        :param x_train:
+        :param y_train:
+        :param batch_size:
+        :param epochs:
+        :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
+        """
+
+        x_train_projected = compute_projections(x_train, random_seed=self.random_seed,
+                                                n_proj=self.n_proj, size_proj=self.size_proj)
+
+        inputs = [[x_train_projected[i], y_train, batch_size, epochs] for i in range(self.n_proj)]
+
+        pool = Pool()  # Create a multiprocessing Pool
+        classifiers = pool.map(self.proj_train, inputs)  # process input_paths iterable with pool
+        pool.close()
+
+        self.trained = True
+        return classifiers
+    #################
 
     @staticmethod
     def _sum_ensemble_classifier(classifiers, projected_data):
@@ -174,6 +222,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         projected_data = compute_projections(data, random_seed=self.random_seed,
                                              n_proj=self.n_proj, size_proj=self.size_proj)
+        predictions = None
         if method == 'sum':
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
         elif method == 'mode':
@@ -205,6 +254,7 @@ class RandomEnsemble(BaselineConvnet):
         # final classifier evaluation on the original test set
         print("\nFinal test evaluation")
         super(BaselineConvnet, self).evaluate_test(classifiers, x_test, y_test)
+
         return y_test_pred
 
     def _generate_adversaries(self, classifier, x, y, method='fgsm', adversaries_path=None, test=False, *args, **kwargs):
@@ -240,6 +290,32 @@ class RandomEnsemble(BaselineConvnet):
         classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
         return classifiers
 
+    # todo: unnecessary, remove this
+    def new_load_classifier(self, relative_path, model_name="random_ensemble"):
+        """
+        Loads a pretrained classifier and sets the projector with the training seed.
+        :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
+        :param model_name: name of the model used when files were saved
+        :return: list of trained classifiers
+        """
+        start_time = time.time()
+        # load all trained models
+        # trained_models = [load_model(relative_path + model_name + "_proj=" + str(self.n_proj) +
+        #                             "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
+        #                  for seed in self.random_seed[:self.n_proj]]
+        # todo: parallelize model loading
+        input_paths = [str(relative_path + model_name + "_proj=" + str(self.n_proj) +
+                                  "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
+                       for seed in self.random_seed[:self.n_proj]]
+        pool = Pool() # Create a multiprocessing Pool
+        trained_models = pool.map(load_model, input_paths) # process input_paths iterable with pool
+        print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
+        pool.close()
+        pool.join()
+
+        classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
+        return classifiers
+
 
 ###################
 # MAIN EXECUTIONS #
@@ -268,8 +344,7 @@ def train_all(n_projections, size_projections):
             model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
                                                                "_size=" + str(model.size_proj))
 
-
-def adversarially_train_all(n_projections, size_projections):
+def adversarially_train_all(n_projections, size_projections, method):
     """ Performs FGSM adversarial training on each projection model """
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
@@ -283,20 +358,24 @@ def adversarially_train_all(n_projections, size_projections):
                                                "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
 
             start_time = time.time()
-            classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
-                                                 batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
+            robust_classifier, x_test_adv = model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
+                                                 batch_size=BATCH_SIZE, epochs=EPOCHS, method=method)
             print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
                   "): --- %s seconds ---" % (time.time() - start_time))
 
-            model.evaluate_test(classifier, x_test, y_test)
-            model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST)
-            model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+            # todo: refactor this part... it's not so efficient
+            model.evaluate_test(robust_classifier, x_test, y_test)
+            model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=TEST)
+            model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
                                                                "_size=" + str(model.size_proj))
 
 
-def evaluate_all_attacks(n_projections, size_projections):
-    """ Evaluates each model on each attack"""
+def evaluate_all_attacks(n_projections, size_projections, method):
+    """ Evaluates all models on a given attack. This method only works on adversarial samples previously generated
+    from the baseline."""
+    # todo:docstring
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
+
     for size_proj in size_projections:
         for n_proj in n_projections:
             K.clear_session()
@@ -307,25 +386,14 @@ def evaluate_all_attacks(n_projections, size_projections):
                 relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
                               "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
 
-            model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST,
-                                       adversaries_path='../data/mnist_x_test_fgsm.pkl')
-            #model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', test=TEST,
-            #                           adversaries_path='../data/mnist_x_test_deepfool.pkl')
-            #model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', test=TEST,
-            #                           adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
-
-            #model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_linf', test=TEST,
-            #                           adversaries_path=DATA_PATH+'mnist_x_test_carlini.pkl')
-
-            # model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-
+            model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST,
+                                       adversaries_path='../data/mnist_x_test_' + method + '.pkl')
 
 def main():
 
-    # train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
-    # adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
-    evaluate_all_attacks(n_projections=N_PROJECTIONS,
-                         size_projections=[8])#SIZE_PROJECTION)
+    train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
+    adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK)
+    evaluate_all_attacks(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK)
 
 
 if __name__ == "__main__":

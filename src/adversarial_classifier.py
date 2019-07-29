@@ -67,6 +67,7 @@ class AdversarialClassifier(object):
 
         if adversaries_path is None:
             print("\nGenerating adversaries with", method, "method.")
+            x_adv = None
             if method == 'fgsm':
                 attacker = FastGradientMethod(classifier, eps=0.5)
                 x_adv = attacker.generate(x)
@@ -88,6 +89,7 @@ class AdversarialClassifier(object):
             elif method == 'newtonfool':
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
+
         else:
             print("\nLoading adversaries generated with", method, "method.")
             x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
@@ -204,29 +206,30 @@ class AdversarialClassifier(object):
         :return: robust classifier
         """
 
+        start_time = time.time()
         print("\n===== Adversarial training =====")
         # generate adversarial examples on train and test sets
         x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method, test=test)
-        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, test=test)
-
-        # todo:debug
-        save_to_pickle(data=x_test_adv, filename="mnist_x_test_fgsm_advtraining.pkl")
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
         y_train_ext = np.append(y_train, y_train, axis=0)
 
         # Retrain the CNN on the extended dataset
-        start_time = time.time()
+
         robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
 
         # Evaluate the adversarially trained classifier on the original + adversarial test sets
         print("\nEvaluating on original test set:")
-        self.evaluate_test(classifier, x_test, y_test)
+        self.evaluate_test(robust_classifier, x_test, y_test)
 
-        print("\nEvaluating on adversarial test set generated on the original classifier:")
-        self.evaluate_test(robust_classifier, x_test_adv, y_test)
+        print("\nEvaluating on adversarial test set generated from the original classifier:")
+        self.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test,
+                                   adversaries_path="../data/mnist_x_test_" + method + ".pkl")
+        # same as
+        # self.evaluate_test(robust_classifier, x_test_adv, y_test)
 
+        # save_to_pickle(data=x_train_adv, filename="x_train_adv_" + method + ".pkl")
         return robust_classifier
 

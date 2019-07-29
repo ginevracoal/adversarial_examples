@@ -10,18 +10,22 @@ from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
 from utils import *
 import time
 
-SAVE = False
+############
+# settings #
+############
 TEST = True
+ATTACK = "fgsm"
+BATCH_SIZE = 128
+EPOCHS = 12
 
+############
+# defaults #
+############
 MODEL_NAME = "baseline_convnet"
 TRAINED_MODELS = "../trained_models/"
 TRAINED_MODEL = TRAINED_MODELS+"baseline/baseline.h5"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
-
-BATCH_SIZE = 128
-EPOCHS = 12
-
 
 class BaselineConvnet(AdversarialClassifier):
 
@@ -44,43 +48,40 @@ class BaselineConvnet(AdversarialClassifier):
         # model.summary()
         return model
 
-def main():
+###################
+# MAIN EXECUTIONS #
+###################
+
+def adversarially_train(method):
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
-
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/baseline.h5")
-
-    # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-
-    model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST,
-                                             adversaries_path="../data/mnist_x_test_fgsm.pkl")
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/baseline.h5")
 
     robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=TEST,
-                                                batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm')
-    model.save_model(classifier=robust_classifier, model_name="baseline_robust")
+                                                             batch_size=BATCH_SIZE, epochs=EPOCHS, method=method)
+    model.save_model(classifier=robust_classifier, model_name=method + "_robust_baseline")
 
-    # todo: debug, this output should be the same as the one given at the end of adversarial training! check
-    print("\nEval on x_test_fgsm.pkl")
-    model.evaluate_adversaries(robust_classifier, x_test, y_test, method='fgsm', test=TEST,
-                                             adversaries_path="../data/mnist_x_test_fgsm.pkl")
+def evaluate_attacks(method):
 
-    #save_to_pickle(data=x_test_fgsm, filename="mnist_x_test_fgsm.pkl")
+    x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
+    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/baseline.h5")
 
-    #x_test_deepfool = model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', test=TEST,
-    #                                             adversaries_path='../data/mnist_x_test_deepfool.pkl')
-    #save_to_pickle(data=x_test_deepfool, filename="mnist_x_test_deepfool.pkl")
+    x_test = model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST,
+                                        adversaries_path="../data/mnist_x_test_" + method + ".pkl")
+    save_to_pickle(data=x_test, filename="mnist_x_test_" + method + ".pkl")
 
-    #x_test_pgd = model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', test=TEST,
-    #                                        adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
-    #save_to_pickle(data=x_test_pgd, filename="mnist_x_test_pgd.pkl")
 
-    #x_test_carlini = model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_linf', test=TEST,
-    #                                            adversaries_path=DATA_PATH+'mnist_x_test_carlini.pkl')
-    #save_to_pickle(data=x_test_carlini, filename="mnist_x_test_carlini.pkl")
+def main():
 
-    # x_test_virtual = model.evaluate_adversaries(classifier, x_test, y_test, method='virtual_adversarial')
-    # x_test_newtonfool = model.evaluate_adversaries(classifier, x_test, y_test, method='newtonfool')
+    # basic training:
+    # x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
+    # model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes)
+    # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+    # evaluate_attacks(method=ATTACK)
+    adversarially_train(method=ATTACK)
 
 
 if __name__ == "__main__":
