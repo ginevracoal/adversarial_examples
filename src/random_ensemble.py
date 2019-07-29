@@ -10,9 +10,10 @@ from baseline_convnet import BaselineConvnet
 from keras.models import load_model
 from utils import *
 import time
+from keras import backend as K
 
 # settings
-TEST = False  # if True takes only 100 samples
+TEST = True  # if True takes only 100 samples
 N_PROJECTIONS = [6, 9, 12, 15]  # it has to be a list
 SIZE_PROJECTION = [8, 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
@@ -168,7 +169,7 @@ class RandomEnsemble(BaselineConvnet):
 
         :param classifiers: list of trained classifiers over different projections
         :param data: input data
-        :param method: #todo: descrivere
+        :param method: ensemble method chosen. Only sum and mode are currently implemented.
         :return: final predictions for the input data
         """
         projected_data = compute_projections(data, random_seed=self.random_seed,
@@ -229,10 +230,13 @@ class RandomEnsemble(BaselineConvnet):
         :param model_name: name of the model used when files were saved
         :return: list of trained classifiers
         """
+        start_time = time.time()
         # load all trained models
         trained_models = [load_model(relative_path + model_name + "_proj=" + str(self.n_proj) +
                                      "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
                           for seed in self.random_seed[:self.n_proj]]
+        print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
+
         classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
         return classifiers
 
@@ -249,6 +253,7 @@ def train_all(n_projections, size_projections):
 
     for size_proj in size_projections:
         for n_proj in n_projections:
+            K.clear_session()
             model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                                    n_proj=n_proj, size_proj=size_proj)
 
@@ -266,14 +271,13 @@ def train_all(n_projections, size_projections):
 
 def adversarially_train_all(n_projections, size_projections):
     """ Performs FGSM adversarial training on each projection model """
-
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
     for size_proj in size_projections:
         for n_proj in n_projections:
+            K.clear_session()
             model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                                    n_proj=n_proj, size_proj=size_proj)
-
             classifier = model.load_classifier(
                 relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
                                                "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
@@ -293,10 +297,9 @@ def adversarially_train_all(n_projections, size_projections):
 def evaluate_all_attacks(n_projections, size_projections):
     """ Evaluates each model on each attack"""
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
-
-    # todo: very slow model loading...
     for size_proj in size_projections:
         for n_proj in n_projections:
+            K.clear_session()
             model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                                    n_proj=n_proj, size_proj=size_proj)
 
@@ -304,12 +307,12 @@ def evaluate_all_attacks(n_projections, size_projections):
                 relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
                               "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
 
-            #model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST,
-            #                           adversaries_path='../data/mnist_x_test_fgsm.pkl')
+            model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', test=TEST,
+                                       adversaries_path='../data/mnist_x_test_fgsm.pkl')
             #model.evaluate_adversaries(classifier, x_test, y_test, method='deepfool', test=TEST,
             #                           adversaries_path='../data/mnist_x_test_deepfool.pkl')
-            model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', test=TEST,
-                                       adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
+            #model.evaluate_adversaries(classifier, x_test, y_test, method='projected_gradient', test=TEST,
+            #                           adversaries_path='../data/mnist_x_test_projected_gradient.pkl')
 
             #model.evaluate_adversaries(classifier, x_test, y_test, method='carlini_linf', test=TEST,
             #                           adversaries_path=DATA_PATH+'mnist_x_test_carlini.pkl')
@@ -322,7 +325,7 @@ def main():
     # train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
     # adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
     evaluate_all_attacks(n_projections=N_PROJECTIONS,
-                         size_projections=SIZE_PROJECTION)
+                         size_projections=[8])#SIZE_PROJECTION)
 
 
 if __name__ == "__main__":
