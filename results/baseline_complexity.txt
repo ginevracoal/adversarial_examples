@@ -1,0 +1,7 @@
+model                     time (s)
+                        
+plain baseline            244.64
+fgsm robust               486.45
+pgd robust                833.16
+deepfool robust           6116.33
+carlini_linf robust       4507.31

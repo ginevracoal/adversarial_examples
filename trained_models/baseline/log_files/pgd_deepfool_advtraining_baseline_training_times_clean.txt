@@ -1,0 +1,222 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Loading the model.
+
+===== Adversarial training =====
+
+Generating adversaries with deepfool method.
+
+Training infos:
+batch_size =  128 
+epochs = 12 
+x_train.shape =  (120000, 28, 28, 1) 
+y_train.shape =  (120000, 10) 
+
+Epoch 1/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.2657 - acc: 0.9159
+Epoch 2/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0982 - acc: 0.9696
+Epoch 3/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0645 - acc: 0.9805
+Epoch 4/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0461 - acc: 0.9866
+Epoch 5/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0341 - acc: 0.9899
+Epoch 6/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0294 - acc: 0.9915
+Epoch 7/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0258 - acc: 0.9923
+Epoch 8/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0222 - acc: 0.9929
+Epoch 9/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0213 - acc: 0.9935
+Epoch 10/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0186 - acc: 0.9941
+Epoch 11/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0177 - acc: 0.9946
+Epoch 12/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0166 - acc: 0.9949
+
+Training time: --- 498.1862075328827 seconds ---
+
+Training time: --- 6116.334429979324 seconds ---
+
+Evaluating on original test set:
+
+===== Test set evaluation =====
+
+Testing infos:
+x_test.shape =  (10000, 28, 28, 1) 
+y_test.shape =  (10000, 10) 
+
+Correctly classified: 9909
+Incorrectly classified: 91
+Test accuracy: 99.09%
+              precision    recall  f1-score   support
+
+           0       0.99      0.99      0.99       980
+           1       1.00      1.00      1.00      1135
+           2       0.99      1.00      1.00      1032
+           3       0.98      1.00      0.99      1010
+           4       0.99      0.99      0.99       982
+           5       0.98      0.99      0.98       892
+           6       0.99      0.98      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.98      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+Evaluating on adversarial test set generated from the original classifier:
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with deepfool method.
+
+Adversarial test data.
+Correctly classified: 9922
+Incorrectly classified: 78
+Adversarial accuracy: 99.22%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       1.00      1.00      1.00      1135
+           2       0.99      1.00      0.99      1032
+           3       0.99      1.00      0.99      1010
+           4       1.00      0.99      0.99       982
+           5       0.98      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+===== Adversarial training =====
+
+Generating adversaries with pgd method.
+
+Training infos:
+batch_size =  128 
+epochs = 12 
+x_train.shape =  (120000, 28, 28, 1) 
+y_train.shape =  (120000, 10) 
+
+Epoch 1/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0666 - acc: 0.9815
+Epoch 2/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0336 - acc: 0.9909
+Epoch 3/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0269 - acc: 0.9923
+Epoch 4/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0236 - acc: 0.9935
+Epoch 5/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0244 - acc: 0.9935
+Epoch 6/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0220 - acc: 0.9940
+Epoch 7/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0217 - acc: 0.9940
+Epoch 8/12
+
+938/937 [==============================] - 41s 44ms/step - loss: 0.0185 - acc: 0.9947
+Epoch 9/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0185 - acc: 0.9948
+Epoch 10/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0175 - acc: 0.9951
+Epoch 11/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0166 - acc: 0.9949
+Epoch 12/12
+
+938/937 [==============================] - 42s 44ms/step - loss: 0.0166 - acc: 0.9950
+
+Training time: --- 499.0688257217407 seconds ---
+
+Training time: --- 833.1652548313141 seconds ---
+
+Evaluating on original test set:
+
+===== Test set evaluation =====
+
+Testing infos:
+x_test.shape =  (10000, 28, 28, 1) 
+y_test.shape =  (10000, 10) 
+
+Correctly classified: 9916
+Incorrectly classified: 84
+Test accuracy: 99.16%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.99      1.00      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       1.00      0.99      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+Evaluating on adversarial test set generated from the original classifier:
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with pgd method.
+
+Adversarial test data.
+Correctly classified: 9908
+Incorrectly classified: 92
+Adversarial accuracy: 99.08%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.98      0.99      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       1.00      0.99      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
