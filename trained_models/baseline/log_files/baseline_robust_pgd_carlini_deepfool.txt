@@ -1,0 +1,84 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Loading the model.
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with deepfool method.
+
+Adversarial test data.
+Correctly classified: 9608
+Incorrectly classified: 392
+Adversarial accuracy: 96.08%
+              precision    recall  f1-score   support
+
+           0       0.99      0.97      0.98       980
+           1       0.99      0.90      0.94      1135
+           2       0.96      0.99      0.98      1032
+           3       0.95      0.98      0.96      1010
+           4       0.99      0.94      0.97       982
+           5       0.97      0.98      0.97       892
+           6       0.99      0.98      0.98       958
+           7       0.93      0.91      0.92      1028
+           8       0.94      0.98      0.96       974
+           9       0.90      0.98      0.94      1009
+
+   micro avg       0.96      0.96      0.96     10000
+   macro avg       0.96      0.96      0.96     10000
+weighted avg       0.96      0.96      0.96     10000
+
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with projected_gradient method.
+
+Adversarial test data.
+Correctly classified: 3255
+Incorrectly classified: 6745
+Adversarial accuracy: 32.55%
+              precision    recall  f1-score   support
+
+           0       0.85      0.52      0.65       980
+           1       0.65      0.20      0.31      1135
+           2       0.32      0.46      0.38      1032
+           3       0.31      0.27      0.29      1010
+           4       0.31      0.39      0.35       982
+           5       0.24      0.38      0.29       892
+           6       0.74      0.51      0.60       958
+           7       0.26      0.13      0.17      1028
+           8       0.23      0.36      0.28       974
+           9       0.05      0.07      0.06      1009
+
+   micro avg       0.33      0.33      0.33     10000
+   macro avg       0.40      0.33      0.34     10000
+weighted avg       0.40      0.33      0.34     10000
+
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with carlini_linf method.
+
+Adversarial test data.
+Correctly classified: 9582
+Incorrectly classified: 418
+Adversarial accuracy: 95.82%
+              precision    recall  f1-score   support
+
+           0       0.99      0.97      0.98       980
+           1       0.99      0.89      0.94      1135
+           2       0.96      0.98      0.97      1032
+           3       0.93      0.97      0.95      1010
+           4       0.97      0.97      0.97       982
+           5       0.94      0.98      0.96       892
+           6       0.98      0.97      0.97       958
+           7       0.97      0.94      0.96      1028
+           8       0.89      0.97      0.93       974
+           9       0.96      0.95      0.96      1009
+
+   micro avg       0.96      0.96      0.96     10000
+   macro avg       0.96      0.96      0.96     10000
+weighted avg       0.96      0.96      0.96     10000
+

@@ -1,0 +1,114 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Loading the model.
+
+===== Adversarial training =====
+
+Generating adversaries with deepfool method.
+
+Training infos:
+batch_size =  128 
+epochs = 12 
+x_train.shape =  (120000, 28, 28, 1) 
+y_train.shape =  (120000, 10) 
+
+Epoch 1/12
+
+938/937 [==============================] - 43s 45ms/step - loss: 0.2625 - acc: 0.9180
+Epoch 2/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0966 - acc: 0.9711
+Epoch 3/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0564 - acc: 0.9831
+Epoch 4/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0402 - acc: 0.9880
+Epoch 5/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0317 - acc: 0.9908
+Epoch 6/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0274 - acc: 0.9921
+Epoch 7/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0266 - acc: 0.9921
+Epoch 8/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0226 - acc: 0.9937
+Epoch 9/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0195 - acc: 0.9944
+Epoch 10/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0194 - acc: 0.9942
+Epoch 11/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0193 - acc: 0.9944
+Epoch 12/12
+
+938/937 [==============================] - 42s 45ms/step - loss: 0.0171 - acc: 0.9949
+
+Training time: --- 507.0207517147064 seconds ---
+
+Training time: --- 5872.518759489059 seconds ---
+
+Evaluating on original test set:
+
+===== Test set evaluation =====
+
+Testing infos:
+x_test.shape =  (10000, 28, 28, 1) 
+y_test.shape =  (10000, 10) 
+
+Correctly classified: 9903
+Incorrectly classified: 97
+Test accuracy: 99.03%
+              precision    recall  f1-score   support
+
+           0       0.99      0.99      0.99       980
+           1       0.99      0.99      0.99      1135
+           2       0.98      1.00      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       1.00      0.99      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.98      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+Evaluating on adversarial test set generated from the original classifier:
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with deepfool method.
+
+Adversarial test data.
+Correctly classified: 9920
+Incorrectly classified: 80
+Adversarial accuracy: 99.20%
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.99      0.99      0.99      1032
+           3       0.99      1.00      0.99      1010
+           4       1.00      0.99      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+

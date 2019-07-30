@@ -1,0 +1,114 @@
+
+Loading mnist.
+x_train shape: (60000, 28, 28, 1) 
+x_test shape: (10000, 28, 28, 1)
+
+Loading the model.
+
+===== Adversarial training =====
+
+Generating adversaries with projected_gradient method.
+
+Training infos:
+batch_size =  128 
+epochs = 12 
+x_train.shape =  (120000, 28, 28, 1) 
+y_train.shape =  (120000, 10) 
+
+Epoch 1/12
+
+938/937 [==============================] - 85s 91ms/step - loss: 0.2598 - acc: 0.9207
+Epoch 2/12
+
+938/937 [==============================] - 83s 89ms/step - loss: 0.0795 - acc: 0.9777
+Epoch 3/12
+
+938/937 [==============================] - 85s 90ms/step - loss: 0.0580 - acc: 0.9839
+Epoch 4/12
+
+938/937 [==============================] - 85s 90ms/step - loss: 0.0454 - acc: 0.9874
+Epoch 5/12
+
+938/937 [==============================] - 85s 91ms/step - loss: 0.0405 - acc: 0.9889
+Epoch 6/12
+
+938/937 [==============================] - 85s 90ms/step - loss: 0.0357 - acc: 0.9901
+Epoch 7/12
+
+938/937 [==============================] - 84s 90ms/step - loss: 0.0325 - acc: 0.9906
+Epoch 8/12
+
+938/937 [==============================] - 85s 91ms/step - loss: 0.0285 - acc: 0.9917
+Epoch 9/12
+
+938/937 [==============================] - 84s 90ms/step - loss: 0.0297 - acc: 0.9916
+Epoch 10/12
+
+938/937 [==============================] - 85s 90ms/step - loss: 0.0257 - acc: 0.9925
+Epoch 11/12
+
+938/937 [==============================] - 86s 91ms/step - loss: 0.0234 - acc: 0.9930
+Epoch 12/12
+
+938/937 [==============================] - 86s 91ms/step - loss: 0.0240 - acc: 0.9930
+
+Training time: --- 1017.8691384792328 seconds ---
+
+Training time: --- 1717.3066794872284 seconds ---
+
+Evaluating on original test set:
+
+===== Test set evaluation =====
+
+Testing infos:
+x_test.shape =  (10000, 28, 28, 1) 
+y_test.shape =  (10000, 10) 
+
+Correctly classified: 9910
+Incorrectly classified: 90
+Test accuracy: 99.10%
+              precision    recall  f1-score   support
+
+           0       0.98      1.00      0.99       980
+           1       0.99      1.00      0.99      1135
+           2       1.00      0.99      0.99      1032
+           3       1.00      0.99      0.99      1010
+           4       0.99      0.99      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.98      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
+
+Evaluating on adversarial test set generated from the original classifier:
+
+===== Adversarial evaluation =====
+
+Loading adversaries generated with projected_gradient method.
+
+Adversarial test data.
+Correctly classified: 9902
+Incorrectly classified: 98
+Adversarial accuracy: 99.02%
+              precision    recall  f1-score   support
+
+           0       0.98      1.00      0.99       980
+           1       0.99      1.00      1.00      1135
+           2       0.99      0.99      0.99      1032
+           3       0.99      0.99      0.99      1010
+           4       0.99      0.98      0.99       982
+           5       0.99      0.99      0.99       892
+           6       0.99      0.99      0.99       958
+           7       0.99      0.99      0.99      1028
+           8       0.99      0.99      0.99       974
+           9       0.99      0.99      0.99      1009
+
+   micro avg       0.99      0.99      0.99     10000
+   macro avg       0.99      0.99      0.99     10000
+weighted avg       0.99      0.99      0.99     10000
+
