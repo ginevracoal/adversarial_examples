@@ -218,7 +218,7 @@ class AdversarialClassifier(object):
         # Retrain the CNN on the extended dataset
 
         robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
-        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
+        print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
 
         # Evaluate the adversarially trained classifier on the original + adversarial test sets
         print("\nEvaluating on original test set:")

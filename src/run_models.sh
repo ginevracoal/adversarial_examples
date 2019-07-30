@@ -4,7 +4,7 @@
 # settings #
 ############
 
-MODEL_NAME="random_ensemble" # this should be the name of the script
+MODEL_NAME="baseline_convnet" # this should be the name of the script
 FILENAME="" # this should be the name of the output file
 
 ## only for clusterino:
@@ -22,7 +22,7 @@ TIME=$(date +%H:%M:%S)
 
 source ~/virtualenvs/venv/bin/activate
 mkdir -p "$RESULTS/$DATE/"
-python "${MODEL_NAME}.py" > "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt
+python3 "${MODEL_NAME}.py" > "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt
 
 ## remove the unnecessary infos from output text
 sed -n '/ETA:/!p' "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${FILENAME}_${TIME}_clean.txt"

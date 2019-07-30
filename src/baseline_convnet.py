@@ -13,7 +13,7 @@ import time
 ############
 # settings #
 ############
-TEST = True
+TEST = False
 ATTACK = "carlini_linf"
 BATCH_SIZE = 128
 EPOCHS = 12
@@ -56,13 +56,13 @@ def main():
     # classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     # load classifier #
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/baseline.h5")
-    # classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/projected_gradient_robust_baseline.h5")
+    # classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/baseline.h5")
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS + "baseline/carlini_linf_robust_baseline.h5")
 
     # adversarial training #
-    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=TEST,
-                                                             batch_size=BATCH_SIZE, epochs=EPOCHS, method=ATTACK)
-    model.save_model(classifier=robust_classifier, model_name=ATTACK + "_robust_baseline")
+    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=TEST,
+    #                                                         batch_size=BATCH_SIZE, epochs=EPOCHS, method=ATTACK)
+    #model.save_model(classifier=robust_classifier, model_name=ATTACK + "_robust_baseline")
 
     # evaluations #
     model.evaluate_test(classifier, x_test, y_test)
@@ -70,7 +70,7 @@ def main():
     for method in ["fgsm","pgd","deepfool","carlini_linf"]:
         x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST,
                                             adversaries_path="../data/mnist_x_test_" + method + ".pkl")
-        save_to_pickle(data=x_test_adv, filename="mnist_x_test_" + method + ".pkl")
+        # save_to_pickle(data=x_test_adv, filename="mnist_x_test_" + method + ".pkl")
 
 
 if __name__ == "__main__":

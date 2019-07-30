@@ -17,10 +17,11 @@ from multiprocessing import Pool
 # settings #
 ############
 TEST = True # if True takes only 100 samples
-N_PROJECTIONS = [6]# 9, 12, 15]  # it has to be a list
-SIZE_PROJECTION = [8]# 12, 16, 20]  # it has to be a list
+SAVE = True
+ATTACK = "fgsm" # available attacks: fgsm, deepfool, virtual_adversarial, pgd, carlini_linf, newtonfool
+N_PROJECTIONS = [6, 9, 12, 15]  # it has to be a list
+SIZE_PROJECTION = [8, 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
-ATTACK = "fgsm" # available attacks: fgsm, deepfool, virtual_adversarial, projected_gradient, carlini_linf, newtonfool
 
 ############
 # defaults #
@@ -322,7 +323,7 @@ class RandomEnsemble(BaselineConvnet):
 ###################
 
 
-def train_all(n_projections, size_projections):
+def train_all(n_projections, size_projections, save):
     """Trains a model for each combinations of the given n_projections, size_projections"""
 
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
@@ -341,10 +342,11 @@ def train_all(n_projections, size_projections):
 
             model.evaluate_test(classifier, x_test, y_test)
             model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
-            model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+            if save:
+                model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
                                                                "_size=" + str(model.size_proj))
 
-def adversarially_train_all(n_projections, size_projections, method):
+def adversarially_train_all(n_projections, size_projections, method, save):
     """ Performs FGSM adversarial training on each projection model """
     x_train, y_train, x_test, y_test, input_shape, num_classes = preprocess_mnist(test=TEST)
 
@@ -366,11 +368,12 @@ def adversarially_train_all(n_projections, size_projections, method):
             # todo: refactor this part... it's not so efficient
             model.evaluate_test(robust_classifier, x_test, y_test)
             model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=TEST)
-            model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
+            if save:
+                model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
                                                                "_size=" + str(model.size_proj))
 
 
-def evaluate_all_attacks(n_projections, size_projections, method):
+def evaluate_all_attacks(n_projections, size_projections, method, save):
     """ Evaluates all models on a given attack. This method only works on adversarial samples previously generated
     from the baseline."""
     # todo:docstring
@@ -386,14 +389,16 @@ def evaluate_all_attacks(n_projections, size_projections, method):
                 relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
                               "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
 
+            # todo: add flag to eventually save the adversaries..
+            # model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST)
             model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST,
                                        adversaries_path='../data/mnist_x_test_' + method + '.pkl')
 
 def main():
 
-    train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
-    adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK)
-    evaluate_all_attacks(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK)
+    train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, save=SAVE)
+    adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK, save=SAVE)
+    evaluate_all_attacks(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, method=ATTACK, save=SAVE)
 
 
 if __name__ == "__main__":
