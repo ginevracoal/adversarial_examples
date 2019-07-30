@@ -83,7 +83,7 @@ class AdversarialClassifier(object):
             elif method == 'carlini_linf':
                 attacker = CarliniLInfMethod(classifier, targeted=False)
                 x_adv = attacker.generate(x=x, y=y)
-            elif method == 'projected_gradient':
+            elif method == 'pgd':
                 attacker = ProjectedGradientDescent(classifier)
                 x_adv = attacker.generate(x=x)
             elif method == 'newtonfool':
