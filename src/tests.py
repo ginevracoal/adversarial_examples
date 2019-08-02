@@ -17,6 +17,7 @@ class Test(unittest.TestCase):
         super(Test, self).__init__(*args, **kwargs)
         self.x_train, self.y_train, self.x_test, self.y_test, \
             self.input_shape, self.num_classes, self.data_format = preprocess_mnist(test=True)
+        # baseline on mnist
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format)
 
@@ -66,7 +67,7 @@ class Test(unittest.TestCase):
         model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
 
         # save and load
-        model.save_model(classifier=classifiers, model_name="random_ensemble_proj=" + str(model.n_proj) +
+        model.save_model(classifier=classifiers, model_name="random_ensemble"#proj=" + str(model.n_proj) +
                                                             "_size=" + str(model.size_proj))
         loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
                                                    model_name="random_ensemble")
@@ -74,6 +75,11 @@ class Test(unittest.TestCase):
 
         # check equal test predictions
         np.array_equal(x_test_pred, x_test_pred_loaded)
+
+    def test_cifar_load_and_train(self):
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True)
+        model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format)
+        model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     def test_random_adversarial_projection(self):
         pass

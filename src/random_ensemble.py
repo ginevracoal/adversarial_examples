@@ -16,8 +16,9 @@ from multiprocessing import Pool
 ############
 # settings #
 ############
-TEST = False # if True takes only 100 samples
-ATTACK = ["fgsm","deepfool","pgd"] # available attacks: fgsm, deepfool, virtual_adversarial, pgd, carlini_linf, newtonfool
+TEST = True # if True takes only 100 samples
+DATASET = "mnist"
+ATTACK = ["fgsm"]#,"deepfool","pgd","carlini_linf"]
 N_PROJECTIONS = [6]#, 9, 12, 15]  # it has to be a list
 SIZE_PROJECTION = [8]#, 12, 16, 20]  # it has to be a list
 ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
@@ -26,8 +27,8 @@ ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
 # defaults #
 ############
 MODEL_NAME = "random_ensemble"
-TRAINED_MODELS = "../trained_models/"
-TRAINED_BASELINE = TRAINED_MODELS+"baseline/baseline.h5"
+TRAINED_MODELS = "../trained_models/random_ensemble/"
+TRAINED_BASELINE = "../trained_models/baseline/baseline.h5"
 DATA_PATH = "../data/"
 RESULTS = "../results/"
 BATCH_SIZE = 128
@@ -59,6 +60,7 @@ class RandomEnsemble(BaselineConvnet):
         self.input_shape = (size_proj, size_proj, 1)
         self.n_proj = n_proj
         self.size_proj = size_proj
+        # the model is currently implemented on 15 projections max
         self.random_seed = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         self.projector = None
         self.projectors_params = None
@@ -243,7 +245,6 @@ class RandomEnsemble(BaselineConvnet):
 
         x_test_proj = compute_projections(x_test, random_seed=self.random_seed,
                                           n_proj=self.n_proj, size_proj=self.size_proj)
-
         y_test_pred = np.argmax(self.predict(classifiers, x_test, method=ENSEMBLE_METHOD), axis=1)
 
         # evaluate each classifier on its projected test set
@@ -284,7 +285,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         start_time = time.time()
         # load all trained models
-        trained_models = [load_model(relative_path + model_name + "_proj=" + str(self.n_proj) +
+        trained_models = [load_model(relative_path + model_name + #"_proj=15"# + str(self.n_proj) +
                                      "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
                           for seed in self.random_seed[:self.n_proj]]
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
@@ -324,9 +325,14 @@ class RandomEnsemble(BaselineConvnet):
 ###################
 
 
-def train_all(n_projections, size_projections):
+def train_all(n_projections, size_projections, dataset):
     """Trains a model for each combinations of the given n_projections, size_projections"""
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    global input_shape, num_classes, data_format, x_train, y_train, x_test, y_test
+
+    if dataset == "mnist":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    elif dataset == "cifar":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=TEST)
 
     for size_proj in size_projections:
         for n_proj in n_projections:
@@ -342,12 +348,16 @@ def train_all(n_projections, size_projections):
 
             model.evaluate_test(classifier, x_test, y_test)
             model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm')
-            model.save_model(classifier=classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
-                                                               "_size=" + str(model.size_proj))
+            model.save_model(classifier=classifier, model_name=dataset+"_random_ensemble_size=" + str(model.size_proj))
 
-def adversarially_train_all(n_projections, size_projections, attacks):
+def adversarially_train_all(n_projections, size_projections, attacks, dataset):
     """ Performs FGSM adversarial training on each projection model """
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    global input_shape, num_classes, data_format, x_train, y_train, x_test, y_test
+
+    if dataset == "mnist":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    elif dataset == "cifar":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=TEST)
 
     for method in attacks:
         for size_proj in size_projections:
@@ -355,27 +365,51 @@ def adversarially_train_all(n_projections, size_projections, attacks):
                 K.clear_session()
                 model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                                        n_proj=n_proj, size_proj=size_proj, data_format=data_format)
-                classifier = model.load_classifier(
-                    relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
-                                                   "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
+
+                relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+                classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
                 start_time = time.time()
-                robust_classifier, x_test_adv = model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
-                                                     batch_size=BATCH_SIZE, epochs=EPOCHS, method=method)
+                robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test,
+                                                     batch_size=BATCH_SIZE, epochs=EPOCHS, method=method, test=TEST)
                 print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
                       "): --- %s seconds ---" % (time.time() - start_time))
 
                 # todo: refactor this part... it's not so efficient
                 model.evaluate_test(robust_classifier, x_test, y_test)
                 model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=TEST)
-                model.save_model(classifier=robust_classifier, model_name="random_ensemble_proj=" + str(model.n_proj) +
-                                                                   "_size=" + str(model.size_proj))
+                model.save_model(classifier=robust_classifier,
+                                 model_name=dataset + "_" + str(method) +
+                                            "_robust_random_ensemble_size=" + str(model.size_proj))
 
+def evaluate_all_test(n_projections, size_projections, dataset):
+    """ Evaluates all models on the test set."""
+    global input_shape, num_classes, data_format, x_train, y_train, x_test, y_test
 
-def evaluate_all_attacks(n_projections, size_projections, attacks):
+    if dataset == "mnist":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    elif dataset == "cifar":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=TEST)
+
+    for size_proj in size_projections:
+        for n_proj in n_projections:
+            K.clear_session()
+            model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+                                   n_proj=n_proj, size_proj=size_proj, data_format=data_format)
+
+            relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+            classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+            model.evaluate_test(classifier, x_test, y_test)
+
+def evaluate_all_attacks(n_projections, size_projections, attacks, dataset):
     """ Evaluates all models on a given attack. This method only works on adversarial samples previously generated
     from the baseline."""
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    global input_shape, num_classes, data_format, x_train, y_train, x_test, y_test
+
+    if dataset=="mnist":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=TEST)
+    elif dataset=="cifar":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=TEST)
 
     for method in attacks:
         for size_proj in size_projections:
@@ -384,19 +418,25 @@ def evaluate_all_attacks(n_projections, size_projections, attacks):
                 model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                                        n_proj=n_proj, size_proj=size_proj, data_format=data_format)
 
-                classifier = model.load_classifier(
-                    relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
-                                  "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
+                relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+                classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+
+                # todo: old code, remove it
+                # classifier = model.load_classifier(
+                #     relative_path=TRAINED_MODELS + "random_ensemble/random_ensemble_sum_proj=" + str(model.n_proj) +
+                #                   "_size=" + str(model.size_proj) + "/", model_name=MODEL_NAME)
 
                 # model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST)
                 model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=TEST,
-                                           adversaries_path='../data/mnist_x_test_new_' + method + '.pkl')
+                                           adversaries_path='../data/mnist_x_test_' + method + '.pkl')
+
 
 def main():
 
-    #train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION)
-    #adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, attacks=ATTACK)
-    evaluate_all_attacks(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, attacks=ATTACK)
+    #train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, dataset=DATASET)
+    adversarially_train_all(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, attacks=ATTACK, dataset=DATASET)
+    #evaluate_all_test(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, dataset=DATASET)
+    #evaluate_all_attacks(n_projections=N_PROJECTIONS, size_projections=SIZE_PROJECTION, attacks=ATTACK, dataset=DATASET)
 
 
 if __name__ == "__main__":
