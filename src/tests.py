@@ -16,11 +16,13 @@ class Test(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(Test, self).__init__(*args, **kwargs)
         self.x_train, self.y_train, self.x_test, self.y_test, \
-            self.input_shape, self.num_classes = preprocess_mnist(test=True)
-        self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+            self.input_shape, self.num_classes, self.data_format = preprocess_mnist(test=True)
+        self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                        data_format=self.data_format)
 
     def test_baseline(self):
-        model = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        model = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                data_format=self.data_format)
 
         # model training
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
@@ -48,15 +50,12 @@ class Test(unittest.TestCase):
         # adversarial training
         robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
                                                   batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True)
-        # todo: capire perché questo non funziona
-        #model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True,
-        #                           adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm_advtraining.pkl")
         model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True,
                                    adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm.pkl")
 
     def test_random_ensemble(self):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
-                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION)
+                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format)
 
         # train
         classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)

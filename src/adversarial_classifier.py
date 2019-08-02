@@ -19,9 +19,10 @@ class AdversarialClassifier(object):
     Keras Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes):
+    def __init__(self, input_shape, num_classes, data_format):
         self.input_shape = input_shape
         self.num_classes = num_classes
+        self.data_format = data_format
         self.model = self._set_layers()
         self.trained = False
 
@@ -74,7 +75,7 @@ class AdversarialClassifier(object):
             elif method == 'deepfool':
                 attacker = DeepFool(classifier)
                 x_adv = attacker.generate(x)
-            elif method == 'virtual_adversarial':
+            elif method == 'virtual':
                 attacker = VirtualAdversarialMethod(classifier)
                 x_adv = attacker.generate(x)
             elif method == 'carlini_l2':
