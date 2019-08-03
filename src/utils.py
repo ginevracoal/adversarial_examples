@@ -48,7 +48,7 @@ def preprocess_mnist(test=False, img_rows=28, img_cols=28):
     y_train = keras.utils.to_categorical(y_train, 10)
     y_test = keras.utils.to_categorical(y_test, 10)
 
-    if test is True:
+    if test:
         x_train = x_train[:TEST_SIZE]
         y_train = y_train[:TEST_SIZE]
         x_test = x_test[:TEST_SIZE]
@@ -69,22 +69,22 @@ def _onehot(integer_labels):
 
 
 def load_cifar(test=False):
-    '''Return train_data, train_labels, test_data, test_labels
-    The shape of data is 32 x 32 x3'''
+    """Return train_data, train_labels, test_data, test_labels
+    The shape of data is 32 x 32 x3"""
     x_train = None
     y_train = []
 
     data_dir='../data/cifar-10/'
 
     for i in range(1, 6):
-        data_dic = unpickle(data_dir + "/data_batch_{}".format(i))
+        data_dic = unpickle(data_dir + "data_batch_{}".format(i))
         if i == 1:
             x_train = data_dic['data']
         else:
             x_train = np.vstack((x_train, data_dic['data']))
         y_train += data_dic['labels']
 
-    test_data_dic = unpickle(data_dir + "/test_batch")
+    test_data_dic = unpickle(data_dir + "test_batch")
     x_test = test_data_dic['data']
     y_test = test_data_dic['labels']
 
@@ -101,10 +101,24 @@ def load_cifar(test=False):
     data_format = 'channels_first'
 
     if test:
-        x_train, x_test, y_train, y_test = x_train[:TEST_SIZE], x_test[:TEST_SIZE], \
-                                           y_train[:TEST_SIZE], y_test[:TEST_SIZE]
+        x_train = x_train[:TEST_SIZE]
+        y_train = y_train[:TEST_SIZE]
+        x_test = x_test[:TEST_SIZE]
+        y_test = y_test[:TEST_SIZE]
 
     return x_train, _onehot(y_train), x_test, _onehot(y_test), input_shape, num_classes, data_format
+
+
+def load_dataset(dataset_name, test):
+    # todo:docstring
+    global x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
+
+    if dataset_name == "mnist":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=test)
+    elif dataset_name == "cifar":
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=test)
+
+    return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
 ######################
 # random projections #

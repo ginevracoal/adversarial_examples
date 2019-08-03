@@ -15,8 +15,9 @@ class Test(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(Test, self).__init__(*args, **kwargs)
+        self.dataset = "mnist"
         self.x_train, self.y_train, self.x_test, self.y_test, \
-            self.input_shape, self.num_classes, self.data_format = preprocess_mnist(test=True)
+            self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
         # baseline on mnist
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format)
@@ -28,10 +29,11 @@ class Test(unittest.TestCase):
         # model training
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
         model.evaluate_test(classifier, self.x_test, self.y_test)
-        x_test_adv = model.evaluate_adversaries(classifier, self.x_test, self.y_test)
+        x_test_adv = model.evaluate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
+                                                method="fgsm")
 
         # save to pickle
-        save_to_pickle(data=x_test_adv, filename="mnist_x_test_fgsm.pkl")
+        save_to_pickle(data=x_test_adv, filename=self.dataset+"_x_test_fgsm.pkl")
 
         # save and load
         model.save_model(classifier=classifier, model_name="baseline_convnet")
@@ -39,20 +41,23 @@ class Test(unittest.TestCase):
             relative_path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
 
         model.evaluate_test(loaded_classifier, self.x_test, self.y_test)
-        model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True,
-                                   adversaries_path=RESULTS+time.strftime('%Y-%m-%d')+"/mnist_x_test_fgsm.pkl")
+        model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True, dataset_name=self.dataset,
+                                   adversaries_path=RESULTS+time.strftime('%Y-%m-%d')+"/mnist_x_test_fgsm.pkl",
+                                   method="fgsm")
 
         # complete model loading
-        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/baseline.h5")
+        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/mnist_baseline.h5")
 
-        model.evaluate_adversaries(classifier, self.x_test, self.y_test,
+        model.evaluate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
                                    method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl', test=True)
 
         # adversarial training
         robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
-                                                  batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True)
-        model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True,
-                                   adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm.pkl")
+                                                    batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True,
+                                                    dataset_name=self.dataset)
+        model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True, dataset_name=self.dataset,
+                                   adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm.pkl",
+                                   method="fgsm")
 
     def test_random_ensemble(self):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -64,7 +69,7 @@ class Test(unittest.TestCase):
 
         # evaluate
         x_test_pred = model.evaluate_test(classifiers, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm')
+        model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm', dataset_name=self.dataset)
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble"#proj=" + str(model.n_proj) +

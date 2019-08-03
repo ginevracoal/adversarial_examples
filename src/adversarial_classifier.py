@@ -55,7 +55,7 @@ class AdversarialClassifier(object):
         self.trained = True
         return classifier
 
-    def _generate_adversaries(self, classifier, x, y, test, method='fgsm', adversaries_path=None):
+    def _generate_adversaries(self, classifier, x, y, test, method, dataset_name, adversaries_path=None):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
 
@@ -67,7 +67,7 @@ class AdversarialClassifier(object):
         """
 
         if adversaries_path is None:
-            print("\nGenerating adversaries with", method, "method.")
+            print("\nGenerating adversaries with", method, "method on ", dataset_name)
             x_adv = None
             if method == 'fgsm':
                 attacker = FastGradientMethod(classifier, eps=0.5)
@@ -92,7 +92,7 @@ class AdversarialClassifier(object):
                 x_adv = attacker.generate(x=x)
 
         else:
-            print("\nLoading adversaries generated with", method, "method.")
+            print("\nLoading adversaries generated with", method, "method on ", dataset_name)
             x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
 
         return x_adv
@@ -135,7 +135,7 @@ class AdversarialClassifier(object):
 
         return y_test_pred
 
-    def evaluate_adversaries(self, classifier, x_test, y_test, method='fgsm', adversaries_path=None, test=False):
+    def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
         """
         Evaluates the trained model against FGSM and prints the number of misclassifications.
         :param classifier: trained classifier
@@ -152,8 +152,8 @@ class AdversarialClassifier(object):
         print("\n===== Adversarial evaluation =====")
 
         # generate adversaries on the test set
-        x_test_adv = self._generate_adversaries(classifier, x_test, y_test,
-                                                method=method, adversaries_path=adversaries_path, test=test)
+        x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
+                                                adversaries_path=adversaries_path, test=test)
         # debug
         # print(len(x_test), len(x_test_adv))
 
@@ -198,7 +198,7 @@ class AdversarialClassifier(object):
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 
-    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method='fgsm',
+    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method, dataset_name,
                           test=False):
         """
         Performs adversarial training on the given classifier using an attack method.
@@ -210,7 +210,8 @@ class AdversarialClassifier(object):
         start_time = time.time()
         print("\n===== Adversarial training =====")
         # generate adversarial examples on train and test sets
-        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method, test=test)
+        x_train_adv = self._generate_adversaries(classifier, x_train, y_train, method=method,
+                                                 dataset_name=dataset_name, test=test)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
@@ -226,8 +227,8 @@ class AdversarialClassifier(object):
         self.evaluate_test(robust_classifier, x_test, y_test)
 
         print("\nEvaluating on adversarial test set generated from the original classifier:")
-        self.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test,
-                                   adversaries_path="../data/mnist_x_test_" + method + ".pkl")
+        self.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
+                                   adversaries_path="../data/"+dataset_name+"_x_test_" + method + ".pkl")
         # same as
         # self.evaluate_test(robust_classifier, x_test_adv, y_test)
 
