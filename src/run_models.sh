@@ -4,12 +4,12 @@
 # settings #
 ############
 
-MODEL_NAME="baseline_convnet" # this should be the name of the script
-FILENAME="" # this should be the name of the output file
+SCRIPT="baseline" # "baseline", "randens"
+OUT_FILENAME="testing_baseline"
 
-## only for clusterino:
-rm screenlog.0
-cd ~/adversarial_examples/src/
+## clusterino
+#rm screenlog.0
+#cd ~/adversarial_examples/src/
 #export CUDA_VISIBLE_DEVICES=-1 # GPU
 
 ##############
@@ -22,7 +22,12 @@ TIME=$(date +%H:%M:%S)
 
 source ~/virtualenvs/venv/bin/activate
 mkdir -p "$RESULTS/$DATE/"
-python3 "${MODEL_NAME}.py" > "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt
+
+if [ $SCRIPT = "baseline" ]; then
+  python3 "baseline_convnet.py" > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}"_out.txt
+elif [ $SCRIPT = "randens" ]; then
+  python3 "random_ensemble.py" > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}"_out.txt
+fi
 
 ## remove the unnecessary infos from output text
-sed -n '/ETA:/!p' "$RESULTS/$DATE/${FILENAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${FILENAME}_${TIME}_clean.txt"
+sed -n '/ETA:/!p' "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}"_out.txt > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_clean.txt"
