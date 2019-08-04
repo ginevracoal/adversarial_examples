@@ -16,11 +16,11 @@ from multiprocessing import Pool
 ###############
 # main() args #
 ###############
-DATASET = "mnist"
-TEST = True
-ATTACK = "fgsm"
-N_PROJECTIONS = 6
-SIZE_PROJECTION = 8
+DATASET = "cifar"
+TEST = False
+ATTACK = ["fgsm"]#,"pgd","deepfool","carlini_linf"]
+N_PROJECTIONS = [6]#,9,12,15]
+SIZE_PROJECTION = [8]#,12,16,20]
 
 ####################
 # default settings #
@@ -43,11 +43,9 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, data_format):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, data_format, dataset_name):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
-        :param input_shape: full dimension input data shape
-        :param num_classes: number of classes
         :param n_proj: number of random projections
         :param size_proj: size of a random projection
         """
@@ -55,16 +53,18 @@ class RandomEnsemble(BaselineConvnet):
         if size_proj > input_shape[1]:
             raise ValueError("The number of projections has to be lower than the image size.")
 
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format)
-        self.input_shape = (size_proj, size_proj, 1)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name)
+        # todo: nel caso di cifar separo sui 3 channel?
+        self.input_shape = (size_proj, size_proj, 1)#input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
         # the model is currently implemented on 15 projections max
         self.random_seed = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
-        self.projector = None
-        self.projectors_params = None
+        #self.projector = None
+        #self.projectors_params = None
         self.trained = False
-        self.data_format = data_format
+        #self.data_format = data_format
+        # todo: set ensemble method here
 
     ###################
     # serial training #
@@ -88,7 +88,7 @@ class RandomEnsemble(BaselineConvnet):
         for i in range(self.n_proj):
             # use the same model architecture (not weights) for all trainings
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                       data_format=self.data_format)
+                                       data_format=self.data_format, dataset_name=self.dataset_name)
             # train n_proj classifiers on different training data
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
             del baseline
@@ -297,7 +297,7 @@ class RandomEnsemble(BaselineConvnet):
 ###################
 
 
-def train_all(dataset, test, attack, n_proj, size_proj):
+def simple_train(dataset, test, attack, n_proj, size_proj):
     """Trains a model for each combinations of the given n_projections, size_projections"""
 
     # === load data === #
@@ -306,10 +306,10 @@ def train_all(dataset, test, attack, n_proj, size_proj):
     # === train === #
     K.clear_session()
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format)
+                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset)
 
     start_time = time.time()
-    classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
           "): --- %s seconds ---" % (time.time() - start_time))
 
@@ -320,23 +320,23 @@ def train_all(dataset, test, attack, n_proj, size_proj):
     model.evaluate_adversaries(classifier, x_test, y_test, dataset_name=dataset, method=attack)
 
 
-def adversarially_train_all(dataset, test, attack, n_proj, size_proj):
-    """ Performs FGSM adversarial training on each projection model """
+def adversarially_train(dataset, test, attack, n_proj, size_proj):
+    """ Performs adversarial training on the classifier using a given attack method. """
 
     # === load data === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset, test=test)
 
     # === train === #
-    K.clear_session()
+    # K.clear_session()
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format)
+                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset)
 
     relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
     classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
     start_time = time.time()
     robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, dataset_name=dataset,
-                                                batch_size=BATCH_SIZE, epochs=EPOCHS, method=attack, test=test)
+                                            batch_size=model.batch_size, epochs=model.epochs, method=attack, test=test)
     print("\nTraining time for model (n_proj=", str(model.n_proj), ", size_proj=", str(model.size_proj),
           "): --- %s seconds ---" % (time.time() - start_time))
 
@@ -347,34 +347,32 @@ def adversarially_train_all(dataset, test, attack, n_proj, size_proj):
                      "_robust_random_ensemble_size=" + str(model.size_proj))
 
 
-def evaluate_all_test(dataset, test, n_proj, size_proj):
-    """ Evaluates all models on the test set."""
+def evaluate_on_test(dataset, test, n_proj, size_proj):
+    """ Evaluates the classifier on test set."""
 
     # === load data === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset,
                                                                                            test=test)
     # === evaluate === #
-    K.clear_session()
+    # K.clear_session()
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format)
+                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset)
 
     relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
     classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
     model.evaluate_test(classifier, x_test, y_test)
 
 
-def evaluate_all_attacks(dataset, test, attack, n_proj, size_proj):
-    """ Evaluates all models on a given attack. This method only works on adversarial samples previously generated
-    from the baseline."""
+def evaluate_on_attack(dataset, test, attack, n_proj, size_proj):
+    """ Evaluates the given model on the attacks previously generated from the baseline."""
 
     # === load data === #
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset,
-                                                                                           test=test)
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset,test=test)
 
     # === evaluation === #
-    K.clear_session()
+    # K.clear_session()
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format)
+                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset)
 
     relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
     classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
@@ -393,12 +391,15 @@ def main(dataset, test, attack, n_proj, size_proj):
     :param size_proj: size of each projection. You can currently load models with values: 8, 12, 16, 20.
     """
 
-    #train_all(dataset, test, attack, n_proj, size_proj)
-    #adversarially_train_all(dataset, test, attack, n_proj, size_proj)
-    #evaluate_all_test(dataset, test, n_proj, size_proj)
-    evaluate_all_attacks(dataset, test, attack, n_proj, size_proj)
+    simple_train(dataset, test, attack, n_proj, size_proj)
+    # adversarially_train(dataset, test, attack, n_proj, size_proj)
+    # evaluate_on_test(dataset, test, n_proj, size_proj)
+    # evaluate_on_attack(dataset, test, attack, n_proj, size_proj)
 
 
 if __name__ == "__main__":
-    main(DATASET, TEST, ATTACK, N_PROJECTIONS, SIZE_PROJECTION)
 
+    for n_proj in N_PROJECTIONS:
+        for size_proj in SIZE_PROJECTION:
+            K.clear_session()
+            main(DATASET, TEST, attack=ATTACK, n_proj=n_proj, size_proj=size_proj)
