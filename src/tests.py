@@ -20,11 +20,11 @@ class Test(unittest.TestCase):
             self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
         # baseline on mnist
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                        data_format=self.data_format)
+                                        data_format=self.data_format, dataset_name=self.dataset)
 
     def test_baseline(self):
         model = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                data_format=self.data_format)
+                                data_format=self.data_format, dataset_name=self.dataset)
 
         # model training
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
@@ -60,7 +60,7 @@ class Test(unittest.TestCase):
                                    method="fgsm")
 
     def test_random_ensemble(self):
-        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
+        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
                                n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format)
 
         # train
@@ -83,7 +83,8 @@ class Test(unittest.TestCase):
 
     def test_cifar_load_and_train(self):
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True)
-        model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format)
+        model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                dataset_name=self.dataset)
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     def test_random_adversarial_projection(self):

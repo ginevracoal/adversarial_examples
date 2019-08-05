@@ -141,20 +141,20 @@ def compute_projections(input_data, random_seed, n_proj, size_proj=None):
     print("Input shape: ", input_data.shape)
     flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
 
-    # old method #
+    # === simple random projector === #
     # np.random.seed(random_seed)
     # idxs = [np.random.choice(input_data.shape[1]*input_data.shape[2], size_proj*size_proj, replace=False)
     #        for i in range(n_proj)]
     # projected_data = [flat_images[:, proj_idxs] for proj_idxs in idxs]
-    ##############
+    # =============================== #
 
-    # gaussian random projector #######
+    # === gaussian random projector === #
     projected_data = []
     for i in range(n_proj):
         # cannot use list comprehension on GaussianRandomProjection objects
         projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed[i])
         projected_data.append(projector.fit_transform(flat_images))
-    ####################
+    # ================================= #
 
     # reshape in matrix form
     projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
@@ -162,6 +162,34 @@ def compute_projections(input_data, random_seed, n_proj, size_proj=None):
     print("Projected data shape:", projected_data.shape)
     return projected_data
 
+# currently unused.
+def compute_projections_channels(input_data, random_seed, n_proj, size_proj=None):
+    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
+    given projector function `projector`.
+
+    :param input_data: full dimension input data
+    :param random_seed: list of seeds for the projections
+    :param n_proj: number of projections
+    :param size_proj: size of a projection
+    :return: array containing m random projections on the data, based on the given seeds
+    """
+
+    print("\nComputing random projections.")
+
+    print("Input shape: ", input_data.shape)
+    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2],input_data.shape[3])
+
+    projected_data = []
+    for i in range(n_proj):
+        # cannot use list comprehension on GaussianRandomProjection objects
+        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed[i])
+        projected_data.append([projector.fit_transform(flat_images[:,:,i]) for i in range(3)])
+
+    # reshape in matrix form
+    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 3)
+
+    print("Projected data shape:", projected_data.shape)
+    return projected_data
 
 ################
 # Pickle utils #
@@ -175,7 +203,7 @@ def save_to_pickle(data, filename):
 
 
 def unpickle(file):
-    '''Load byte data from file'''
+    """ Load byte data from file"""
     with open(file, 'rb') as f:
         data = pkl.load(f, encoding='latin-1')
     return data

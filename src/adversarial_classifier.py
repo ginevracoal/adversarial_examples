@@ -67,7 +67,7 @@ class AdversarialClassifier(object):
         """
 
         if adversaries_path is None:
-            print("\nGenerating adversaries with", method, "method on ", dataset_name)
+            print("\nGenerating adversaries with", method, "method on", dataset_name)
             x_adv = None
             if method == 'fgsm':
                 attacker = FastGradientMethod(classifier, eps=0.5)
@@ -222,13 +222,14 @@ class AdversarialClassifier(object):
         robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
         print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
 
+        # todo: remove next lines... they have nothing do to with adversarial training
         # Evaluate the adversarially trained classifier on the original + adversarial test sets
-        print("\nEvaluating on original test set:")
-        self.evaluate_test(robust_classifier, x_test, y_test)
+        #print("\nEvaluating on original test set:")
+        #self.evaluate_test(robust_classifier, x_test, y_test)
 
-        print("\nEvaluating on adversarial test set generated from the original classifier:")
-        self.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-                                   adversaries_path="../data/"+dataset_name+"_x_test_" + method + ".pkl")
+        #print("\nEvaluating on adversarial test set generated from the original classifier:")
+        #self.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
+        #                           adversaries_path="../data/"+dataset_name+"_x_test_" + method + ".pkl")
         # same as
         # self.evaluate_test(robust_classifier, x_test_adv, y_test)
 
