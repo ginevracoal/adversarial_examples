@@ -11,16 +11,16 @@ from keras.models import load_model
 from utils import *
 import time
 from keras import backend as K
-from multiprocessing import Pool
+import multiprocessing as mp
 
 ###############
 # main() args #
 ###############
-DATASET = "cifar"
+DATASET = "mnist"
 TEST = True
 ATTACK = ["fgsm"] #,"pgd","deepfool","carlini_linf"]
-N_PROJECTIONS = [15] # default for training is [15], default for testing is [6,9,12,15]
-SIZE_PROJECTIONS = [8,12,16,20]
+N_PROJECTIONS = [6] # default for training is [15], default for testing is [6,9,12,15]
+SIZE_PROJECTIONS = [8]#,12,16,20]
 
 ####################
 # default settings #
@@ -54,7 +54,6 @@ class RandomEnsemble(BaselineConvnet):
             raise ValueError("The number of projections has to be lower than the image size.")
 
         super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name)
-        # todo: nel caso di cifar separo sui 3 channel?
         self.input_shape = (size_proj, size_proj, 1) #input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
@@ -66,15 +65,15 @@ class RandomEnsemble(BaselineConvnet):
         #self.data_format = data_format
         # todo: set ensemble method here
 
-        print("\n === RandEns model (n_proj=", str(self.n_proj), ", size_proj=", str(self.size_proj), " ===")
+        print("\n === RandEns model ( n_proj =", self.n_proj, ", size_proj =", self.size_proj, ") ===")
 
     ###################
     # serial training #
     ###################
-    def train(self, x_train, y_train, batch_size, epochs):
+    def serial_train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
-        `(size_proj, size_proj, 1)`.
+        `(size_proj, size_proj, 1)`. This function is currently unused.
 
         :param x_train:
         :param y_train:
@@ -105,20 +104,22 @@ class RandomEnsemble(BaselineConvnet):
     #####################
     # parallel training #
     #####################
-    # todo: solve buggy parallel implementation. TF sessions do not like multiprocessing...
-    def proj_train(self, args):
-        x_train_projected, y_train, batch_size, epochs = args
+    def train_save_projection(self, x_train_projected, y_train, batch_size, epochs, idx):
+        """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
         # use the same model architecture (not weights) for all trainings
-        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                   dataset_name=self.dataset_name, data_format=self.data_format)
         # train n_proj classifiers on different training data
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
+        classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seed[idx]) + ".h5",
+                             path=RESULTS + time.strftime('%Y-%m-%d'))
         return classifier
 
-    def new_train(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
-        `(size_proj, size_proj, 1)`.
+        `(size_proj, size_proj, 1)` and parallelizes training over the different projections.
 
         :param x_train:
         :param y_train:
@@ -130,12 +131,22 @@ class RandomEnsemble(BaselineConvnet):
         x_train_projected = compute_projections(x_train, random_seed=self.random_seed,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
 
-        inputs = [[x_train_projected[i], y_train, batch_size, epochs] for i in range(self.n_proj)]
+        # Define an output queue
+        #output = mp.Queue()
+        # Setup a list of processes that we want to run
+        processes = [mp.Process(target=self.train_save_projection,
+                                args=(x_train_projected[i], y_train, batch_size, epochs, i)) for i in range(self.n_proj)]
+        # Run processes
+        for p in processes:
+            p.start()
+        # Exit the completed processes
+        for p in processes:
+            p.join()
+        # Get process results from the output queue
+        #classifiers = [output.get() for p in processes]
 
-        pool = Pool()  # Create a multiprocessing Pool
-        classifiers = pool.map(self.proj_train, inputs)  # process input_paths iterable with pool
-        pool.close()
-
+        classifiers = self.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
+                                           model_name="random_ensemble")
         self.trained = True
         return classifiers
     #################
@@ -326,16 +337,16 @@ def main(dataset, test, attack, n_proj, size_proj):
     #classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
     # === adversarial train === #
-    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, dataset_name=dataset,
-                                                batch_size=model.batch_size, epochs=model.epochs, method=attack, test=test)
-    model.save_model(classifier=robust_classifier, model_name=dataset + "_" + str(attack) +
-                     "_robust_random_ensemble_size=" + str(model.size_proj))
+    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, dataset_name=dataset,
+    #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack, test=test)
+    #model.save_model(classifier=robust_classifier, model_name=dataset + "_" + str(attack) +
+    #                 "_robust_random_ensemble_size=" + str(model.size_proj))
 
     # === evaluate === #
     model.evaluate_test(classifier, x_test, y_test)
-    model.evaluate_test(robust_classifier, x_test, y_test)
+    #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset)
+    #model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset)
     #                           adversaries_path='../data/'+dataset+'_x_test_' + attack + '.pkl')
     #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
 
