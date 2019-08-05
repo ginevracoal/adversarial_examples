@@ -62,6 +62,7 @@ class RandomEnsemble(BaselineConvnet):
         #self.projector = None
         #self.projectors_params = None
         self.trained = False
+        self.training_time = 0
         #self.data_format = data_format
         # todo: set ensemble method here
 
@@ -112,8 +113,14 @@ class RandomEnsemble(BaselineConvnet):
                                    dataset_name=self.dataset_name, data_format=self.data_format)
         # train n_proj classifiers on different training data
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
+
+        start = time.time()
         classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seed[idx]) + ".h5",
                              path=RESULTS + time.strftime('%Y-%m-%d'))
+        saving_time = time.time() - start
+
+        self.training_time -= saving_time
+
         return classifier
 
     def train(self, x_train, y_train, batch_size, epochs):
@@ -128,6 +135,7 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
 
+        start = time.time()
         x_train_projected = compute_projections(x_train, random_seed=self.random_seed,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
 
@@ -139,15 +147,23 @@ class RandomEnsemble(BaselineConvnet):
         # Run processes
         for p in processes:
             p.start()
+
         # Exit the completed processes
         for p in processes:
             p.join()
+
+        self.training_time += + time.time() - start
+
         # Get process results from the output queue
         #classifiers = [output.get() for p in processes]
 
+        print("\nParallel training time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
+              "): --- %s seconds ---" % (self.training_time))
         classifiers = self.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
                                            model_name="random_ensemble")
+
         self.trained = True
+
         return classifiers
     #################
 
