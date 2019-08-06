@@ -125,9 +125,8 @@ def load_dataset(dataset_name, test):
 ######################
 
 
-def compute_projections(input_data, random_seed, n_proj, size_proj=None):
-    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
-    given projector function `projector`.
+def compute_projections(input_data, random_seeds, n_proj, size_proj):
+    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions.
 
     :param input_data: full dimension input data
     :param random_seed: list of seeds for the projections
@@ -152,7 +151,7 @@ def compute_projections(input_data, random_seed, n_proj, size_proj=None):
     projected_data = []
     for i in range(n_proj):
         # cannot use list comprehension on GaussianRandomProjection objects
-        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed[i])
+        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seeds[i])
         projected_data.append(projector.fit_transform(flat_images))
     # ================================= #
 
