@@ -12,15 +12,21 @@ from utils import *
 import time
 from keras import backend as K
 import multiprocessing as mp
+import logging
+from multiprocessing import Pool, Process
 
 ###############
 # main() args #
 ###############
-DATASET = "mnist"
+DATASET = "cifar"
 TEST = True
-ATTACK = ["fgsm"] #,"pgd","deepfool","carlini_linf"]
-N_PROJECTIONS = [6] # default for training is [15], default for testing is [6,9,12,15]
+ATTACK = ["fgsm"]#,"pgd","deepfool","carlini_linf"]
+N_PROJECTIONS = None # default for training is [15], default for testing is [6,9,12,15]
 SIZE_PROJECTIONS = [8]#,12,16,20]
+
+# parallel flags
+PROJ_IDX = 1
+SIZE_PROJ = 8
 
 ####################
 # default settings #
@@ -58,7 +64,7 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         # the model is currently implemented on 15 projections max
-        self.random_seed = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
+        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         #self.projector = None
         #self.projectors_params = None
         self.trained = False
@@ -68,13 +74,13 @@ class RandomEnsemble(BaselineConvnet):
 
         print("\n === RandEns model ( n_proj =", self.n_proj, ", size_proj =", self.size_proj, ") ===")
 
-    ###################
-    # serial training #
-    ###################
+    ############
+    # training #
+    ############
     def serial_train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
-        `(size_proj, size_proj, 1)`. This function is currently unused.
+        `(size_proj, size_proj, 1)`.
 
         :param x_train:
         :param y_train:
@@ -84,7 +90,7 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         start_time = time.time()
-        x_train_projected = compute_projections(x_train, random_seed=self.random_seed,
+        x_train_projected = compute_projections(x_train, random_seeds=self.random_seeds,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
 
         classifiers = []
@@ -96,16 +102,13 @@ class RandomEnsemble(BaselineConvnet):
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
             del baseline
 
-        print("\nTraining time for model (n_proj=", str(self.n_proj), ", size_proj=", str(self.size_proj),
+        print("\nTraining time for model ( n_proj=", str(self.n_proj), ", size_proj=", str(self.size_proj),
               "): --- %s seconds ---" % (time.time() - start_time))
 
         self.trained = True
         return classifiers
 
-    #####################
-    # parallel training #
-    #####################
-    def train_save_projection(self, x_train_projected, y_train, batch_size, epochs, idx):
+    def train_save_single_projection(self, x_train_projected, y_train, batch_size, epochs, idx):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
         # use the same model architecture (not weights) for all trainings
@@ -115,7 +118,7 @@ class RandomEnsemble(BaselineConvnet):
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
 
         start = time.time()
-        classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seed[idx]) + ".h5",
+        classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5",
                              path=RESULTS + time.strftime('%Y-%m-%d'))
         saving_time = time.time() - start
 
@@ -123,7 +126,7 @@ class RandomEnsemble(BaselineConvnet):
 
         return classifier
 
-    def train(self, x_train, y_train, batch_size, epochs):
+    def parallel_train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
         `(size_proj, size_proj, 1)` and parallelizes training over the different projections.
@@ -134,15 +137,17 @@ class RandomEnsemble(BaselineConvnet):
         :param epochs:
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
+        mpl = mp.log_to_stderr()
+        mpl.setLevel(logging.INFO)
 
         start = time.time()
-        x_train_projected = compute_projections(x_train, random_seed=self.random_seed,
+        x_train_projected = compute_projections(x_train, random_seeds=self.random_seeds,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
 
         # Define an output queue
         #output = mp.Queue()
         # Setup a list of processes that we want to run
-        processes = [mp.Process(target=self.train_save_projection,
+        processes = [mp.Process(target=self.train_save_single_projection,
                                 args=(x_train_projected[i], y_train, batch_size, epochs, i)) for i in range(self.n_proj)]
         # Run processes
         for p in processes:
@@ -151,8 +156,9 @@ class RandomEnsemble(BaselineConvnet):
         # Exit the completed processes
         for p in processes:
             p.join()
+            #output.close()
 
-        self.training_time += + time.time() - start
+        self.training_time += time.time() - start
 
         # Get process results from the output queue
         #classifiers = [output.get() for p in processes]
@@ -255,7 +261,7 @@ class RandomEnsemble(BaselineConvnet):
         :param method: ensemble method chosen. Only sum and mode are currently implemented.
         :return: final predictions for the input data
         """
-        projected_data = compute_projections(data, random_seed=self.random_seed,
+        projected_data = compute_projections(data, random_seeds=self.random_seeds,
                                              n_proj=self.n_proj, size_proj=self.size_proj)
         predictions = None
         if method == 'sum':
@@ -275,14 +281,14 @@ class RandomEnsemble(BaselineConvnet):
         """
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        x_test_proj = compute_projections(x_test, random_seed=self.random_seed,
+        x_test_proj = compute_projections(x_test, random_seeds=self.random_seeds,
                                           n_proj=self.n_proj, size_proj=self.size_proj)
         y_test_pred = np.argmax(self.predict(classifiers, x_test, method=ENSEMBLE_METHOD), axis=1)
 
         # evaluate each classifier on its projected test set
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         for i, classifier in enumerate(classifiers):
-            print("\nTest evaluation on projection ", self.random_seed[i])  # i
+            print("\nTest evaluation on projection ", self.random_seeds[i])  # i
             baseline.evaluate_test(classifier, x_test_proj[i], y_test)
 
         # final classifier evaluation on the original test set
@@ -300,15 +306,15 @@ class RandomEnsemble(BaselineConvnet):
                                                adversaries_path=adversaries_path, test=test)
         return x_adv
 
-    def save_model(self, classifier, model_name):
+    def save_model(self, classifier, model_name=MODEL_NAME):
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
-                proj_classifier.save(filename=model_name + "_" + str(self.random_seed[i]) + ".h5",
+                proj_classifier.save(filename=model_name + "_" + str(self.random_seeds[i]) + ".h5",
                                      path=RESULTS + time.strftime('%Y-%m-%d'))
         else:
             raise ValueError("Model has not been fitted!")
 
-    def load_classifier(self, relative_path, model_name="random_ensemble"):
+    def load_classifier(self, relative_path, model_name=MODEL_NAME):
         """
         Loads a pretrained classifier and sets the projector with the training seed.
         :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
@@ -318,7 +324,7 @@ class RandomEnsemble(BaselineConvnet):
         start_time = time.time()
         # load all trained models
         trained_models = [load_model(relative_path+model_name+"_size=" + str(self.size_proj)+"_"+str(seed)+".h5")
-                          for seed in self.random_seed[:self.n_proj]]
+                          for seed in self.random_seeds[:self.n_proj]]
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
         classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
@@ -329,7 +335,7 @@ class RandomEnsemble(BaselineConvnet):
 # MAIN #
 ########
 
-def main(dataset, test, attack, n_proj, size_proj):
+def main(dataset_name, test, attack, n_proj, size_proj):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
@@ -339,14 +345,14 @@ def main(dataset, test, attack, n_proj, size_proj):
     """
 
     # === load data === #
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset, test=test)
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
     # === train === #
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset)
+                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
 
-    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    # model.save_model(classifier=classifier, model_name=dataset+"_random_ensemble_size=" + str(model.size_proj))
+    classifier = model.serial_train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    #model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
     #relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
@@ -362,14 +368,16 @@ def main(dataset, test, attack, n_proj, size_proj):
     model.evaluate_test(classifier, x_test, y_test)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    #model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset)
-    #                           adversaries_path='../data/'+dataset+'_x_test_' + attack + '.pkl')
+    for attack in ["fgsm","pgd","deepfool","carlini_linf"]:
+        model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset,
+                                   adversaries_path='../data/'+dataset+'_x_test_' + attack + '.pkl'
+                                   )
     #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
 
 
 if __name__ == "__main__":
 
-    for n_proj in N_PROJECTIONS:
-        for size_proj in SIZE_PROJECTIONS:
-            K.clear_session()
-            main(DATASET, TEST, ATTACK, n_proj, size_proj)
+    #for n_proj in N_PROJECTIONS:
+    #    for size_proj in SIZE_PROJECTIONS:
+    #        K.clear_session()
+    main(DATASET, TEST, ATTACK, PROJ_IDX, SIZE_PROJ)
