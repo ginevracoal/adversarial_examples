@@ -37,8 +37,8 @@ def main(dataset_name, test, proj_idx, size_proj):
     x_train_projected = compute_single_projection(input_data=x_train, random_seed=model.random_seeds[proj_idx],
                                                   size_proj=model.size_proj)
 
-    model.train_save_single_projection(x_train_projected=x_train_projected, y_train=y_train, batch_size=model.batch_size,
-                                  epochs=model.epochs, idx=proj_idx)
+    model.train_single_projection(x_train_projected=x_train_projected, y_train=y_train, batch_size=model.batch_size,
+                                  epochs=model.epochs, idx=proj_idx, save=False)
 
 
 if __name__ == "__main__":

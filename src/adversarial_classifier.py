@@ -92,7 +92,7 @@ class AdversarialClassifier(object):
                 x_adv = attacker.generate(x=x)
 
         else:
-            print("\nLoading adversaries generated with", method, "method on ", dataset_name)
+            print("\nLoading adversaries generated with", method, "method on", dataset_name)
             x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
 
         return x_adv
@@ -192,7 +192,7 @@ class AdversarialClassifier(object):
         from save_model()
         returns: trained classifier
         """
-        print("\nLoading the model.")
+        print("\nLoading model:", str(relative_path))
         # load a trained model
         trained_model = load_model(relative_path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
@@ -218,7 +218,6 @@ class AdversarialClassifier(object):
         y_train_ext = np.append(y_train, y_train, axis=0)
 
         # Retrain the CNN on the extended dataset
-
         robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
         print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
 

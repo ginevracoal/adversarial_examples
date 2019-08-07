@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 ###############
 # main() args #
 ###############
-DATASET="cifar"
-TEST=True
-ATTACK="fgsm"
+#DATASET="cifar" # "mnist", "cifar"
+#TEST=False
+#ATTACK="carlini_linf"# "fgsm, "pgd", "deepfool", "carlini_linf"
 
 
 ####################
@@ -104,7 +104,7 @@ class BaselineConvnet(AdversarialClassifier):
             return model
 
 
-def main(dataset, test, attack):
+def main(dataset_name, test, attack):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True, only takes the first 100 samples.
@@ -112,25 +112,25 @@ def main(dataset, test, attack):
     """
 
     # load dataset #
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset, test=test)
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
     #plt.imshow(x_test[5])
 
     # train classifier #
-    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset)
-    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    #model.save_model(classifier = classifier, model_name = dataset+"_baseline")
+    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name)
+    #classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    #model.save_model(classifier = classifier, model_name = dataset_name+"_baseline")
 
     # load classifier #
-    #classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/"+DATASET+"_baseline.h5")
-    #classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/"+DATASET+"_"+ATTACK+"_robust_baseline.h5")
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/"+dataset_name+"_baseline.h5")
+    #classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/"+dataset_name+"_"+attack+"_robust_baseline.h5")
 
     # adversarial training #
-    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=test,
-    #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack)
-    #model.save_model(classifier = robust_classifier, model_name = dataset+"_"+attack+"_robust_baseline")
+    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=test, method=attack,
+                                                batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
+    #model.save_model(classifier = robust_classifier, model_name = dataset_name+"_"+attack+"_robust_baseline")
 
     # evaluations #
-    #model.evaluate_test(classifier, x_test, y_test)
+    model.evaluate_test(classifier, x_test, y_test)
 
     #############
     # todo: solve this bug eventually... not urgent
@@ -139,24 +139,27 @@ def main(dataset, test, attack):
     # x_test_adv, _ = model.evaluate_adversaries(...)
     #############
 
-    #x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset,
-                                            # adversaries_path=DATA_PATH+dataset+"_x_test_"+attack+".pkl"
-    #                                        )
-    #save_to_pickle(data=x_test_adv, filename=dataset+"_x_test_"+attack+".pkl")
+    #x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset_name)
+    #save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
+
+    for attack in ['fgsm','pgd','deepfool','carlini_linf']:
+        x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
+                                                adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=False)
 
     #plt.imshow(x_test_adv[5])
     #plt.show()
 
 
 if __name__ == "__main__":
-    # try:
-    #     dataset = sys.argv[1]
-    #     test = sys.argv[2]
-    #     attack = sys.argv[3]
-    #
-    # except IndexError:
-    #     dataset = input("\nChoose a dataset.")
-    #     test = input("\nDo you just want to test the code?")
-    #     attack = input("\nChoose an attack.")
+    try:
+        dataset_name = sys.argv[1]
+        test = sys.argv[2]
+        attack = sys.argv[3]
 
-    main(DATASET, TEST, ATTACK)
+    except IndexError:
+        dataset_name = input("\nChoose a dataset.")
+        test = input("\nDo you just want to test the code?")
+        attack = input("\nChoose an attack.")
+
+    K.clear_session()
+    main(dataset_name=dataset_name, test=test, attack=attack)

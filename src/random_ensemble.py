@@ -13,20 +13,16 @@ import time
 from keras import backend as K
 import multiprocessing as mp
 import logging
-from multiprocessing import Pool, Process
+import sys
 
 ###############
 # main() args #
 ###############
-DATASET = "cifar"
-TEST = True
-ATTACK = ["fgsm"]#,"pgd","deepfool","carlini_linf"]
-N_PROJECTIONS = None # default for training is [15], default for testing is [6,9,12,15]
-SIZE_PROJECTIONS = [8]#,12,16,20]
-
-# parallel flags
-PROJ_IDX = 1
-SIZE_PROJ = 8
+#DATASET = "cifar"
+#TEST = True
+#ATTACK = ["fgsm"]#,"pgd","deepfool","carlini_linf"]
+#N_PROJ_LIST = [6,9,12,15] # default for training is [15], default for testing is [6,9,12,15]
+#SIZE_PROJ_LIST = [8,12,16,20]
 
 ####################
 # default settings #
@@ -77,7 +73,7 @@ class RandomEnsemble(BaselineConvnet):
     ############
     # training #
     ############
-    def serial_train(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
         `(size_proj, size_proj, 1)`.
@@ -108,7 +104,7 @@ class RandomEnsemble(BaselineConvnet):
         self.trained = True
         return classifiers
 
-    def train_save_single_projection(self, x_train_projected, y_train, batch_size, epochs, idx):
+    def train_single_projection(self, x_train_projected, y_train, batch_size, epochs, idx, save):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
         # use the same model architecture (not weights) for all trainings
@@ -117,12 +113,13 @@ class RandomEnsemble(BaselineConvnet):
         # train n_proj classifiers on different training data
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
 
-        start = time.time()
-        classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5",
-                             path=RESULTS + time.strftime('%Y-%m-%d'))
-        saving_time = time.time() - start
+        if save:
+            start = time.time()
+            classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5",
+                                 path=RESULTS + time.strftime('%Y-%m-%d'))
+            saving_time = time.time() - start
 
-        self.training_time -= saving_time
+            self.training_time -= saving_time
 
         return classifier
 
@@ -147,8 +144,8 @@ class RandomEnsemble(BaselineConvnet):
         # Define an output queue
         #output = mp.Queue()
         # Setup a list of processes that we want to run
-        processes = [mp.Process(target=self.train_save_single_projection,
-                                args=(x_train_projected[i], y_train, batch_size, epochs, i)) for i in range(self.n_proj)]
+        processes = [mp.Process(target=self.train_single_projection,
+                                args=(x_train_projected[i], y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
         # Run processes
         for p in processes:
             p.start()
@@ -335,7 +332,7 @@ class RandomEnsemble(BaselineConvnet):
 # MAIN #
 ########
 
-def main(dataset_name, test, attack, n_proj, size_proj):
+def main(dataset_name, test, n_proj, size_proj, attack=None):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
@@ -351,12 +348,12 @@ def main(dataset_name, test, attack, n_proj, size_proj):
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
 
-    classifier = model.serial_train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    #classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     #model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
-    #relpath = dataset + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
-    #classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+    relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
     # === adversarial train === #
     #robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, dataset_name=dataset,
@@ -369,15 +366,28 @@ def main(dataset_name, test, attack, n_proj, size_proj):
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
     for attack in ["fgsm","pgd","deepfool","carlini_linf"]:
-        model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset,
-                                   adversaries_path='../data/'+dataset+'_x_test_' + attack + '.pkl'
+        model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset_name,
+                                   adversaries_path='../data/'+dataset_name+'_x_test_' + attack + '.pkl'
                                    )
     #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
 
 
 if __name__ == "__main__":
+    try:
+        dataset_name = sys.argv[1]
+        test = sys.argv[2]
+        n_proj_list = map(int, sys.argv[3].strip('[]').split(','))
+        size_proj_list = map(int, sys.argv[4].strip('[]').split(','))
+        attack = sys.argv[5]
 
-    #for n_proj in N_PROJECTIONS:
-    #    for size_proj in SIZE_PROJECTIONS:
-    #        K.clear_session()
-    main(DATASET, TEST, ATTACK, PROJ_IDX, SIZE_PROJ)
+    except IndexError:
+        dataset_name = input("\nChoose a dataset.")
+        test = input("\nDo you just want to test the code?")
+        n_proj_list = input("\nChoose the projection idx.")
+        size_proj_list = input("\nChoose size for the projection.")
+        attack = input("\nChoose an attack.")
+
+    for n_proj in n_proj_list:
+        for size_proj in size_proj_list:
+            K.clear_session()
+            main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj, attack=attack)
