@@ -3,7 +3,7 @@
 ############
 # settings #
 ############
-SCRIPT="parallel_randens" # "baseline", "randens", "parallel_randens"
+SCRIPT="baseline" # "baseline", "randens", "parallel_randens"
 
 # === all scripts === #
 DATASET_NAME="mnist" # supported: "mnist","cifar"
@@ -29,24 +29,28 @@ SIZE_PROJ=8 # supported: 8, 12, 16, 20
 ##############
 # run script #
 ##############
-
-OUT_FILENAME="${DATASET_NAME}_${SCRIPT}"
-RESULTS="../results"
-DATE=$(date +%Y-%m-%d)
-TIME=$(date +%H:%M:%S)
-
 source ~/virtualenvs/venv/bin/activate
-mkdir -p "$RESULTS/$DATE/"
+
+DATE=$(date +%Y-%m-%d)
+RESULTS="../results"
+TIME=$(date +%H:%M:%S)
+RESULTS="../results/$DATE/"
+mkdir -p $RESULTS
+OUT="${RESULTS}${DATASET_NAME}_${SCRIPT}"
+BASELINE_OUT="${OUT}_${TEST}_${ATTACK}"
+RANDENS_OUT="${OUT}_${TEST}_${SIZE_PROJ}_${ATTACK}"
+PARALLEL_RANDENS_OUT="${OUT}_${TEST}_${proj_idx}_${SIZE_PROJ}"
 
 if [ $SCRIPT = "baseline" ]; then
-  python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_out.txt"
-  sed -n '/ETA:/!p' "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_out.txt" > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_clean.txt"
+  python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK > "${BASELINE_OUT}_out.txt"
+  sed -n '/ETA:/!p' "${BASELINE_OUT}_out.txt" > "${BASELINE_OUT}_clean.txt"
 elif [ $SCRIPT = "randens" ]; then
-  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ $SIZE_PROJ $ATTACK > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_out.txt"
-  sed -n '/ETA:/!p' "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_out.txt" > "$RESULTS/$DATE/${OUT_FILENAME}_${TIME}_clean.txt"
+  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ $SIZE_PROJ $ATTACK > "${RANDENS_OUT}_out.txt"
+  sed -n '/ETA:/!p' "${RANDENS_OUT}_out.txt"  > "${RANDENS_OUT}_clean.txt"
 elif [ $SCRIPT = "parallel_randens" ]; then
+  rm "$RESULTS/$DATE/${DATASET_NAME}_${SCRIPT}_complexity.txt"
   for proj_idx in $(seq 0 $N_PROJ); do
-    python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ > "$RESULTS/$DATE/${OUT_FILENAME}_${proj_idx}_${TIME}_out.txt"
-    grep -e "Rand" -e "Training" "$RESULTS/$DATE/${OUT_FILENAME}_${proj_idx}_${TIME}_out.txt" >> "$RESULTS/$DATE/${OUT_FILENAME}_complexity.txt"
+    python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ > "${PARALLEL_RANDENS_OUT}_out.txt"
+    grep -e "Rand" -e "Training time for" "${PARALLEL_RANDENS_OUT}_out.txt" >> "${PARALLEL_RANDENS_OUT}_complexity.txt"
   done
 fi

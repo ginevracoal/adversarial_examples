@@ -13,14 +13,6 @@ import time
 import sys
 import matplotlib.pyplot as plt
 
-###############
-# main() args #
-###############
-#DATASET="cifar" # "mnist", "cifar"
-#TEST=False
-#ATTACK="carlini_linf"# "fgsm, "pgd", "deepfool", "carlini_linf"
-
-
 ####################
 # default settings #
 ####################
@@ -28,8 +20,6 @@ MODEL_NAME = "baseline_convnet"
 TRAINED_MODELS = "../trained_models/"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
-BATCH_SIZE = 128
-EPOCHS = 12
 
 
 class BaselineConvnet(AdversarialClassifier):
@@ -125,9 +115,9 @@ def main(dataset_name, test, attack):
     #classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/"+dataset_name+"_"+attack+"_robust_baseline.h5")
 
     # adversarial training #
-    robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, test=test, method=attack,
+    robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
                                                 batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
-    #model.save_model(classifier = robust_classifier, model_name = dataset_name+"_"+attack+"_robust_baseline")
+    model.save_model(classifier = robust_classifier, model_name = dataset_name+"_"+attack+"_robust_baseline")
 
     # evaluations #
     model.evaluate_test(classifier, x_test, y_test)
@@ -139,12 +129,13 @@ def main(dataset_name, test, attack):
     # x_test_adv, _ = model.evaluate_adversaries(...)
     #############
 
-    #x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset_name)
+    #x_test_adv = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
+    #                                        method=attack, test=test, dataset_name=dataset_name)
     #save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
 
-    for attack in ['fgsm','pgd','deepfool','carlini_linf']:
-        x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
-                                                adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=False)
+    #for attack in ['fgsm','pgd','deepfool','carlini_linf']:
+    #    x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
+    #                                            adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
 
     #plt.imshow(x_test_adv[5])
     #plt.show()
@@ -153,7 +144,7 @@ def main(dataset_name, test, attack):
 if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
-        test = sys.argv[2]
+        test = eval(sys.argv[2])
         attack = sys.argv[3]
 
     except IndexError:

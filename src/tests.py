@@ -52,7 +52,7 @@ class Test(unittest.TestCase):
                                    method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl', test=True)
 
         # adversarial training
-        robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train, self.x_test, self.y_test,
+        robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train,
                                                     batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True,
                                                     dataset_name=self.dataset)
         model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True, dataset_name=self.dataset,
@@ -72,8 +72,7 @@ class Test(unittest.TestCase):
         model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm', dataset_name=self.dataset)
 
         # save and load
-        model.save_model(classifier=classifiers, model_name="random_ensemble"#proj=" + str(model.n_proj) +
-                                                            "_size=" + str(model.size_proj))
+        model.save_model(classifier=classifiers, model_name="random_ensemble_size=" + str(model.size_proj))
         loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
                                                    model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)

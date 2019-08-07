@@ -15,14 +15,6 @@ import multiprocessing as mp
 import logging
 import sys
 
-###############
-# main() args #
-###############
-#DATASET = "cifar"
-#TEST = True
-#ATTACK = ["fgsm"]#,"pgd","deepfool","carlini_linf"]
-#N_PROJ_LIST = [6,9,12,15] # default for training is [15], default for testing is [6,9,12,15]
-#SIZE_PROJ_LIST = [8,12,16,20]
 
 ####################
 # default settings #
@@ -32,11 +24,8 @@ ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 DATA_PATH = "../data/"
 RESULTS = "../results/"
-BATCH_SIZE = 128
-EPOCHS = 12
 MIN = 0
 MAX = 255
-SEED = 123
 
 
 class RandomEnsemble(BaselineConvnet):
@@ -61,11 +50,8 @@ class RandomEnsemble(BaselineConvnet):
         self.size_proj = size_proj
         # the model is currently implemented on 15 projections max
         self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
-        #self.projector = None
-        #self.projectors_params = None
         self.trained = False
         self.training_time = 0
-        #self.data_format = data_format
         # todo: set ensemble method here
 
         print("\n === RandEns model ( n_proj =", self.n_proj, ", size_proj =", self.size_proj, ") ===")
@@ -104,19 +90,28 @@ class RandomEnsemble(BaselineConvnet):
         self.trained = True
         return classifiers
 
-    def train_single_projection(self, x_train_projected, y_train, batch_size, epochs, idx, save):
+    def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
         # use the same model architecture (not weights) for all trainings
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    dataset_name=self.dataset_name, data_format=self.data_format)
+
+        start_time = time.time()
+        x_train_projected = compute_single_projection(input_data=x_train, random_seed=self.random_seeds[idx],
+                                                      size_proj=self.size_proj)
+
         # train n_proj classifiers on different training data
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
 
+        print("\nTraining time for single projection with size_proj=", str(self.size_proj),
+              "): --- %s seconds ---" % (time.time() - start_time))
+
         if save:
             start = time.time()
-            classifier.save(filename=MODEL_NAME + "_size="+ str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5",
-                                 path=RESULTS + time.strftime('%Y-%m-%d'))
+            classifier.save(filename=MODEL_NAME + "_" + str(self.random_seeds[idx]) + ".h5",
+                            path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
+                                 MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
             saving_time = time.time() - start
 
             self.training_time -= saving_time
@@ -145,7 +140,7 @@ class RandomEnsemble(BaselineConvnet):
         #output = mp.Queue()
         # Setup a list of processes that we want to run
         processes = [mp.Process(target=self.train_single_projection,
-                                args=(x_train_projected[i], y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
+                                args=(x_train, y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
         # Run processes
         for p in processes:
             p.start()
@@ -307,7 +302,8 @@ class RandomEnsemble(BaselineConvnet):
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 proj_classifier.save(filename=model_name + "_" + str(self.random_seeds[i]) + ".h5",
-                                     path=RESULTS + time.strftime('%Y-%m-%d'))
+                                     path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
+                                          MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
         else:
             raise ValueError("Model has not been fitted!")
 
@@ -348,16 +344,16 @@ def main(dataset_name, test, n_proj, size_proj, attack=None):
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
 
-    #classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    #model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
+    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
-    relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+    #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+    #classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
     # === adversarial train === #
-    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, x_test, y_test, dataset_name=dataset,
-    #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack, test=test)
+    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
+    #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack)
     #model.save_model(classifier=robust_classifier, model_name=dataset + "_" + str(attack) +
     #                 "_robust_random_ensemble_size=" + str(model.size_proj))
 
@@ -365,17 +361,17 @@ def main(dataset_name, test, n_proj, size_proj, attack=None):
     model.evaluate_test(classifier, x_test, y_test)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    for attack in ["fgsm","pgd","deepfool","carlini_linf"]:
-        model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test, dataset_name=dataset_name,
-                                   adversaries_path='../data/'+dataset_name+'_x_test_' + attack + '.pkl'
-                                   )
-    #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
+    #for method in ["fgsm","pgd","deepfool","carlini_linf"]:
+    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
+    #                               adversaries_path='../data/'+dataset_name+'_x_test_' + attack + '.pkl')
+        #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
+    del classifier
 
 
 if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
-        test = sys.argv[2]
+        test = eval(sys.argv[2])
         n_proj_list = map(int, sys.argv[3].strip('[]').split(','))
         size_proj_list = map(int, sys.argv[4].strip('[]').split(','))
         attack = sys.argv[5]

@@ -17,7 +17,7 @@ RESULTS = "../results/"
 ######################
 
 
-def preprocess_mnist(test=False, img_rows=28, img_cols=28):
+def preprocess_mnist(test, img_rows=28, img_cols=28):
     """Preprocess mnist dataset for keras training
 
     :param test: If test is True, only load the first 100 images
@@ -68,7 +68,7 @@ def _onehot(integer_labels):
     return onehot
 
 
-def load_cifar(test=False):
+def load_cifar(test):
     """Return train_data, train_labels, test_data, test_labels
     The shape of data is 32 x 32 x3"""
     x_train = None
@@ -125,6 +125,30 @@ def load_dataset(dataset_name, test):
 ######################
 
 
+def compute_single_projection(input_data, random_seed, size_proj):
+    """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
+        matrix entries sampling.
+
+    :param input_data: full dimension input data
+    :param random_seed: list of seeds for the projections
+    :param size_proj: size of a projection
+    :return: array containing all random projections of the data, based on the given seed
+    """
+
+    print("\nProjecting the whole data over a single subspace.")
+
+    print("Input shape: ", input_data.shape)
+    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
+
+    projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
+    projected_data = projector.fit_transform(flat_images)
+
+    # reshape in matrix form
+    projected_data = np.array(projected_data).reshape(input_data.shape[0], size_proj, size_proj, 1)
+
+    print("Projected data shape:", projected_data.shape)
+    return projected_data
+
 def compute_projections(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions.
 
@@ -161,8 +185,9 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     print("Projected data shape:", projected_data.shape)
     return projected_data
 
+
 # currently unused.
-def compute_projections_channels(input_data, random_seed, n_proj, size_proj=None):
+def compute_projections_channels(input_data, random_seed, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given projector function `projector`.
 
@@ -221,28 +246,3 @@ def load_from_pickle(path, test):
     if test is True:
         data = data[:TEST_SIZE]
     return data
-
-##############
-# DEPRECATED #
-##############
-
-
-class List(list):
-    # TODO: remove this
-    """
-    A subclass of list that can accept additional attributes.
-    Should be able to be used just like a regular list.
-    """
-    def __new__(self, *args, **kwargs):
-        return super(List, self).__new__(self, args, kwargs)
-
-    def __init__(self, *args, **kwargs):
-        if len(args) == 1 and hasattr(args[0], '__iter__'):
-            list.__init__(self, args[0])
-        else:
-            list.__init__(self, args)
-        self.__dict__.update(kwargs)
-
-    def __call__(self, **kwargs):
-        self.__dict__.update(kwargs)
-        return self

@@ -95,7 +95,10 @@ class AdversarialClassifier(object):
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
             x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
 
-        return x_adv
+        if test:
+            return x_adv[:TEST_SIZE]
+        else:
+            return x_adv
 
     def predict(self, classifier, x, *args, **kwargs):
         """
@@ -155,7 +158,7 @@ class AdversarialClassifier(object):
         x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
                                                 adversaries_path=adversaries_path, test=test)
         # debug
-        # print(len(x_test), len(x_test_adv))
+        print(len(x_test), len(x_test_adv))
 
         # evaluate the performance on the adversarial test set
         y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
@@ -198,8 +201,7 @@ class AdversarialClassifier(object):
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 
-    def adversarial_train(self, classifier, x_train, y_train, x_test, y_test, batch_size, epochs, method, dataset_name,
-                          test=False):
+    def adversarial_train(self, classifier, x_train, y_train, batch_size, epochs, method, dataset_name, test=False):
         """
         Performs adversarial training on the given classifier using an attack method.
         :param classifier: trained classifier
