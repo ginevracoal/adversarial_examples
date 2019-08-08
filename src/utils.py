@@ -6,6 +6,7 @@ import pickle as pkl
 import time
 from sklearn.random_projection import GaussianRandomProjection
 import os
+import matplotlib.pyplot as plt
 
 MIN = 0
 MAX = 255
@@ -125,7 +126,7 @@ def load_dataset(dataset_name, test):
 ######################
 
 
-def compute_single_projection(input_data, random_seed, size_proj):
+def compute_single_projection_old(input_data, random_seed, size_proj):
     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
         matrix entries sampling.
 
@@ -149,7 +150,7 @@ def compute_single_projection(input_data, random_seed, size_proj):
     print("Projected data shape:", projected_data.shape)
     return projected_data
 
-def compute_projections(input_data, random_seeds, n_proj, size_proj):
+def compute_projections_old(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions.
 
     :param input_data: full dimension input data
@@ -162,7 +163,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     print("\nComputing random projections.")
 
     print("Input shape: ", input_data.shape)
-    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
+    flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1]*input_data.shape[2], input_data.shape[3]))
 
     # === simple random projector === #
     # np.random.seed(random_seed)
@@ -180,14 +181,29 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     # ================================= #
 
     # reshape in matrix form
-    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 1)
+    projected_data = np.array(projected_data).reshape((n_proj, input_data.shape[0], size_proj, size_proj, 1))
 
     print("Projected data shape:", projected_data.shape)
     return projected_data
 
+# todo: test these new functions
+def compute_single_projection(input_data, random_seed, size_proj):
+    # cannot use list comprehension on GaussianRandomProjection objects
+    projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
+
+    flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
+    projected_image = np.empty(shape=(size_proj * size_proj, input_data.shape[3]))
+    single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
+
+    for im in range(input_data.shape[0]):
+        for channel in range(input_data.shape[3]):
+            projected_image[:, channel] = projector.fit_transform(flat_images[im, :, channel].reshape(1, -1))
+        single_projection[im, :, :, :] = projected_image.reshape((size_proj, size_proj, input_data.shape[3]))
+
+    return single_projection
 
 # currently unused.
-def compute_projections_channels(input_data, random_seed, n_proj, size_proj):
+def compute_projections(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given projector function `projector`.
 
@@ -199,21 +215,37 @@ def compute_projections_channels(input_data, random_seed, n_proj, size_proj):
     """
 
     print("\nComputing random projections.")
-
     print("Input shape: ", input_data.shape)
-    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2],input_data.shape[3])
 
-    projected_data = []
-    for i in range(n_proj):
+    all_projections = np.empty(shape=(n_proj, input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
+
+    for proj_idx in range(n_proj):
         # cannot use list comprehension on GaussianRandomProjection objects
-        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed[i])
-        projected_data.append([projector.fit_transform(flat_images[:,:,i]) for i in range(3)])
+        #projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seeds[proj_idx])
+        #b, g, r = image[:, :, 0], image[:, :, 1], image[:, :, 2]
+        #projected_data_b.append(projector.fit_transform(flat_images[:,:,0]))
+        #projected_data_g.append(projector.fit_transform(flat_images[:,:,1]))
+        #projected_data_r.append(projector.fit_transform(flat_images[:,:,2]))
 
-    # reshape in matrix form
-    projected_data = np.array(projected_data).reshape(n_proj, input_data.shape[0], size_proj, size_proj, 3)
+        #for im in range(input_data.shape[0]):
+        #    for channel in range(input_data.shape[3]):
+        #        projected_image[:,channel] = projector.fit_transform(flat_images[im,:,channel].reshape(1, -1))
+        single_projection = compute_single_projection(input_data=input_data, random_seed=random_seeds[proj_idx],
+                                                      size_proj=size_proj)
+        all_projections[proj_idx,:,:,:,:] = single_projection
 
-    print("Projected data shape:", projected_data.shape)
-    return projected_data
+    print("Projected data dimensions:", all_projections.shape)
+
+    # todo: look at cifar projections... they do not make sense
+    #plt.figure(1)
+    #plt.imshow(input_data[2])
+    #plt.figure(2)
+    #plt.imshow(all_projections[0][2])
+    # block plots
+    #plt.show(block=False)
+    #input("Press ENTER to exit")
+
+    return all_projections
 
 ################
 # Pickle utils #

@@ -14,6 +14,7 @@ from keras import backend as K
 import multiprocessing as mp
 import logging
 import sys
+import matplotlib.pyplot as plt
 
 
 ####################
@@ -45,7 +46,7 @@ class RandomEnsemble(BaselineConvnet):
             raise ValueError("The number of projections has to be lower than the image size.")
 
         super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name)
-        self.input_shape = (size_proj, size_proj, 1) #input_shape[2])
+        self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
         # the model is currently implemented on 15 projections max
@@ -84,7 +85,7 @@ class RandomEnsemble(BaselineConvnet):
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
             del baseline
 
-        print("\nTraining time for model ( n_proj=", str(self.n_proj), ", size_proj=", str(self.size_proj),
+        print("\nTraining time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
               "): --- %s seconds ---" % (time.time() - start_time))
 
         self.trained = True
@@ -109,7 +110,7 @@ class RandomEnsemble(BaselineConvnet):
 
         if save:
             start = time.time()
-            classifier.save(filename=MODEL_NAME + "_" + str(self.random_seeds[idx]) + ".h5",
+            classifier.save(filename=MODEL_NAME + "_size="+str(self.size_proj)+"_"+str(self.random_seeds[idx])+".h5",
                             path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
                                  MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
             saving_time = time.time() - start
@@ -255,6 +256,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         projected_data = compute_projections(data, random_seeds=self.random_seeds,
                                              n_proj=self.n_proj, size_proj=self.size_proj)
+
         predictions = None
         if method == 'sum':
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
@@ -291,17 +293,19 @@ class RandomEnsemble(BaselineConvnet):
 
     def _generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
         """ Adversaries are generated on the baseline classifier """
+
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name)
         baseline_classifier = baseline.load_classifier("../trained_models/baseline/"+dataset_name+"_baseline.h5")
         x_adv = baseline._generate_adversaries(baseline_classifier, x, y, method=method, dataset_name=dataset_name,
                                                adversaries_path=adversaries_path, test=test)
+
         return x_adv
 
     def save_model(self, classifier, model_name=MODEL_NAME):
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
-                proj_classifier.save(filename=model_name + "_" + str(self.random_seeds[i]) + ".h5",
+                proj_classifier.save(filename=model_name+"_size="+str(self.size_proj)+"_"+str(self.random_seeds[i])+".h5",
                                      path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
                                           MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
         else:
@@ -340,12 +344,12 @@ def main(dataset_name, test, n_proj, size_proj, attack=None):
     # === load data === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
-    # === train === #
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
 
+    # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
+    #model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
     #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
@@ -361,10 +365,10 @@ def main(dataset_name, test, n_proj, size_proj, attack=None):
     model.evaluate_test(classifier, x_test, y_test)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    #for method in ["fgsm","pgd","deepfool","carlini_linf"]:
-    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-    #                               adversaries_path='../data/'+dataset_name+'_x_test_' + attack + '.pkl')
-        #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=attack, dataset_name=dataset, test=test)
+    #for method in ["fgsm"]:#,"pgd","deepfool","carlini_linf"]:
+    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name)
+                                   #adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
+        #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
     del classifier
 
 
