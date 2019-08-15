@@ -1,7 +1,0 @@
-model            test        fgsm         pgd         deepfool       carlini_linf
-
-original         99.13       5.91         0.71        34.83          28.96
-fgsm_robust      99.13       98.91        32.55       96.08          95.82
-deepfool_robust  99.03       23.11        35.55       99.20          95.70
-pgd_robust       99.10       44.60        99.02       98.34          97.19
-carlini_robust   99.10       14.74        3.85        94.63          99.06
