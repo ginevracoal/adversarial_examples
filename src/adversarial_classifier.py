@@ -8,10 +8,18 @@ from sklearn.metrics import classification_report
 from utils import *
 import time
 
-RESULTS = "../results/"
+
+############
+# defaults #
+############
+
 TRAINED_MODELS = "../trained_models/"
+DATA_PATH = "../data/"
+RESULTS = "../results/"
 MIN = 0
 MAX = 255
+DATASETS = "mnist, cifar"
+ATTACKS = "None, fgsm, pgd, deepfool, carlini_linf"
 
 
 class AdversarialClassifier(object):

@@ -8,18 +8,13 @@ from adversarial_classifier import AdversarialClassifier
 from keras.models import Model, Sequential
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
 from keras.optimizers import SGD
-from utils import *
-import time
+from adversarial_classifier import *
 import sys
-import matplotlib.pyplot as plt
 
-####################
-# default settings #
-####################
+############
+# defaults #
+############
 MODEL_NAME = "baseline_convnet"
-TRAINED_MODELS = "../trained_models/"
-DATA_PATH = "../data/"
-RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
 
 
 class BaselineConvnet(AdversarialClassifier):
@@ -103,10 +98,13 @@ def main(dataset_name, test, attack):
 
     # load dataset #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
+
+    #plt.figure(1)
     #plt.imshow(x_test[5])
 
-    # train classifier #
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name)
+
+    # train classifier #
     #classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     #model.save_model(classifier = classifier, model_name = dataset_name+"_baseline")
 
@@ -133,13 +131,18 @@ def main(dataset_name, test, attack):
     #                                        method=attack, test=test, dataset_name=dataset_name)
     #save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
 
-    #for attack in ['fgsm','pgd','deepfool','carlini_linf']:
-    #    x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
-    #                                            adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
+    for attack in ['fgsm','pgd','deepfool','carlini_linf']:
+        x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
+                                                adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
 
+
+    #x_test_adv = [im.reshape(32, 32, 3) for im in x_test_adv[0]]
+    #plt.figure(2)
     #plt.imshow(x_test_adv[5])
-    #plt.show()
 
+    # block plots
+    #plt.show(block=False)
+    #input("Press ENTER to exit")
 
 if __name__ == "__main__":
     try:
@@ -148,9 +151,9 @@ if __name__ == "__main__":
         attack = sys.argv[3]
 
     except IndexError:
-        dataset_name = input("\nChoose a dataset.")
-        test = input("\nDo you just want to test the code?")
-        attack = input("\nChoose an attack.")
+        dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
+        test = input("\nDo you just want to test the code? (True/False): ")
+        attack = input("\nChoose an attack ("+ATTACKS+"): ")
 
     K.clear_session()
     main(dataset_name=dataset_name, test=test, attack=attack)
