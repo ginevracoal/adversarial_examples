@@ -65,7 +65,6 @@ class Test(unittest.TestCase):
 
         # train
         classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-        model.save_model(classifier=classifiers, model_name="random_ensemble")
 
         # evaluate
         x_test_pred = model.evaluate_test(classifiers, self.x_test, self.y_test)
@@ -73,8 +72,9 @@ class Test(unittest.TestCase):
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble_size=" + str(model.size_proj))
-        loaded_classifiers = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
-                                                   model_name="random_ensemble")
+        relpath = TRAINED_MODELS+RESULTS+time.strftime('%Y-%m-%d')+"/"\
+                  +self.dataset+"_random_ensemble_sum_size="+str(model.size_proj)+"/"
+        loaded_classifiers = model.load_classifier(relative_path=relpath, model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
 
         # check equal test predictions
@@ -86,7 +86,7 @@ class Test(unittest.TestCase):
                                 dataset_name=self.dataset)
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    def test_random_adversarial_projection(self):
+    def test_random_regularizer(self):
         pass
         """
         model = RandomAdversarialProjection(input_shape=self.input_shape, num_classes=self.num_classes,
