@@ -1,6 +1,7 @@
 from utils import *
 from random_ensemble import RandomEnsemble
 import sys
+from adversarial_classifier import *
 
 
 def main(dataset_name, test, proj_idx, size_proj):
@@ -19,14 +20,16 @@ if __name__ == "__main__":
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
         proj_idx = int(sys.argv[3])
-        size_proj = int(sys.argv[4])
+        size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
 
     except IndexError:
-        dataset_name = input("\nChoose a dataset.")
-        test = input("\nDo you just want to test the code?")
-        proj_idx = input("\nChoose the projection idx.")
-        size_proj = input("\nChoose size for the projection.")
+        dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
+        test = input("\nDo you just want to test the code? (True/False): ")
+        proj_idx = input("\nChoose the projection idx. ")
+        size_proj_list = input("\nChoose size for the projection. ")
 
-    main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, size_proj=size_proj)
+    for size_proj in size_proj_list:
+        K.clear_session()
+        main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, size_proj=size_proj)
 
 

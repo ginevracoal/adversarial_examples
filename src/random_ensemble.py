@@ -15,18 +15,15 @@ import multiprocessing as mp
 import logging
 import sys
 import matplotlib.pyplot as plt
+import argparse
+from adversarial_classifier import *
 
 
-####################
-# default settings #
-####################
+############
+# defaults #
+############
 MODEL_NAME = "random_ensemble"
-ENSEMBLE_METHOD = "sum"  # possible methods: mode, sum
 TRAINED_MODELS = "../trained_models/random_ensemble/"
-DATA_PATH = "../data/"
-RESULTS = "../results/"
-MIN = 0
-MAX = 255
 
 
 class RandomEnsemble(BaselineConvnet):
@@ -53,7 +50,8 @@ class RandomEnsemble(BaselineConvnet):
         self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         self.trained = False
         self.training_time = 0
-        # todo: set ensemble method here
+        self.x_test_proj = None
+        self.ensemble_method = "sum"  # possible methods: mode, sum
 
         print("\n === RandEns model ( n_proj =", self.n_proj, ", size_proj =", self.size_proj, ") ===")
 
@@ -195,6 +193,7 @@ class RandomEnsemble(BaselineConvnet):
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
 
+
     @staticmethod
     def _mode_ensemble_classifier(classifiers, projected_data):
         """
@@ -245,7 +244,7 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def predict(self, classifiers, data, method=ENSEMBLE_METHOD, *args, **kwargs):
+    def predict(self, classifiers, data, *args, **kwargs):
         """
         Compute the average prediction over the trained models.
 
@@ -257,14 +256,28 @@ class RandomEnsemble(BaselineConvnet):
         projected_data = compute_projections(data, random_seeds=self.random_seeds,
                                              n_proj=self.n_proj, size_proj=self.size_proj)
 
-        predictions = None
-        if method == 'sum':
+        if self.ensemble_method == 'sum':
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
-        elif method == 'mode':
+
+            #################################
+            # todo: test with this new code which adds probs from the baseline:
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                       data_format=self.data_format, dataset_name=self.dataset_name)
+            baseline_classifier = baseline.load_classifier("../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
+            baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
+            # sum the probabilities across all predictors
+            final_predictions = np.add(predictions, baseline_predictions)
+            ###############################
+            #print(baseline_predictions.shape)
+            #print(final_predictions.shape)
+
+            return final_predictions
+            #return predictions
+        elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
+            return predictions
 
-        return predictions
-
+    # todo: refactor this!
     def evaluate_test_projections(self, classifiers, x_test, y_test):
         """
         Performs a test evaluation on each projected version of the data and also on the final predictions.
@@ -275,15 +288,16 @@ class RandomEnsemble(BaselineConvnet):
         """
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        x_test_proj = compute_projections(x_test, random_seeds=self.random_seeds,
-                                          n_proj=self.n_proj, size_proj=self.size_proj)
-        y_test_pred = np.argmax(self.predict(classifiers, x_test, method=ENSEMBLE_METHOD), axis=1)
+        if self.x_test_proj is None:
+            self.x_test_proj = compute_projections(x_test, random_seeds=self.random_seeds,
+                                                   n_proj=self.n_proj, size_proj=self.size_proj)
+        y_test_pred = np.argmax(self.predict(classifiers, x_test, method=self.ensemble_method), axis=1)
 
         # evaluate each classifier on its projected test set
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
         for i, classifier in enumerate(classifiers):
             print("\nTest evaluation on projection ", self.random_seeds[i])  # i
-            baseline.evaluate_test(classifier, x_test_proj[i], y_test)
+            baseline.evaluate_test(classifier, self.x_test_proj[i], y_test)
 
         # final classifier evaluation on the original test set
         print("\nFinal test evaluation")
@@ -303,6 +317,7 @@ class RandomEnsemble(BaselineConvnet):
         return x_adv
 
     def save_model(self, classifier, model_name=MODEL_NAME):
+        # todo: salvare il modello soltanto nel caso n_proj=15. Per le valutazioni su n_proj inferiori basta il loading corretto.
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 proj_classifier.save(filename=model_name+"_size="+str(self.size_proj)+"_"+str(self.random_seeds[i])+".h5",
@@ -332,7 +347,7 @@ class RandomEnsemble(BaselineConvnet):
 # MAIN #
 ########
 
-def main(dataset_name, test, n_proj, size_proj, attack=None):
+def main(dataset_name, test, n_proj, size_proj, attack):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
@@ -362,12 +377,12 @@ def main(dataset_name, test, n_proj, size_proj, attack=None):
     #                 "_robust_random_ensemble_size=" + str(model.size_proj))
 
     # === evaluate === #
-    model.evaluate_test(classifier, x_test, y_test)
+    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    #for method in ["fgsm"]:#,"pgd","deepfool","carlini_linf"]:
-    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name)
-                                   #adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
+    #for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
+    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
+    #                               adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
         #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
     del classifier
 
@@ -376,16 +391,16 @@ if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
-        n_proj_list = map(int, sys.argv[3].strip('[]').split(','))
-        size_proj_list = map(int, sys.argv[4].strip('[]').split(','))
+        n_proj_list = list(map(int, sys.argv[3].strip('[]').split(',')))
+        size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
         attack = sys.argv[5]
 
     except IndexError:
-        dataset_name = input("\nChoose a dataset.")
-        test = input("\nDo you just want to test the code?")
-        n_proj_list = input("\nChoose the projection idx.")
-        size_proj_list = input("\nChoose size for the projection.")
-        attack = input("\nChoose an attack.")
+        dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
+        test = input("\nDo you just want to test the code? (True/False): ")
+        n_proj_list = input("\nChoose the number of projections (type=list): ")
+        size_proj_list = input("\nChoose the size of projections (type=list): ")
+        attack = input("\nChoose an attack ("+ATTACKS+"): ")
 
     for n_proj in n_proj_list:
         for size_proj in size_proj_list:

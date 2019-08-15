@@ -186,64 +186,55 @@ def compute_projections_old(input_data, random_seeds, n_proj, size_proj):
     print("Projected data shape:", projected_data.shape)
     return projected_data
 
-# todo: test these new functions
+
+# todo: test these new functions, eventually remove the old ones
 def compute_single_projection(input_data, random_seed, size_proj):
-    # cannot use list comprehension on GaussianRandomProjection objects
+    """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
+         matrix entries sampling, using the given random_seed.
+
+     :param input_data: high dimensional input data
+     :param random_seed: projection seed
+     :param size_proj: size of a projection
+     :return: np.array containing all random projections of input_data
+     """
     projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
 
     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
-    projected_image = np.empty(shape=(size_proj * size_proj, input_data.shape[3]))
     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
 
     for im in range(input_data.shape[0]):
+        projected_image = np.empty(shape=(size_proj * size_proj, input_data.shape[3]))
         for channel in range(input_data.shape[3]):
             projected_image[:, channel] = projector.fit_transform(flat_images[im, :, channel].reshape(1, -1))
         single_projection[im, :, :, :] = projected_image.reshape((size_proj, size_proj, input_data.shape[3]))
 
     return single_projection
 
-# currently unused.
+
 def compute_projections(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
-    given projector function `projector`.
+    given list of random seeds.
 
-    :param input_data: full dimension input data
-    :param random_seed: list of seeds for the projections
+    :param input_data: high dimensional input data
+    :param random_seeds: list of random seeds for the projections
     :param n_proj: number of projections
     :param size_proj: size of a projection
-    :return: array containing m random projections on the data, based on the given seeds
+    :return: np.array containing n_proj random projections on the data
     """
 
-    print("\nComputing random projections.")
     print("Input shape: ", input_data.shape)
+    print("\nComputing random projections: ")
 
     all_projections = np.empty(shape=(n_proj, input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
 
     for proj_idx in range(n_proj):
-        # cannot use list comprehension on GaussianRandomProjection objects
-        #projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seeds[proj_idx])
-        #b, g, r = image[:, :, 0], image[:, :, 1], image[:, :, 2]
-        #projected_data_b.append(projector.fit_transform(flat_images[:,:,0]))
-        #projected_data_g.append(projector.fit_transform(flat_images[:,:,1]))
-        #projected_data_r.append(projector.fit_transform(flat_images[:,:,2]))
-
-        #for im in range(input_data.shape[0]):
-        #    for channel in range(input_data.shape[3]):
-        #        projected_image[:,channel] = projector.fit_transform(flat_images[im,:,channel].reshape(1, -1))
-        single_projection = compute_single_projection(input_data=input_data, random_seed=random_seeds[proj_idx],
-                                                      size_proj=size_proj)
-        all_projections[proj_idx,:,:,:,:] = single_projection
-
+        #print(proj_idx)
+        all_projections[proj_idx,:,:,:,:] = compute_single_projection(input_data=input_data, size_proj=size_proj,
+                                                                      random_seed=random_seeds[proj_idx])
     print("Projected data dimensions:", all_projections.shape)
 
-    # todo: look at cifar projections... they do not make sense
-    #plt.figure(1)
-    #plt.imshow(input_data[2])
-    #plt.figure(2)
-    #plt.imshow(all_projections[0][2])
-    # block plots
-    #plt.show(block=False)
-    #input("Press ENTER to exit")
+    # todo: look at cifar projections...
+    #plot_projected_images(input_data=input_data, projected_data=all_projections, n_proj=n_proj, im_idxs=[1,2,6])
 
     return all_projections
 
@@ -278,3 +269,21 @@ def load_from_pickle(path, test):
     if test is True:
         data = data[:TEST_SIZE]
     return data
+
+##############
+# plot utils #
+##############
+
+
+def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
+
+    fig, axs = plt.subplots(len(im_idxs),n_proj+1,figsize=(10, 8))
+    for im_idx, im in enumerate(im_idxs):
+        axs[im_idx, 0].imshow(input_data[im_idx])
+        for proj in range(n_proj):
+            axs[im_idx, proj+1].imshow(projected_data[proj][im])
+
+    # block plots at the end of code execution
+    plt.show(block=False)
+    input("Press ENTER to exit")
+    exit()
