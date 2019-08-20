@@ -2,23 +2,27 @@
 
 from adversarial_classifier import *
 from art.classifiers import TFClassifier
-import keras.backend as K
 import tensorflow as tf
+from keras.models import load_model
 from utils import *
 import sys
 import random
-from baseline_convnet import BaselineConvnet
-from keras.models import Model, Sequential
+from keras.models import Model
+from baseline_convnet import  BaselineConvnet
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
-from keras.wrappers.scikit_learn import KerasClassifier
+from art.classifiers import KerasClassifier as artKerasClassifier
+from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
+from keras.callbacks import Callback
+from tensorflow.python.keras.layers import Lambda
+import keras.losses
 
 # todo: docstrings!
 # todo: unittest
 
 
-class RandomRegularizerK(KerasClassifier):
+class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, test):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -30,13 +34,21 @@ class RandomRegularizerK(KerasClassifier):
         self.lam = lam
         self.batch_size, self.epochs = self._set_training_params()
         self.model = self._set_layers()
-        super(RandomRegularizerK, self).__init__(build_fn=self._set_layers)
+        #self.epoch = K.variable(value=0)
+        self.inputs = Input(shape=self.input_shape)
+        super(RandomRegularizer, self).__init__(build_fn=self._set_layers, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self):
         if self.dataset_name == "mnist":
-            return 100, 12
+            if test:
+                return 100, 12
+            else:
+                return 1000, 12
         elif self.dataset_name == "cifar":
-            return 100, 120
+            if test:
+                return 100, 120
+            else:
+                return 1000, 120
 
     def _get_logits(self, inputs):
         if self.dataset_name == "mnist":
@@ -50,20 +62,48 @@ class RandomRegularizerK(KerasClassifier):
             logits = Dense(self.num_classes, activation='softmax')(x)
             return logits
 
+        elif self.dataset_name == "cifar":
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(inputs)
+            x = BatchNormalization()(x)
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.2)(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.3)(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.4)(x)
+            x = Flatten()(x)
+            x = Dense(128, activation='relu', kernel_initializer='he_uniform')(x)
+            x = BatchNormalization()(x)
+            x = Dropout(0.5)(x)
+            logits = Dense(10, activation='softmax')(x)
+            return logits
+
     def _set_layers(self):
         inputs = Input(shape=self.input_shape)
         logits = self._get_logits(inputs=inputs)
+        self.outputs = logits
         model = Model(inputs=inputs, outputs=logits)
-        model.compile(loss=self.loss_wrapper(inputs), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+        model.compile(loss=self.loss_wrapper(inputs, 0), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
         # model.summary()
+        self.model = model
         return model
 
-    def loss_wrapper(self, inputs):
+    def loss_wrapper(self, inputs, batch):
         def custom_loss(y_true, y_pred):
-            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, y_true=y_true)
+            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, batch=batch, y_true=y_true)
         return custom_loss
 
-    def regularizer(self, inputs, y_true, max_nproj=6):
+    def regularizer(self, inputs, batch, y_true, max_nproj=6):
         """
         This regularization term penalizes the expected value of loss gradient, evaluated on random projections of the
         input points.
@@ -73,51 +113,50 @@ class RandomRegularizerK(KerasClassifier):
         :return: regularization term for the objective loss function.
         """
         rows, cols, channels = self.input_shape
-        flat_images = tf.reshape(inputs,shape=[self.batch_size, rows * cols * channels])
-        n_proj = 1  # random.randint(3, max_proj)
-        n_features = rows * cols * channels
-        inverse_projections = np.empty(shape=(n_proj,self.batch_size,n_features))
-        for proj in range(n_proj):
-            size = random.randint(1,20)
-            seed = random.randint(1,100)
-            n_components = size*size*channels
-            print("\nproj =", proj, ", size =", size, ", seed =", seed)
-            projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-            proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
-            pinv = np.linalg.pinv(proj_matrix)
-            projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-            # todo: inverse_projections cantains all the projections for the whole datset from the chosen projector.
-            # todo: instead I would like to use a different projection on each possible point...
-            inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
-            inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows,cols,channels]))
-            #print(proj_matrix.shape)
-            #print(pinv.shape)
+        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
 
+        #n_proj = 3  # random.randint(3, max_proj)
+        n_features = rows * cols * channels
+        regularization = 0
+
+        size = random.randint(6,20)
+        seed = random.randint(1,100)
+        n_components = size*size*channels
+        print("\nsize =", size, ", seed =", seed)
+        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
+        proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
+        pinv = np.linalg.pinv(proj_matrix)
+        projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
+        inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
+        inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows,cols,channels]))
         proj_logits = self._get_logits(inputs=inverse_projections)
-        #print(proj_logits) # Tensor("loss/dense_2_loss/dense_4/Softmax:0", shape=(100, 10), dtype=float32)
-
         loss = K.categorical_crossentropy(target=y_true, output=proj_logits)
-        #print(loss) #Tensor("loss/dense_2_loss/Neg:0", shape=(100,), dtype=float32)
+        loss_gradient = K.gradients(loss=loss, variables=inputs)
+        regularization += tf.reduce_sum(tf.square(tf.norm(loss_gradient, ord=2, axis=0)))
 
-        loss_gradient = K.gradients(loss=loss, variables=inputs) #  shape=(100, 28, 28, 1) dtype=float32>]
-        regularization = tf.reduce_sum(tf.square(tf.norm(loss_gradient, ord=2, axis=0))) / (n_proj*self.batch_size)
-        return regularization
-
-    def compute_projections(self):
-        return None
+        return regularization / self.batch_size #(n_proj*self.batch_size)
 
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         start_time = time.time()
-        self.fit(x_train, y_train, batch_size=self.batch_size, epochs=self.epochs)
-        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
 
-        self.trained = True
+        self.batches = int(len(x_train)/self.batch_size)
+        x_train = np.split(x_train, self.batches)
+        y_train = np.split(y_train, self.batches)
+        for batch in range(self.batches):
+            print("\n=== training batch", batch+1,"/",self.batches,"===")
+            inputs = tf.convert_to_tensor(x_train[batch])
+            for proj in range(3):
+                print("\nprojection",proj+1,"/ 3")
+                self.model.compile(loss=self.loss_wrapper(inputs, batch), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+                self.model.fit(x_train[batch], y_train[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
+
+        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
-    def evaluate_test(self, classifier, x_test, y_test):
+    def evaluate_test(self, x_test, y_test):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
         :param classifier: trained classifier
@@ -125,10 +164,17 @@ class RandomRegularizerK(KerasClassifier):
         :param y_test: test labels
         :return: x_test predictions
         """
+
+        # todo: set classes_ attribute for loaded models
+        if len(y_test.shape) == 2 and y_test.shape[1] > 1:
+            self.classes_ = np.arange(y_test.shape[1])
+        elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
+            self.classes_ = np.unique(y_test)
+
         print("\n===== Test set evaluation =====")
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        y_test_pred = self.predict(x_test)# np.argmax(self.predict(x_test))#, axis=1)
+        y_test_pred = self.predict(x_test) # self.predict
         y_test_true = np.argmax(y_test, axis=1)
         correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
 
@@ -143,240 +189,122 @@ class RandomRegularizerK(KerasClassifier):
 
         return y_test_pred
 
-###################################################
+    def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
+        print("\n===== Adversarial evaluation =====")
 
-class RandomRegularizerTF(TFClassifier):
+        # generate adversaries on the test set
+        x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
+                                                adversaries_path=adversaries_path, test=test)
+        # debug
+        print(len(x_test), len(x_test_adv))
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, sess):
-        # Define dataset infos
-        self.sess = sess
-        #self.x_train = x_train
-        self._input_shape = input_shape
-        self.num_classes = num_classes
-        self.data_format = data_format
-        self.dataset_name = dataset_name
-        self.lam = lam  # regularization weight
-        # Define the architecture
-        self.batch_size, self.epochs = self._set_training_params()
-        #self.trained = False
-
-        # Define input and output placeholders
-        self.input_ph = tf.placeholder(tf.float32, shape=[self.batch_size, input_shape[0], input_shape[1], input_shape[2]])
-        self.output_ph = tf.placeholder(tf.int32, shape=[self.batch_size, num_classes])
-        #train_op = self._train_op()
-        self.logits = self._get_logits(self.input_ph)
-        # TF Classifier
-        super(RandomRegularizerTF, self).__init__(clip_values=(0, 1), input_ph=self.input_ph, logits=self.logits,
-                                                  output_ph=self.output_ph, train=self._train_op(),
-                                                  loss=self.loss_wrapper(self.input_ph),
-                                                  learning=None, sess=sess)
-
-    def _set_training_params(self):
-        if self.dataset_name == "mnist":
-            return 128, 12
-        elif self.dataset_name == "cifar":
-            return 128, 120
-
-    def _get_logits_tf(self, inputs):
-        if self.dataset_name == "mnist":
-            x = tf.layers.conv2d(inputs=inputs, filters=32, kernel_size=(3,3), activation=tf.nn.relu,
-                                 kernel_initializer=tf.contrib.layers.xavier_initializer(uniform=False),
-                                 bias_initializer= tf.constant_initializer())
-            x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=(3,3), activation=tf.nn.relu)
-            x = tf.layers.max_pooling2d(inputs=x, pool_size=(2,2),
-                                        strides=[self._input_shape[0], self._input_shape[1]])
-            x = tf.layers.dropout(inputs=x, rate=0.25) #training=mode == tf.estimator.ModeKeys.TRAIN)
-            x = tf.layers.dense(inputs=x, units=128, activation=tf.nn.relu)
-            x = tf.layers.dropout(inputs=x, rate=0.5) #training=mode == tf.estimator.ModeKeys.TRAIN)
-            x = tf.contrib.layers.flatten(x)
-            logits = tf.layers.dense(inputs=x, units=self.num_classes, activation=tf.nn.softmax)
-            return logits
-
-        # elif self.dataset_name == "cifar":
-            # todo: implement cifar architecture
-
-    def _get_logits(self, inputs):
-        if self.dataset_name == "mnist":
-            x = Conv2D(32, kernel_size=(3, 3), activation='relu', data_format=self.data_format)(inputs)
-            x = Conv2D(64, (3, 3), activation='relu')(x)
-            x = MaxPooling2D(pool_size=(2, 2))(x)
-            x = Dropout(0.25)(x)
-            x = Flatten()(x)
-            x = Dense(128, activation='relu')(x)
-            x = Dropout(0.5)(x)
-            logits = Dense(self.num_classes, activation='softmax')(x)
-            return logits
-
-    def loss_wrapper(self, inputs):
-        def custom_loss(y_true, y_pred):
-            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, labels=y_true)
-        return custom_loss
-
-    def _train_op(self):
-        inputs = Input(shape=self.input_shape)
-        logits = self._get_logits(inputs=inputs)
-        # todo: non ho capito se i logits così si aggiornano ad ogni step oppure no...
-
-        #self.loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=self.output_ph))
-        #self.loss = self.proj_loss(inputs=self.input_ph, logits=logits, labels=self.output_ph)
-
-        #optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
-        #train_operator = optimizer.minimize(self.loss)
-        #return train_operator
-
-        model = Model(inputs=inputs, outputs=logits)
-        model.compile(loss=self.loss_wrapper(inputs), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-        # model.summary()
-        return model
-
-    # currently unused
-    def project_image(self, im, size, channels, projector, psinverse):
-        #projection = np.empty(shape=(size*size, channels))
-        projected_image = np.empty(shape=(size, size, channels))
-        projection = projector.fit_transform(im)  # .reshape(1, -1))#.reshape(size, size)#, channels)
-        exit()
-        for channel in range(channels):
-            ch_im = tf.reshape(im[:,:, channel], shape=[1,-1])
-
-            projection = projector.fit_transform(im[:,:, channel])#.reshape(1, -1))#.reshape(size, size)#, channels)
-            print(projection)
-            exit()
-            projection = tf.reshape(projection, shape=[size,size])
-            # apply pseudoinverse and get full dimensional projected data
-            projected_image[:, channel] = map(psinverse.dot, projection)
-        return projected_image
-
-    def regularizer(self, inputs, labels, max_nproj=6):
-        """
-        This regularization term penalizes the expected value of loss gradient, evaluated on random projections of the
-        input points.
-        :param inputs:
-        :param labels:
-        :param max_nproj:
-        :return: regularization term for the objective loss function.
-        """
-        rows, cols, channels = self.input_shape
-        flat_images = tf.reshape(inputs,shape=[self.batch_size, rows * cols * channels])
-        n_proj = 1  # random.randint(3, max_proj)
-        n_features = rows * cols * channels
-        inverse_projections = np.empty(shape=(n_proj,self.batch_size,n_features))
-        for proj in range(n_proj):
-            size = random.randint(1,20)
-            seed = random.randint(1,100)
-            n_components = size*size*channels
-            print("\nproj =", proj, ", size =", size, ", seed =", seed)
-            projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-            proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
-            pinv = np.linalg.pinv(proj_matrix)
-            projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-            # todo: inverse_projections cantains all the projections for the whole datset from the chosen projector.
-            # todo: instead I would like to use a different projection on each possible point...
-            inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
-            inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows,cols,channels]))
-            #print(proj_matrix.shape)
-            #print(pinv.shape)
-
-        # todo: ogni volta calcolo il regolarizzatore su un batch diverso
-
-        #loss_gradient = self.loss_gradient(x=inverse_projections, y=labels)
-        loss = K.mean(K.categorical_crossentropy(target=labels, output=self._get_logits(inputs=inverse_projections)))
-        loss_gradient = K.gradients(loss=loss,variables=inverse_projections)
-        reg = tf.norm(loss_gradient, ord=2, axis=1)
-        return reg
-
-    def train(self, x_train, y_train):
-        print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
-              "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
-
-        start_time = time.time()
-        self.fit(x_train, y_train, batch_size=self.batch_size, nb_epochs=self.epochs)
-        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
-
-        self.trained = True
-        return self
-
-    def save_model(self, classifier, model_name):
-        """
-        Saves the trained model and adds the current datetime to the filename.
-        Example of saved model: `trained_models/2019-05-20/baseline.h5`
-
-        :param classifier: trained classifier
-        :param model_name: name of the model
-        """
-        if self.trained:
-            classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
-
-    def load_classifier(self, relative_path, sess):
-        """
-        Loads a pretrained classifier.
-        :param relative_path: is the relative path w.r.t. trained_models folder, `2019-05-20/baseline.h5` in the example
-        from save_model()
-        :param sess: tf session
-        returns: trained classifier
-        """
-        print("\nLoading model:", str(relative_path))
-        # load a trained model
-        model = load_model(relative_path)
-        classifier = TFClassifier(clip_values=(0, 1), input_ph=model.input_ph, logits=model.logits, sess=sess,
-                                  output_ph=model.output_ph, train=model.train, loss=model.loss, learning=None)
-        return classifier
-
-    def evaluate_test(self, classifier, x_test, y_test):
-        """
-        Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
-        :param classifier: trained classifier
-        :param x_test: test data
-        :param y_test: test labels
-        :return: x_test predictions
-        """
-        print("\n===== Test set evaluation =====")
-        print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
-
-        y_test_pred = np.argmax(classifier.predict(x_test), axis=1)
+        # evaluate the performance on the adversarial test set
+        y_test_adv = self.predict(x_test_adv)
         y_test_true = np.argmax(y_test, axis=1)
-        correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
+        nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
 
-        print("Correctly classified: {}".format(correct_preds))
-        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
+        print("\nAdversarial test data.")
+        print("Correctly classified: {}".format(nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
 
-        acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
-        print("Test accuracy: %.2f%%" % (acc * 100))
+        acc = nb_correct_adv_pred / y_test.shape[0]
+        print("Adversarial accuracy: %.2f%%" % (acc * 100))
 
-        # classification report over single classes
-        print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
+        # classification report
+        print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
+        return x_test_adv, y_test_adv
 
-        return y_test_pred
+    def _get_adversaries(self, trained_classifier, x, y, test, method, dataset_name, adversaries_path):
+        """
+        Generates adversaries on the input data x using a given method or loads saved data if available.
+
+        :param classifier: trained classifier
+        :param x: input data
+        :param method: art.attack method
+        :param adversaries_path: path of saved pickle data
+        :return: adversarially perturbed data
+        """
+        if adversaries_path is None:
+            # todo: buggy...
+            classifier = artKerasClassifier((MIN, MAX), trained_classifier.model, use_logits=False)
+            print("\nGenerating adversaries with", method, "method on", dataset_name)
+            x_adv = None
+            if method == 'fgsm':
+                attacker = FastGradientMethod(classifier, eps=0.5)
+                x_adv = attacker.generate(x=x)
+            elif method == 'deepfool':
+                attacker = DeepFool(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'virtual':
+                attacker = VirtualAdversarialMethod(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'carlini_l2':
+                attacker = CarliniL2Method(classifier, targeted=False)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'carlini_linf':
+                attacker = CarliniLInfMethod(classifier, targeted=False)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'pgd':
+                attacker = ProjectedGradientDescent(classifier)
+                x_adv = attacker.generate(x=x)
+            elif method == 'newtonfool':
+                attacker = NewtonFool(classifier)
+                x_adv = attacker.generate(x=x)
+        else:
+            print("\nLoading adversaries generated with", method, "method on", dataset_name)
+            x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
+
+        if test:
+            return x_adv[:TEST_SIZE]
+        else:
+            return x_adv
+
+class EpochIdxCallback(keras.callbacks.Callback):
+    def __init__(self, model):
+        super(EpochIdxCallback,self).__init__()
+        self.model = model
+    def on_epoch_begin(self, epoch, logs={}):
+        self.epoch = epoch
+        return epoch
+    def set_model(self, model):
+        return self.model
 
 
-def main(dataset_name, test, attack, lam):
+def main(dataset_name, test, lam):
     # load dataset
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     # Tensorflow session and initialization
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-    sess.run(tf.local_variables_initializer())
 
-    # Define the tensorflow graph
-    randReg = RandomRegularizerK(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                  dataset_name=dataset_name, sess=sess, lam=lam)
-    classifier = randReg.train(x_train, y_train)#, batch_size=randReg.batch_size, epochs=randReg.epochs)
-    #randReg.save_model(classifier=classifier, model_name=dataset_name + "_" + attack + "_baseline")
+    classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                   dataset_name=dataset_name, sess=sess, lam=lam, test=test)
+
+    rel_path = time.strftime('%Y-%m-%d') + "/" + str(dataset_name) + "_randreg_weights_lam=" + str(classifier.lam) + ".h5"
+
+    classifier.train(x_train, y_train)
+    classifier.model.save_weights(RESULTS + rel_path)
+    #classifier.model.load_weights(RESULTS+rel_path)
 
     # evaluations #
-    randReg.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
+    classifier.evaluate_test(x_test=x_test, y_test=y_test)
+
+    for attack in ['fgsm','pgd','deepfool','carlini_linf']:
+        filename = dataset_name + "_x_test_" + attack + ".pkl" #"_randreg.pkl"
+        x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
+                                                     adversaries_path=DATA_PATH+filename,
+                                                     test=test)
 
 if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
-        attack = sys.argv[3]
-        lam = float(sys.argv[4])
+        lam = float(sys.argv[3])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        attack = input("\nChoose an attack ("+ATTACKS+"): ")
         lam = input("\nChoose lambda regularization weight.")
 
-    main(dataset_name=dataset_name, test=test, attack=attack, lam=lam)
+    main(dataset_name=dataset_name, test=test, lam=lam)
