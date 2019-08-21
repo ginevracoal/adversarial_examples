@@ -32,23 +32,27 @@ class RandomRegularizer(sklKerasClassifier):
         self.dataset_name = dataset_name
         self.data_format = data_format
         self.lam = lam
-        self.batch_size, self.epochs = self._set_training_params()
-        self.model = self._set_layers()
-        #self.epoch = K.variable(value=0)
+        self._set_training_params()
+        self._set_layers()
         self.inputs = Input(shape=self.input_shape)
-        super(RandomRegularizer, self).__init__(build_fn=self._set_layers, batch_size=self.batch_size, epochs=self.epochs)
+        print("\nbatch_size=",self.batch_size,"\nepochs=",self.epochs,"\nn_proj=",self.n_proj)
+        super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self):
         if self.dataset_name == "mnist":
+            self.epochs = 12
+            self.n_proj = 3
             if test:
-                return 100, 12
+                self.batch_size = 100
             else:
-                return 1000, 12
+                self.batch_size = 1000
         elif self.dataset_name == "cifar":
+            self.epochs = 36
+            self.n_proj = 3
             if test:
-                return 100, 120
+                self.batch_size = 100
             else:
-                return 1000, 120
+                self.batch_size = 1000
 
     def _get_logits(self, inputs):
         if self.dataset_name == "mnist":
@@ -92,18 +96,17 @@ class RandomRegularizer(sklKerasClassifier):
         inputs = Input(shape=self.input_shape)
         logits = self._get_logits(inputs=inputs)
         self.outputs = logits
-        model = Model(inputs=inputs, outputs=logits)
-        model.compile(loss=self.loss_wrapper(inputs, 0), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+        self.model = Model(inputs=inputs, outputs=logits)
+        #model.compile(loss=self.loss_wrapper(inputs, 0), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
         # model.summary()
-        self.model = model
-        return model
+        #return self.model
 
-    def loss_wrapper(self, inputs, batch):
+    def loss_wrapper(self, inputs):
         def custom_loss(y_true, y_pred):
-            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, batch=batch, y_true=y_true)
+            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, y_true=y_true)
         return custom_loss
 
-    def regularizer(self, inputs, batch, y_true, max_nproj=6):
+    def regularizer(self, inputs, y_true, max_nproj=6):
         """
         This regularization term penalizes the expected value of loss gradient, evaluated on random projections of the
         input points.
@@ -112,17 +115,18 @@ class RandomRegularizer(sklKerasClassifier):
         :param max_nproj:
         :return: regularization term for the objective loss function.
         """
-        rows, cols, channels = self.input_shape
-        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
 
-        #n_proj = 3  # random.randint(3, max_proj)
-        n_features = rows * cols * channels
-        regularization = 0
-
-        size = random.randint(6,20)
-        seed = random.randint(1,100)
-        n_components = size*size*channels
+        size = random.randint(6,10)  # small size seems to work better
+        seed = random.randint(1,100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
+
+        rows, cols, channels = self.input_shape
+        n_features = rows * cols * channels
+        inputs = tf.cast(inputs, tf.float32)
+        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
+        n_components = size*size*channels
+
+        regularization = 0
         projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
         proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
         pinv = np.linalg.pinv(proj_matrix)
@@ -134,24 +138,39 @@ class RandomRegularizer(sklKerasClassifier):
         loss_gradient = K.gradients(loss=loss, variables=inputs)
         regularization += tf.reduce_sum(tf.square(tf.norm(loss_gradient, ord=2, axis=0)))
 
-        return regularization / self.batch_size #(n_proj*self.batch_size)
+        #tf.Print(regularization,[regularization])#.eval(session=self.sess))
+        #K.eval(regularization)
+        #exit()
+        return regularization / self.batch_size
 
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
+        rows, cols, channels = self.input_shape
+        self.batches = int(len(x_train)/self.batch_size)
+
         start_time = time.time()
 
-        self.batches = int(len(x_train)/self.batch_size)
-        x_train = np.split(x_train, self.batches)
-        y_train = np.split(y_train, self.batches)
+        x_train_batches = np.split(x_train, self.batches)
+        y_train_batches = np.split(y_train, self.batches)
         for batch in range(self.batches):
             print("\n=== training batch", batch+1,"/",self.batches,"===")
-            inputs = tf.convert_to_tensor(x_train[batch])
-            for proj in range(3):
-                print("\nprojection",proj+1,"/ 3")
-                self.model.compile(loss=self.loss_wrapper(inputs, batch), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-                self.model.fit(x_train[batch], y_train[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
+            inputs = tf.convert_to_tensor(x_train_batches[batch])
+
+            # x_train = tf.placeholder(dtype=tf.float64, shape=[self.batch_size, rows, cols, channels])
+            # y_train = tf.placeholder(dtype=tf.float64, shape=[self.batch_size, self.num_classes])
+            # inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
+            # self.sess.run(inputs, feed_dict={inp: x_train})
+            # self.sess.run(tf.initialize_all_variables)
+            inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
+            self.sess.run(inputs, feed_dict={inp: x_train})
+
+            for proj in range(self.n_proj):
+                print("\nprojection",proj+1,"/",self.n_proj)
+                custom_loss = self.loss_wrapper(inputs)#, batch)
+                self.model.compile(loss=custom_loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+                self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
@@ -192,6 +211,11 @@ class RandomRegularizer(sklKerasClassifier):
     def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
         print("\n===== Adversarial evaluation =====")
 
+        if len(y_test.shape) == 2 and y_test.shape[1] > 1:
+            self.classes_ = np.arange(y_test.shape[1])
+        elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
+            self.classes_ = np.unique(y_test)
+
         # generate adversaries on the test set
         x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
                                                 adversaries_path=adversaries_path, test=test)
@@ -227,6 +251,7 @@ class RandomRegularizer(sklKerasClassifier):
         if adversaries_path is None:
             # todo: buggy...
             classifier = artKerasClassifier((MIN, MAX), trained_classifier.model, use_logits=False)
+            classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x))
             print("\nGenerating adversaries with", method, "method on", dataset_name)
             x_adv = None
             if method == 'fgsm':
@@ -271,29 +296,36 @@ class EpochIdxCallback(keras.callbacks.Callback):
 
 
 def main(dataset_name, test, lam):
-    # load dataset
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     # Tensorflow session and initialization
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
+    #sess = sess.run(tf.local_variables_initializer())
+
+    #sess = tf.InteractiveSession()
+
+    # load dataset
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
+
+
 
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, test=test)
 
     rel_path = time.strftime('%Y-%m-%d') + "/" + str(dataset_name) + "_randreg_weights_lam=" + str(classifier.lam) + ".h5"
 
-    classifier.train(x_train, y_train)
-    classifier.model.save_weights(RESULTS + rel_path)
-    #classifier.model.load_weights(RESULTS+rel_path)
+    #classifier.train(x_train, y_train)
+    #classifier.model.save_weights(RESULTS+rel_path)
+
+    classifier.model.load_weights(RESULTS+rel_path)
 
     # evaluations #
-    classifier.evaluate_test(x_test=x_test, y_test=y_test)
+    #classifier.evaluate_test(x_test=x_test, y_test=y_test)
 
     for attack in ['fgsm','pgd','deepfool','carlini_linf']:
         filename = dataset_name + "_x_test_" + attack + ".pkl" #"_randreg.pkl"
         x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
-                                                     adversaries_path=DATA_PATH+filename,
+                                                     #adversaries_path=DATA_PATH+filename,
                                                      test=test)
 
 if __name__ == "__main__":
