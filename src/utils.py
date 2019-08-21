@@ -125,70 +125,7 @@ def load_dataset(dataset_name, test):
 # random projections #
 ######################
 
-
 def compute_single_projection_old(input_data, random_seed, size_proj):
-    """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
-        matrix entries sampling.
-
-    :param input_data: full dimension input data
-    :param random_seed: list of seeds for the projections
-    :param size_proj: size of a projection
-    :return: array containing all random projections of the data, based on the given seed
-    """
-
-    print("\nProjecting the whole data over a single subspace.")
-
-    print("Input shape: ", input_data.shape)
-    flat_images = input_data.reshape(input_data.shape[0], input_data.shape[1]*input_data.shape[2]*input_data.shape[3])
-
-    projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
-    projected_data = projector.fit_transform(flat_images)
-
-    # reshape in matrix form
-    projected_data = np.array(projected_data).reshape(input_data.shape[0], size_proj, size_proj, 1)
-
-    print("Projected data shape:", projected_data.shape)
-    return projected_data
-
-def compute_projections_old(input_data, random_seeds, n_proj, size_proj):
-    """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions.
-
-    :param input_data: full dimension input data
-    :param random_seed: list of seeds for the projections
-    :param n_proj: number of projections
-    :param size_proj: size of a projection
-    :return: array containing m random projections on the data, based on the given seeds
-    """
-
-    print("\nComputing random projections.")
-
-    print("Input shape: ", input_data.shape)
-    flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1]*input_data.shape[2], input_data.shape[3]))
-
-    # === simple random projector === #
-    # np.random.seed(random_seed)
-    # idxs = [np.random.choice(input_data.shape[1]*input_data.shape[2], size_proj*size_proj, replace=False)
-    #        for i in range(n_proj)]
-    # projected_data = [flat_images[:, proj_idxs] for proj_idxs in idxs]
-    # =============================== #
-
-    # === gaussian random projector === #
-    projected_data = []
-    for i in range(n_proj):
-        # cannot use list comprehension on GaussianRandomProjection objects
-        projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seeds[i])
-        projected_data.append(projector.fit_transform(flat_images))
-    # ================================= #
-
-    # reshape in matrix form
-    projected_data = np.array(projected_data).reshape((n_proj, input_data.shape[0], size_proj, size_proj, 1))
-
-    print("Projected data shape:", projected_data.shape)
-    return projected_data
-
-
-# todo: test these new functions, eventually remove the old ones
-def compute_single_projection(input_data, random_seed, size_proj):
     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
          matrix entries sampling, using the given random_seed.
 
@@ -197,8 +134,7 @@ def compute_single_projection(input_data, random_seed, size_proj):
      :param size_proj: size of a projection
      :return: np.array containing all random projections of input_data
      """
-    projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
-
+    projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
 
@@ -210,6 +146,27 @@ def compute_single_projection(input_data, random_seed, size_proj):
 
     return single_projection
 
+
+def compute_single_projection(input_data, random_seed, size_proj):
+    """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
+         matrix entries sampling, using the given random_seed.
+
+     :param input_data: high dimensional input data
+     :param random_seed: projection seed
+     :param size_proj: size of a projection
+     :return: np.array containing all random projections of input_data
+     """
+    projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
+    flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
+    single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
+
+    #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
+    for channel in range(input_data.shape[3]):
+        channel_projection = projector.fit_transform(flat_images[:, :, channel])\
+                                      .reshape((input_data.shape[0], size_proj, size_proj))
+        single_projection[:, :, :, channel] = channel_projection
+
+    return single_projection
 
 def compute_projections(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
@@ -228,19 +185,20 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     all_projections = np.empty(shape=(n_proj, input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
 
     for proj_idx in range(n_proj):
-        #print(proj_idx)
         all_projections[proj_idx,:,:,:,:] = compute_single_projection(input_data=input_data, size_proj=size_proj,
                                                                       random_seed=random_seeds[proj_idx])
     print("Projected data dimensions:", all_projections.shape)
 
-    # todo: look at cifar projections...
+    # look at cifar projections
     #plot_projected_images(input_data=input_data, projected_data=all_projections, n_proj=n_proj, im_idxs=[1,2,6])
 
     return all_projections
 
+
 ################
 # Pickle utils #
 ################
+
 
 def save_to_pickle(data, filename):
     """ saves data to pickle """
@@ -279,9 +237,9 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
 
     fig, axs = plt.subplots(len(im_idxs),n_proj+1,figsize=(10, 8))
     for im_idx, im in enumerate(im_idxs):
-        axs[im_idx, 0].imshow(input_data[im_idx])
+        axs[im_idx, 0].imshow(np.squeeze(input_data)[im_idx])
         for proj in range(n_proj):
-            axs[im_idx, proj+1].imshow(projected_data[proj][im])
+            axs[im_idx, proj+1].imshow(np.squeeze(projected_data)[proj][im])
 
     # block plots at the end of code execution
     plt.show(block=False)
