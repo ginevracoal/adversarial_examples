@@ -55,6 +55,7 @@ class RandomRegularizer(sklKerasClassifier):
                 self.batch_size = 1000
 
     def _get_logits(self, inputs):
+        inputs = tf.cast(inputs, tf.float32)
         if self.dataset_name == "mnist":
             x = Conv2D(32, kernel_size=(3, 3), activation='relu', data_format=self.data_format)(inputs)
             x = Conv2D(64, (3, 3), activation='relu')(x)
@@ -120,53 +121,49 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nsize =", size, ", seed =", seed)
 
         rows, cols, channels = self.input_shape
-        n_features = rows * cols * channels
         inputs = tf.cast(inputs, tf.float32)
         flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
-        n_components = size*size*channels
-
         regularization = 0
+
+        # 3 channel images to grayscale
+        if channels == 3:
+            grayscale_images = tf.image.rgb_to_grayscale(inputs)
+            flat_images = tf.reshape(tensor=grayscale_images,shape=[self.batch_size, rows* cols* 1])
+            channels = 1
+
+        # computing projections
+        n_features = rows * cols * channels
+        n_components = size*size*channels
         projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
         proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
         pinv = np.linalg.pinv(proj_matrix)
         projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
         inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
         inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
+
+        # print(proj_matrix.shape, pinv.shape, flat_images, inverse_projections)
+
+        # computing regularization
         proj_logits = self._get_logits(inputs=inverse_projections)
         loss = K.categorical_crossentropy(target=y_true, output=proj_logits)
-        loss_gradient = K.gradients(loss=loss, variables=flat_images)#inputs
-        #grad_matrix_list = [tf.gradients(f[:, k], x)[0] for k in range(hps.n_classes)]  # take each gradient wrt input only once
-        #regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=0)) # axis=0
-
-        regularization += tf.reduce_sum(loss_gradient) # axis=0
-
-        #tf.Print(regularization,[regularization])#.eval(session=self.sess))
-        #K.eval(regularization)
-        #exit()
+        loss_gradient = K.gradients(loss=loss, variables=flat_images)[0] # inputs / flat images
+        # print(loss_gradient)
+        # exit()
+        regularization += tf.reduce_sum(loss_gradient) # tf.norm(loss_gradient, ord=2, axis=0)
         return regularization / self.batch_size*self.n_proj
 
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        #rows, cols, channels = self.input_shape
         self.batches = int(len(x_train)/self.batch_size)
-
-        start_time = time.time()
-
         x_train_batches = np.split(x_train, self.batches)
         y_train_batches = np.split(y_train, self.batches)
+
+        start_time = time.time()
         for batch in range(self.batches):
             print("\n=== training batch", batch+1,"/",self.batches,"===")
             inputs = tf.convert_to_tensor(x_train_batches[batch])
-
-            # x_train = tf.placeholder(dtype=tf.float64, shape=[self.batch_size, rows, cols, channels])
-            # y_train = tf.placeholder(dtype=tf.float64, shape=[self.batch_size, self.num_classes])
-            # inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
-            # self.sess.run(inputs, feed_dict={inp: x_train})
-            # self.sess.run(tf.initialize_all_variables)
-            #inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
-            #self.sess.run(inputs, feed_dict={inp: x_train})
 
             for proj in range(self.n_proj):
                 print("\nprojection",proj+1,"/",self.n_proj)
