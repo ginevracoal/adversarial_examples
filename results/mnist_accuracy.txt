@@ -1,93 +1,42 @@
 === BASELINE ===
-model            test        fgsm         pgd         deepfool       carlini_linf
 
-original         99.13       5.91         0.71        34.83          28.96
-fgsm_robust      99.13       98.91        32.55       96.08          95.82
-deepfool_robust  99.03       23.11        35.55       99.20          95.70
-pgd_robust       99.10       44.60        99.02       98.34          97.19
-carlini_robust   99.10       14.74        3.85        94.63          99.06
+model            test       fgsm        pgd        deepfool   carlini_linf
 
+original         99.13      5.91        0.71        34.83       28.96
+fgsm_robust      99.13      98.91       32.55       96.08       95.82
+deepfool_robust  99.03      23.11       35.55       99.20       95.70
+pgd_robust       99.10      44.60       99.02       98.34       97.19
+carlini_robust   99.10      14.74       3.85        94.63       99.06
+
+=== RANDREG ===                                              
+                                                             
+lambda  batch_s  epochs proj     test    fgsm    pgd  deepfool carlini_linf    test    fgsm    pgd  deepfool carlini_linf
+                                           -----baseline adversaries-----        -----randreg adversaries-----
+                                 
+0.5     1000      12     1       97.52   26.24   49.99   93.92   91.45
+0.5     1000      12     3       98.31   15.95   21.93   94.00   91.33         98.19   13.80   1.4   .... male
+0.5     1000      5      5       98.15   17.72   25.75   93.49   91.00
+0.5     500       12     10
+0.5     500       12     3       98.39   15.18   16.20   93.16   90.45         98.39   21.22   2.38    33.08  38.10   # norma asse 1
+0.5     1000      12     3                                                                                            # 22 ago, 10:25, no norma, flat inputs nel gradiente
 
 === RANDENS ===
-eval_set      proj		size		accuracy
 
-test          6           8         96.60
-test          9           8         97.34
-test          12          8         97.26
-test          15          8         96.92
-test          6           12        97.57
-test          9           12        98.02
-test          12          12        97.98
-test          15          12        97.74
-test          6           16        97.98
-test          9           16        98.25
-test          12          16        98.16
-test          15          16        98.20
-test          6           20        98.16
-test          9           20        98.40
-test          12          20        98.19
-test          15          20        98.22
-fgsm          6           8         31.44
-fgsm          9           8         32.89
-fgsm          12          8         32.39
-fgsm          15          8         33.07
-fgsm          6           12        29.09
-fgsm          9           12        29.40
-fgsm          12          12        30.04
-fgsm          15          12        30.77
-fgsm          6           16        27.98
-fgsm          9           16        27.23
-fgsm          12          16        27.43
-fgsm          15          16        27.94
-fgsm          6           20        24.40
-fgsm          9           20        25.18
-fgsm          12          20        25.59
-fgsm          15          20        25.67
-deepfool      6           8         93.93
-deepfool      9           8         94.47
-deepfool      12          8         94.47
-deepfool      15          8         94.59
-deepfool      6           12        95.53
-deepfool      9           12        95.78
-deepfool      12          12        95.84
-deepfool      15          12        95.90
-deepfool      6           16        96.28
-deepfool      9           16        96.38
-deepfool      15          16        96.42
-deepfool      12          16        96.50
-deepfool      6           20        96.38
-deepfool      9           20        96.51
-deepfool      12          20        96.57
-deepfool      15          20        96.62
-proj_grad     6           8         64.18
-proj_grad     9           8         63.35
-proj_grad     12          8         64.53
-proj_grad     15          8         65.00
-proj_grad     6           12        60.89
-proj_grad     9           12        61.73
-proj_grad     12          12        62.25
-proj_grad     15          12        63.85
-proj_grad     6           16        59.02
-proj_grad     9           16        58.93
-proj_grad     12          16        59.79
-proj_grad     15          16        60.52
-proj_grad     6           20        57.20
-proj_grad     9           20        57.57
-proj_grad     12          20        58.18
-proj_grad     15          20        58.29
-carlini_linf  6           8         92.72
-carlini_linf  9           8         93.29
-carlini_linf  12          8         93.36
-carlini_linf  15          8         93.35
-carlini_linf  6           12        94.29
-carlini_linf  9           12        94.60
-carlini_linf  12          12        94.65
-carlini_linf  15          12        94.61
-carlini_linf  6           16        94.85
-carlini_linf  9           16        95.23
-carlini_linf  12          16        95.32
-carlini_linf  15          16        95.27
-carlini_linf  6           20        95.44
-carlini_linf  9           20        95.46
-carlini_linf  12          20        95.44
-carlini_linf  15          20        95.49
+(proj, size)   test     fgsm       deepfool      pgd    carlini_linf
+
+(6,8)          96.6     31.44       93.93       64.18       92.72
+(9,8)          97.3     32.89       94.47       63.35       93.29
+(12,8)         97.2     32.39       94.47       64.53       93.36
+(15,8)         96.9     33.07       94.59       65.00       93.35
+(6,12)         97.5     29.09       95.53       60.89       94.29
+(9,12)         98.0     29.40       95.78       61.73       94.60
+(12,12)        97.9     30.04       95.84       62.25       94.65
+(15,12)        97.7     30.77       95.90       63.85       94.61
+(6,16)         97.9     27.98       96.28       59.02       94.85
+(9,16)         98.2     27.23       96.38       58.93       95.23
+(12,16)        98.1     27.43       96.50       59.79       95.32
+(15,16)        98.2     27.94       96.42       60.52       95.27
+(6,20)         98.1     24.40       96.38       57.20       95.44
+(9,20)         98.4     25.18       96.51       57.57       95.46
+(12,20)        98.1     25.59       96.57       58.18       95.44
+(15,20)        98.2     25.67       96.62       58.29       95.49

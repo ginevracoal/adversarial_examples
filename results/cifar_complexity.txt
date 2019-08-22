@@ -4,22 +4,23 @@ model                   training time (s)
 baseline                11555.19160747528
 fgsm_robust             25108.290491104126
 pgd_robust              27043.505586862564
-deepfool_robust
-carlini_robust
+deepfool_robust         70846.34929156303
+carlini_robust          49535.69976067543
 
+randreg                 51065.31980204582
 
 === RANDENS ===
 n_proj     size_proj     training time (s)
 
-6	       8             20024.77380514145
+6	       8            20417.675488710403
 9	       8
 12	       8
 15	       8
-6	       12
+6	       12           37281.46624183655
 9	       12
 12	       12
 15	       12
-6	       16
+6	       16           68161.40333080292
 9	       16
 12	       16
 15	       16
@@ -31,7 +32,7 @@ n_proj     size_proj     training time (s)
 === PARALLEL RANDENS ===
 size_proj     parallel training time (s)
 
-8             4054.7319855690002
+8             3050.729281425476
 12            9490.245878458023
 16            11081.634799718857
 20            17134.651045799255

@@ -1,93 +1,41 @@
 === BASELINE ===
 
-model            test       fgsm       pgd       deepfool     carlini_linf
+model            test        fgsm        pgd       deepfool   carlini_linf
 
-original         81.06      70.78      75.72     11.20        68.86
-fgsm_robust      84.83      84.33      84.75     84.05        84.61
-deepfool_robust  24.50      24.53      24.47     24.48        24.51
-pgd_robust       85.03      84.38      84.77     83.80        84.81
-carlini_robust   85.04      84.14      84.58     83.34        84.84
+original         81.06      70.78       75.72       11.20      68.86
+fgsm_robust      84.83      84.33       84.75       84.05      84.61
+deepfool_robust  84.09      83.92       83.98       83.69      84.06
+pgd_robust       85.03      84.38       84.77       83.80      84.81
+carlini_robust   85.04      84.14       84.58       83.34      84.84
+
+=== RANDREG ===
+
+lambda  batch_s  epochs proj  test   fgsm   pgd   deepfool  carlini_linf   time (s)
+
+0.5     1000     120    5         --- estremamente lento ---                          # job 20 ago 21:43
+0.5     1000     36     3                                                             # job 21 ago 08:49
+0.5     1000     50     1
+0.5     1000     36     3       75.79   73.77   74.50   71.48   75.59
+
 
 === RANDENS ===
-eval_set      proj	   size		accuracy (%)
 
-test          6        8        64.18
-test          9        8
-test          12       8
-test          15       8
-test          6        12
-test          9        12
-test          12       12
-test          15       12
-test          6        16
-test          9        16
-test          12       16
-test          15       16
-test          6        20
-test          9        20
-test          12       20
-test          15       20
-fgsm          6        8        60.67
-fgsm          9        8
-fgsm          12       8
-fgsm          15       8
-fgsm          6        12
-fgsm          9        12
-fgsm          12       12
-fgsm          15       12
-fgsm          6        16
-fgsm          9        16
-fgsm          12       16
-fgsm          15       16
-fgsm          6        20
-fgsm          9        20
-fgsm          12       20
-fgsm          15       20
-deepfool      6        8         51.99
-deepfool      9        8
-deepfool      12       8
-deepfool      15       8
-deepfool      6        12
-deepfool      9        12
-deepfool      12       12
-deepfool      15       12
-deepfool      6        16
-deepfool      9        16
-deepfool      15       16
-deepfool      12       16
-deepfool      6        20
-deepfool      9        20
-deepfool      12       20
-deepfool      15       20
-pgd           6        8         62.03
-pgd           9        8
-pgd           12       8
-pgd           15       8
-pgd           6        12
-pgd           9        12
-pgd           12       12
-pgd           15       12
-pgd           6        16
-pgd           9        16
-pgd           12       16
-pgd           15       16
-pgd           6        20
-pgd           9        20
-pgd           12       20
-pgd           15       20
-carlini       6        8           63.27
-carlini       9        8
-carlini       12       8
-carlini       15       8
-carlini       6        12
-carlini       9        12
-carlini       12       12
-carlini       15       12
-carlini       6        16
-carlini       9        16
-carlini       12       16
-carlini       15       16
-carlini       6        20
-carlini       9        20
-carlini       12       20
-carlini       15       20
+(proj, size)   test         fgsm         pgd       deepfool   carlini_linf
+
+(6,8)          64.55        60.89       62.21       52.79       63.64
+(9,8)          53.47        53.34       53.41       53.23       53.46                   # job 12:58 21 ago
+(12,8)         53.80        53.60       53.74       53.39       53.80
+(15,8)                                                  
+(6,12)         63.59        60.36       61.72       52.81       62.84
+(9,12)         53.34        53.23       53.25       53.05       53.32
+(12,12)        53.74        53.57       53.64       53.35       53.73
+(15,12)                                                 
+(6,16)         62.19        59.20       60.45       52.62       61.62
+(9,16)         53.15        53.16       53.20       52.92       53.17
+(12,16)     
+(15,16)     
+(6,20)      
+(9,20)         53.25        53.06       53.14       52.91       53.22
+(12,20)     
+(15,20)     
+
