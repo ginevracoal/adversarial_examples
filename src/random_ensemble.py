@@ -18,10 +18,10 @@ import matplotlib.pyplot as plt
 import argparse
 from adversarial_classifier import *
 
-
 ############
 # defaults #
 ############
+
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 
@@ -53,7 +53,7 @@ class RandomEnsemble(BaselineConvnet):
         self.x_test_proj = None
         self.ensemble_method = "sum"  # possible methods: mode, sum
 
-        print("\n === RandEns model ( n_proj =", self.n_proj, ", size_proj =", self.size_proj, ") ===")
+        print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
     ############
     # training #
@@ -112,7 +112,6 @@ class RandomEnsemble(BaselineConvnet):
                             path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
                                  MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
             saving_time = time.time() - start
-
             self.training_time -= saving_time
 
         return classifier
@@ -271,8 +270,8 @@ class RandomEnsemble(BaselineConvnet):
             #print(baseline_predictions.shape)
             #print(final_predictions.shape)
 
-            return final_predictions
-            #return predictions
+            #return final_predictions
+            return predictions
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
             return predictions
@@ -294,7 +293,8 @@ class RandomEnsemble(BaselineConvnet):
         y_test_pred = np.argmax(self.predict(classifiers, x_test, method=self.ensemble_method), axis=1)
 
         # evaluate each classifier on its projected test set
-        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes)
+        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                   data_format=self.data_format, dataset_name=self.dataset_name)
         for i, classifier in enumerate(classifiers):
             print("\nTest evaluation on projection ", self.random_seeds[i])  # i
             baseline.evaluate_test(classifier, self.x_test_proj[i], y_test)
@@ -364,7 +364,7 @@ def main(dataset_name, test, n_proj, size_proj, attack):
 
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    #model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
+    model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
     #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
@@ -380,9 +380,9 @@ def main(dataset_name, test, n_proj, size_proj, attack):
     model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
-    #for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
-    #    model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-    #                               adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
+    for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
+        model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
+                                   adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
         #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
     del classifier
 

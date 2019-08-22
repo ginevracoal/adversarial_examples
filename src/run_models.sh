@@ -3,11 +3,11 @@
 ############
 # settings #
 ############
-SCRIPT="randens" # "baseline", "randens", "parallel_randens"
+SCRIPT="randreg" # "baseline", "randens", "parallel_randens", "randreg"
 
 # === all scripts === #
 DATASET_NAME="mnist" # supported: "mnist","cifar"
-TEST="True" # if True only takes 100 samples
+TEST="False" # if True only takes 100 samples
 
 # === baseline, randens === #
 ATTACK=None # supported: "fgsm, "pgd", "deepfool", "carlini_linf"
@@ -21,9 +21,12 @@ SIZE_PROJ_LIST=[8,12,16,20] # Supported: list containing 8, 12, 16, 20. Default 
 # === parallel_randens === #
 #N_PROJ=15 # default is 15
 
+# === randreg === #
+LAMBDA=0.5
+
 # === clusterino === #
 #rm screenlog.0
-#cd ~/adversarial_examples/src/
+cd ~/adversarial_examples/src/
 #export CUDA_VISIBLE_DEVICES=-1 # GPU
 
 ##############
@@ -56,4 +59,7 @@ elif [ $SCRIPT = "parallel_randens" ]; then
     sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
     grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
   done
+elif [ $SCRIPT = "randreg" ]; then
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA >> $OUT
+  grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi

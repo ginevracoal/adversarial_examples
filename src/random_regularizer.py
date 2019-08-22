@@ -106,17 +106,16 @@ class RandomRegularizer(sklKerasClassifier):
             return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, y_true=y_true)
         return custom_loss
 
-    def regularizer(self, inputs, y_true, max_nproj=6):
+    def regularizer(self, inputs, y_true):
         """
         This regularization term penalizes the expected value of loss gradient, evaluated on random projections of the
         input points.
         :param inputs:
         :param y_true:
-        :param max_nproj:
         :return: regularization term for the objective loss function.
         """
 
-        size = random.randint(6,10)  # small size seems to work better
+        size = random.randint(6,20)  # small size seems to work better
         seed = random.randint(1,100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
@@ -132,22 +131,25 @@ class RandomRegularizer(sklKerasClassifier):
         pinv = np.linalg.pinv(proj_matrix)
         projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
         inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
-        inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows,cols,channels]))
+        inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
         proj_logits = self._get_logits(inputs=inverse_projections)
         loss = K.categorical_crossentropy(target=y_true, output=proj_logits)
-        loss_gradient = K.gradients(loss=loss, variables=inputs)
-        regularization += tf.reduce_sum(tf.square(tf.norm(loss_gradient, ord=2, axis=0)))
+        loss_gradient = K.gradients(loss=loss, variables=flat_images)#inputs
+        #grad_matrix_list = [tf.gradients(f[:, k], x)[0] for k in range(hps.n_classes)]  # take each gradient wrt input only once
+        #regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=0)) # axis=0
+
+        regularization += tf.reduce_sum(loss_gradient) # axis=0
 
         #tf.Print(regularization,[regularization])#.eval(session=self.sess))
         #K.eval(regularization)
         #exit()
-        return regularization / self.batch_size
+        return regularization / self.batch_size*self.n_proj
 
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        rows, cols, channels = self.input_shape
+        #rows, cols, channels = self.input_shape
         self.batches = int(len(x_train)/self.batch_size)
 
         start_time = time.time()
@@ -163,13 +165,13 @@ class RandomRegularizer(sklKerasClassifier):
             # inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
             # self.sess.run(inputs, feed_dict={inp: x_train})
             # self.sess.run(tf.initialize_all_variables)
-            inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
-            self.sess.run(inputs, feed_dict={inp: x_train})
+            #inp = tf.placeholder(dtype=tf.float32, shape=[self.batch_size, rows, cols, channels])
+            #self.sess.run(inputs, feed_dict={inp: x_train})
 
             for proj in range(self.n_proj):
                 print("\nprojection",proj+1,"/",self.n_proj)
-                custom_loss = self.loss_wrapper(inputs)#, batch)
-                self.model.compile(loss=custom_loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+                loss = self.loss_wrapper(inputs)#, batch)
+                self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
                 self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
@@ -249,9 +251,9 @@ class RandomRegularizer(sklKerasClassifier):
         :return: adversarially perturbed data
         """
         if adversaries_path is None:
-            # todo: buggy...
             classifier = artKerasClassifier((MIN, MAX), trained_classifier.model, use_logits=False)
             classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x))
+            classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x))
             print("\nGenerating adversaries with", method, "method on", dataset_name)
             x_adv = None
             if method == 'fgsm':
@@ -301,32 +303,47 @@ def main(dataset_name, test, lam):
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
     #sess = sess.run(tf.local_variables_initializer())
-
     #sess = tf.InteractiveSession()
 
     # load dataset
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
-
-
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, test=test)
 
-    rel_path = time.strftime('%Y-%m-%d') + "/" + str(dataset_name) + "_randreg_weights_lam=" + str(classifier.lam) + ".h5"
+    modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
+                "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+".h5"
+    model_path = RESULTS+time.strftime('%Y-%m-%d') +"/"+ modelname
+    #model_path = TRAINED_MODELS+"random_regularizer/" + modelname
 
-    #classifier.train(x_train, y_train)
-    #classifier.model.save_weights(RESULTS+rel_path)
+    classifier.train(x_train, y_train)
+    classifier.model.save_weights(model_path)
 
-    classifier.model.load_weights(RESULTS+rel_path)
+    ######### todo: bug on adversarial evaluation. It only works on loaded models..
+    del classifier
+    classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                   dataset_name=dataset_name, sess=sess, lam=lam, test=test)
+
+    classifier.model.load_weights(model_path)
 
     # evaluations #
-    #classifier.evaluate_test(x_test=x_test, y_test=y_test)
+    classifier.evaluate_test(x_test=x_test, y_test=y_test)
 
+    print("\nBaseline adversaries")
     for attack in ['fgsm','pgd','deepfool','carlini_linf']:
         filename = dataset_name + "_x_test_" + attack + ".pkl" #"_randreg.pkl"
         x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
+                                                     adversaries_path=DATA_PATH+filename,
+                                                     test=test)
+
+    print("\nRandreg adversaries")
+    for attack in ['fgsm','pgd','deepfool','carlini_linf']:
+        filename = dataset_name + "_x_test_" + attack + "_randreg.pkl"
+        x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
                                                      #adversaries_path=DATA_PATH+filename,
                                                      test=test)
+        save_to_pickle(data=x_test_adv, filename=filename)
+
 
 if __name__ == "__main__":
     try:

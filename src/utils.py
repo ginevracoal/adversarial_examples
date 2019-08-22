@@ -7,6 +7,7 @@ import time
 from sklearn.random_projection import GaussianRandomProjection
 import os
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 MIN = 0
 MAX = 255
@@ -146,7 +147,6 @@ def compute_single_projection_old(input_data, random_seed, size_proj):
 
     return single_projection
 
-
 def compute_single_projection(input_data, random_seed, size_proj):
     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
          matrix entries sampling, using the given random_seed.
@@ -159,6 +159,8 @@ def compute_single_projection(input_data, random_seed, size_proj):
     projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
+
+    # plot_inverse_projections(input_data, size_proj, random_seed)
 
     #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
     for channel in range(input_data.shape[3]):
@@ -191,6 +193,8 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
 
     # look at cifar projections
     #plot_projected_images(input_data=input_data, projected_data=all_projections, n_proj=n_proj, im_idxs=[1,2,6])
+
+    plot_inverse_projections(input_data, size_proj, random_seeds[3])
 
     return all_projections
 
@@ -242,6 +246,34 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
             axs[im_idx, proj+1].imshow(np.squeeze(projected_data)[proj][im])
 
     # block plots at the end of code execution
+    plt.show(block=False)
+    input("Press ENTER to exit")
+    exit()
+
+def plot_inverse_projections(input_data, size_proj, random_seed):
+    # todo: understand how images are transformed...
+    sess = tf.Session()
+    sess.as_default()
+    im_idxs = range(10)
+
+    fig, axs = plt.subplots(nrows=3, ncols=len(im_idxs), figsize=(10, 8))
+    for im_idx in range(len(im_idxs)):
+        axs[0,im_idx].imshow(np.squeeze(input_data)[im_idx])
+
+        projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
+        proj_matrix = np.float32(projector._make_random_matrix(size_proj*size_proj, input_data.shape[1] * input_data.shape[2]*input_data.shape[3]))
+        pinv = np.linalg.pinv(proj_matrix)
+        flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2]*input_data.shape[3]))
+        projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
+        im_projections = tf.reshape(projections, shape=(input_data.shape[0],size_proj,size_proj)).eval(session=sess)
+        axs[1,im_idx].imshow(im_projections[im_idx])
+
+        inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
+        im_inverse_projections = np.squeeze(tf.reshape(inverse_projections, shape=(input_data.shape)).eval(session=sess))
+        axs[2,im_idx].imshow(im_inverse_projections[im_idx])
+
+        # print(proj_matrix.shape, pinv.shape, flat_images.shape)
+
     plt.show(block=False)
     input("Press ENTER to exit")
     exit()
