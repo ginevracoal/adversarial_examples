@@ -1,0 +1,124 @@
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 67.53378820419312 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 112.49300241470337 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 84.55938076972961 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 171.14637875556946 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 94.14661169052124 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 142.90125799179077 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 313.11666893959045 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 123.32347011566162 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 224.5809235572815 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 127.88899230957031 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 344.66293573379517 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 127.89063477516174 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 224.489248752594 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 127.4766137599945 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 124.95827603340149 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 386.8093349933624 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 588.4239058494568 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 224.87242722511292 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 123.56875729560852 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 125.4663302898407 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 224.9464066028595 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 127.05626797676086 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 379.39666414260864 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 226.6756820678711 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 124.4911253452301 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 594.1259212493896 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 124.30820775032043 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 223.59685635566711 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 123.76805424690247 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 376.7573459148407 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+Training time for single projection with size_proj= 8 ): --- 124.15846681594849 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 8 ) ===
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 227.83327412605286 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 363.2531659603119 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 209.5300018787384 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 564.1516842842102 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 210.81056213378906 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 354.5876567363739 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 209.5303671360016 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 543.6948239803314 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 210.17331838607788 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 361.85493779182434 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 210.88833284378052 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 357.6161081790924 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+Training time for single projection with size_proj= 12 ): --- 210.89152455329895 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 12 ) ===
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 538.9288580417633 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 315.51517605781555 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 473.74474811553955 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 323.14837980270386 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 317.00161504745483 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 479.4102408885956 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 320.3303225040436 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 481.87461376190186 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 314.851101398468 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+Training time for single projection with size_proj= 16 ): --- 321.0758709907532 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 16 ) ===
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 467.98092222213745 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 407.10289692878723 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 406.80229330062866 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 404.59528613090515 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 402.2670154571533 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
+Training time for single projection with size_proj= 20 ): --- 403.7488069534302 seconds ---
+ === RandEns model ( n_proj = None , size_proj = 20 ) ===
