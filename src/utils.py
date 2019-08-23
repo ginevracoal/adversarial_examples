@@ -157,7 +157,7 @@ def load_dataset(dataset_name, test):
 
 
 # todo: this is only used in parallel implementation, extend it to the other methods.
-def compute_single_projection(input_data, random_seed, size_proj):
+def compute_single_projection_par(input_data, random_seed, size_proj):
     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
          matrix entries sampling, using the given random_seed.
 
@@ -213,7 +213,18 @@ def flat_projection(input_data, random_seed, size_proj):
 
 
 def channels_projection(input_data, random_seed, size_proj):
-    # todo: docstring and test
+    """ Computes a projection of the whole input data over each channel, then reconstructs the rgb image.
+    It also computes the inverse projections.
+    It samples `size_proj` random directions for the projection using the given random_seed.
+
+    :param input_data: high dimensional input data
+    :param random_seed: projection seed
+    :param size_proj: size of a projection
+    :return:
+    :param projection: np.array containing a random projection of input_data
+    :param projection: np.array containing the inverse projection of input_data given by the
+    pseudoinverse of the projection matrix
+    """
 
     sess = tf.Session()
     sess.as_default()
@@ -252,6 +263,24 @@ def grayscale_projection(input_data, random_seed, size_proj):
     greyscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
     return flat_projection(greyscale_data, random_seed, size_proj)
 
+def compute_single_projection(input_data, seed, size_proj, projection_mode):
+    # print("\ncomputing",projection_mode,"projection")
+
+    projection = None
+    inverse_projection = None
+    if projection_mode == "flat":
+        projection, inverse_projection = flat_projection(input_data=input_data, size_proj=size_proj,
+                                                         random_seed=seed)
+    elif projection_mode == "channels":
+        projection, inverse_projection = channels_projection(input_data=input_data, size_proj=size_proj,
+                                                             random_seed=seed)
+    elif projection_mode == "one_channel":
+        projection, inverse_projection = one_channel_projection(input_data=input_data, size_proj=size_proj,
+                                                                random_seed=seed)
+    elif projection_mode == "grayscale":
+        projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
+                                                              random_seed=seed)
+    return projection,inverse_projection
 
 def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
@@ -268,8 +297,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
     sess.as_default()
 
     print("Input shape: ", input_data.shape)
-    print("\nComputing random projections: ")
-
+    print("\nComputing ",n_proj,"random projections in ",projection_mode,"mode: ")
     # samples, rows, cols, channels = input_data.shape
     # projections = np.empty(shape=(n_proj, samples, size_proj, size_proj, channels))
     # inverse_projections = np.empty(shape=(n_proj, samples, rows, cols, channels))
@@ -279,20 +307,8 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
     for proj_idx in range(n_proj):
         # all_projections[proj_idx,:,:,:,:] = compute_single_projection_channel(input_data=input_data,
         #                                     size_proj=size_proj, random_seed=random_seeds[proj_idx])
-        projection = None
-        inverse_projection = None
-        if projection_mode == "flat":
-            projection, inverse_projection = flat_projection(input_data=input_data, size_proj=size_proj,
-                                                             random_seed=random_seeds[proj_idx])
-        elif projection_mode == "channels":
-            projection, inverse_projection = channels_projection(input_data=input_data, size_proj=size_proj,
-                                                             random_seed=random_seeds[proj_idx])
-        elif projection_mode == "one_channel":
-            projection, inverse_projection = one_channel_projection(input_data=input_data, size_proj=size_proj,
-                                                             random_seed=random_seeds[proj_idx])
-        elif projection_mode == "grayscale":
-            projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
-                                                             random_seed=random_seeds[proj_idx])
+
+        projection, inverse_projection = compute_single_projection(input_data, random_seeds[proj_idx], size_proj, projection_mode)
         projections.append(projection)
         inverse_projections.append(inverse_projection)
 
