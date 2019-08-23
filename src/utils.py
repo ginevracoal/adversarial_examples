@@ -130,30 +130,33 @@ def load_dataset(dataset_name, test):
 # random projections #
 ######################
 
+
 # todo: remove, deprecated
-def one_channel_projection_old(input_data, random_seed, size_proj, channel=0):
-    """ Computes one projection over a single channel of the whole input data.
-     It samples `size_proj` random directions for the projection using the given random_seed.
+# def one_channel_projection_old(input_data, random_seed, size_proj, channel=0):
+#     """ Computes one projection over a single channel of the whole input data.
+#      It samples `size_proj` random directions for the projection using the given random_seed.
+#
+#      :param input_data: original input data
+#      :param random_seed: projection seed
+#      :param size_proj: size of a projection
+#      :return: np.array containing the projected version of input_data
+#      """
+#     samples, rows, cols, channels = input_data.shape
+#
+#     projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
+#
+#     flat_images = input_data.reshape((samples, rows*cols, channels))
+#     projection = np.empty((samples, size_proj, size_proj, channels))
+#
+#     for im in range(samples):
+#         projected_image = np.empty(shape=(size_proj * size_proj, channels))
+#         projected_image[:, channel] = projector.fit_transform(flat_images[im, :, channel].reshape(1, -1))
+#         projection[im, :, :] = projected_image.reshape((size_proj, size_proj, channels))
+#
+#     return projection
 
-     :param input_data: original input data
-     :param random_seed: projection seed
-     :param size_proj: size of a projection
-     :return: np.array containing the projected version of input_data
-     """
-    samples, rows, cols, channels = input_data.shape
 
-    projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
-
-    flat_images = input_data.reshape((samples, rows*cols, channels))
-    projection = np.empty((samples, size_proj, size_proj, channels))
-
-    for im in range(samples):
-        projected_image = np.empty(shape=(size_proj * size_proj, channels))
-        projected_image[:, channel] = projector.fit_transform(flat_images[im, :, channel].reshape(1, -1))
-        projection[im, :, :] = projected_image.reshape((size_proj, size_proj, channels))
-
-    return projection
-
+# todo: this is only used in parallel implementation, extend it to the other methods.
 def compute_single_projection(input_data, random_seed, size_proj):
     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
          matrix entries sampling, using the given random_seed.
@@ -167,7 +170,6 @@ def compute_single_projection(input_data, random_seed, size_proj):
     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
 
-
     #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
     for channel in range(input_data.shape[3]):
         channel_projection = projector.fit_transform(flat_images[:, :, channel]) \
@@ -178,9 +180,20 @@ def compute_single_projection(input_data, random_seed, size_proj):
 
 
 def flat_projection(input_data, random_seed, size_proj):
+    """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
+    It samples `size_proj` random directions for the projection using the given random_seed.
+
+    :param input_data: high dimensional input data
+    :param random_seed: projection seed
+    :param size_proj: size of a projection
+    :return:
+    :param projection: np.array containing a random projection of input_data
+    :param projection: np.array containing the inverse projection of input_data given by the
+    pseudoinverse of the projection matrix
+    """
+    # this is needed to go from tf tensors to np arrays:
     sess = tf.Session()
     sess.as_default()
-    # todo: docstring and test
     samples, rows, cols, channels = input_data.shape
 
     # projection matrices
@@ -196,7 +209,6 @@ def flat_projection(input_data, random_seed, size_proj):
     # reshape
     projection = tf.reshape(projection, shape=(samples, size_proj, size_proj, channels)).eval(session=sess)
     inverse_projection = tf.reshape(inverse_projection, shape=(input_data.shape)).eval(session=sess)
-
     return projection, inverse_projection
 
 
@@ -228,15 +240,18 @@ def channels_projection(input_data, random_seed, size_proj):
 
     return projection, inverse_projection
 
+
 def one_channel_projection(input_data, random_seed, size_proj, channel=0):
     samples, rows, cols, channels = input_data.shape
     single_channel = input_data[:,:,:,channel].reshape(samples, rows, cols, 1)
     return flat_projection(single_channel, random_seed, size_proj)
 
+
 def greyscale_projection(input_data, random_seed, size_proj):
     samples, rows, cols, channels = input_data.shape
     greyscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
     return flat_projection(greyscale_data, random_seed, size_proj)
+
 
 def compute_projections(input_data, random_seeds, n_proj, size_proj):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
@@ -248,22 +263,22 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     :param size_proj: size of a projection
     :return: np.array containing n_proj random projections on the data
     """
-    # needed to pass from tf to np
+    # this is needed to go from tf tensors to np arrays:
     sess = tf.Session()
     sess.as_default()
 
     print("Input shape: ", input_data.shape)
     print("\nComputing random projections: ")
 
-    samples, rows, cols, channels = input_data.shape
-    projections = np.empty(shape=(n_proj, samples, size_proj, size_proj, channels))
-    inverse_projections = np.empty(shape=(n_proj, samples, rows, cols, channels))
+    # samples, rows, cols, channels = input_data.shape
+    # projections = np.empty(shape=(n_proj, samples, size_proj, size_proj, channels))
+    # inverse_projections = np.empty(shape=(n_proj, samples, rows, cols, channels))
 
     projections = []
     inverse_projections = []
     for proj_idx in range(n_proj):
         projection, inverse_projection = flat_projection(input_data=input_data, size_proj=size_proj,
-                                                                      random_seed=random_seeds[proj_idx])
+                                                         random_seed=random_seeds[proj_idx])
         # all_projections[proj_idx,:,:,:,:] = compute_single_projection_channel(input_data=input_data,
         #                                     size_proj=size_proj, random_seed=random_seeds[proj_idx])
         projections.append(projection)
@@ -273,12 +288,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     inverse_projections = np.array(inverse_projections)
     print("Projected data dimensions:", projections.shape)
 
-    # look at cifar projections
-    #plot_projected_images(input_data=input_data, projected_data=all_projections, n_proj=n_proj, im_idxs=[1,2,6])
-
-    plot_inverse_projections(input_data,  projections, inverse_projections)
-
-    return projections
+    return projections, inverse_projections
 
 ################
 # Pickle utils #
@@ -319,7 +329,7 @@ def load_from_pickle(path, test):
 
 
 def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
-
+    # todo. deprecated, remove this
     fig, axs = plt.subplots(len(im_idxs),n_proj+1,figsize=(10, 8))
     for im_idx, im in enumerate(im_idxs):
         axs[im_idx, 0].imshow(np.squeeze(input_data)[im_idx])
@@ -331,20 +341,29 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
     input("Press ENTER to exit")
     exit()
 
-def plot_inverse_projections(input_data, projections, inverse_projections):
-    """todo: docstring and test"""
-    im_idxs = range(10)
-    proj_idx = 0
 
+def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, im_idxs=range(10), proj_idx=0):
+    """
+    Plots input data in the first row, projected data in the second row and inverse projected data in the third row.
+    By default it only takes the first 10 samples and the first projection.
+
+    :param input_data: high dimensional input data
+    :param random_seeds: list of random seeds for the projections
+    :param n_proj: number of projections
+    :param size_proj: size of a projection
+    """
+
+    projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj)
     # print(input_data.shape, projections.shape, inverse_projections.shape)
+
     fig, axs = plt.subplots(nrows=3, ncols=len(im_idxs), figsize=(10, 8))
 
     # cmap = "gray" if input_data.shape[3] == 1 else None
     cmap = None
     for im_idx in range(len(im_idxs)):
         axs[0, im_idx].imshow(np.squeeze(input_data[im_idx]), cmap=cmap)
-        axs[1, im_idx].imshow(np.squeeze(projections[0,im_idx]), cmap=cmap)
-        axs[2, im_idx].imshow(np.squeeze(inverse_projections[0,im_idx]), cmap=cmap)
+        axs[1, im_idx].imshow(np.squeeze(projections[proj_idx,im_idx]), cmap=cmap)
+        axs[2, im_idx].imshow(np.squeeze(inverse_projections[proj_idx,im_idx]), cmap=cmap)
 
     plt.show(block=False)
     input("Press ENTER to exit")
