@@ -61,7 +61,8 @@ class Test(unittest.TestCase):
 
     def test_random_ensemble(self):
         model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
-                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format)
+                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
+                               projection_mode="flat")
 
         # train
         classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
@@ -71,8 +72,8 @@ class Test(unittest.TestCase):
         model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm', dataset_name=self.dataset)
 
         # save and load
-        model.save_model(classifier=classifiers, model_name="random_ensemble_size=" + str(model.size_proj))
-        relpath = TRAINED_MODELS+RESULTS+time.strftime('%Y-%m-%d')+"/"\
+        model.save_model(classifier=classifiers, model_name="random_ensemble")
+        relpath = RESULTS+time.strftime('%Y-%m-%d')+"/"\
                   +self.dataset+"_random_ensemble_sum_size="+str(model.size_proj)+"/"
         loaded_classifiers = model.load_classifier(relative_path=relpath, model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
@@ -85,6 +86,14 @@ class Test(unittest.TestCase):
         model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                 dataset_name=self.dataset)
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+    def test_plot_projections(self):
+        for projection_mode in ["flat","channels","one_channel","grayscale"]:
+            model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
+                                   n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
+                                   projection_mode=projection_mode)
+            plot_inverse_projections(self.x_train, model.random_seeds, model.n_proj, model.size_proj, model.projection_mode,
+                                     test=True)
 
     def test_random_regularizer(self):
         pass
