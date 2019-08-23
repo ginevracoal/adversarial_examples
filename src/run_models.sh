@@ -14,7 +14,6 @@ ATTACK=None # supported: "fgsm, "pgd", "deepfool", "carlini_linf"
 
 # === randens === #
 N_PROJ_LIST=[6,9,12,15] # Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15]
-PROJ_MODE="channels" # Supported: flat, channels, one_channel, grayscale
 
 # === randens, parallel_randens === #
 SIZE_PROJ_LIST=[8,12,16,20] # Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20]
@@ -24,6 +23,9 @@ SIZE_PROJ_LIST=[8,12,16,20] # Supported: list containing 8, 12, 16, 20. Default 
 
 # === randreg === #
 LAMBDA=0.5
+
+# === randens, randreg === #
+PROJ_MODE="channels" # Supported: flat, channels, one_channel, grayscale (only channels and grayscale for randreg)
 
 # === clusterino === #
 #rm screenlog.0
@@ -61,6 +63,6 @@ elif [ $SCRIPT = "parallel_randens" ]; then
     grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
   done
 elif [ $SCRIPT = "randreg" ]; then
-  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA >> $OUT
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi

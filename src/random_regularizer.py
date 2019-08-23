@@ -1,20 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from adversarial_classifier import *
-from art.classifiers import TFClassifier
-import tensorflow as tf
-from keras.models import load_model
-from utils import *
-import sys
 import random
 from keras.models import Model
-from baseline_convnet import  BaselineConvnet
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
 from art.classifiers import KerasClassifier as artKerasClassifier
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
-from keras.callbacks import Callback
-from tensorflow.python.keras.layers import Lambda
 import keras.losses
+from random_ensemble import *
 
 # todo: docstrings!
 # todo: unittest
@@ -22,7 +14,7 @@ import keras.losses
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, test):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -32,6 +24,7 @@ class RandomRegularizer(sklKerasClassifier):
         self.dataset_name = dataset_name
         self.data_format = data_format
         self.lam = lam
+        self.projection_mode = projection_mode
         self._set_training_params()
         self._set_layers()
         self.inputs = Input(shape=self.input_shape)
@@ -102,54 +95,85 @@ class RandomRegularizer(sklKerasClassifier):
         # model.summary()
         #return self.model
 
-    def loss_wrapper(self, inputs):
+    def loss_wrapper(self, inputs, outputs):
         def custom_loss(y_true, y_pred):
-            return K.binary_crossentropy(y_true, y_pred) + self.lam * self.regularizer(inputs=inputs, y_true=y_true)
+            if self.projection_mode == "grayscale":
+                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
+            elif self.projection_mode == "channels":
+                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
         return custom_loss
 
-    def regularizer(self, inputs, y_true):
-        """
-        This regularization term penalizes the expected value of loss gradient, evaluated on random projections of the
-        input points.
-        :param inputs:
-        :param y_true:
-        :return: regularization term for the objective loss function.
-        """
-
-        size = random.randint(6,20)  # small size seems to work better
-        seed = random.randint(1,100)  # one different seed for projecting each batch
-        print("\nsize =", size, ", seed =", seed)
-
-        rows, cols, channels = self.input_shape
-        inputs = tf.cast(inputs, tf.float32)
-        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
+    def grayscale_regularizer(self, inputs, outputs):
         regularization = 0
 
-        # 3 channel images to grayscale
+        size = random.randint(18, 28)
+        seed = random.randint(1, 100)  # one different seed for projecting each batch
+        print("\nsize =", size, ", seed =", seed)
+
+        _, rows, cols, channels = self.inputs.get_shape().as_list()  # self.input_shape
+        inputs = tf.cast(inputs, tf.float32)
+        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
+
         if channels == 3:
             grayscale_images = tf.image.rgb_to_grayscale(inputs)
-            flat_images = tf.reshape(tensor=grayscale_images,shape=[self.batch_size, rows* cols* 1])
+            flat_images = tf.reshape(tensor=grayscale_images, shape=[self.batch_size, rows * cols * 1])
             channels = 1
 
-        # computing projections
         n_features = rows * cols * channels
-        n_components = size*size*channels
+        n_components = size * size * channels
+
         projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-        proj_matrix = np.float32(projector._make_random_matrix(n_components,n_features))
+        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
         pinv = np.linalg.pinv(proj_matrix)
         projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
         inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
-        inverse_projections = tf.reshape(inverse_projections, shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
+        inverse_projections = tf.reshape(inverse_projections,
+                                         shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
 
-        # print(proj_matrix.shape, pinv.shape, flat_images, inverse_projections)
-
-        # computing regularization
+        # compute regularization
         proj_logits = self._get_logits(inputs=inverse_projections)
-        loss = K.categorical_crossentropy(target=y_true, output=proj_logits)
-        loss_gradient = K.gradients(loss=loss, variables=flat_images)[0] # inputs / flat images
-        # print(loss_gradient)
-        # exit()
-        regularization += tf.reduce_sum(loss_gradient) # tf.norm(loss_gradient, ord=2, axis=0)
+        axis = 1 if self.data_format == "channels_first" else -1
+        loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True,
+                                          axis=axis)  # target = y_true / outputs
+        loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
+        regularization += tf.reduce_sum(loss_gradient)  # tf.norm(loss_gradient, ord=2, axis=0)
+
+        return regularization / self.batch_size*self.n_proj
+
+    def channels_regularizer(self, inputs, outputs):
+        regularization = 0
+
+        size = random.randint(18, 28)
+        seed = random.randint(1, 100)  # one different seed for projecting each batch
+        print("\nsize =", size, ", seed =", seed)
+
+        _, rows, cols, channels = self.inputs.get_shape().as_list()  # self.input_shape
+        inputs = tf.cast(inputs, tf.float32)
+
+        # projection matrices
+        n_features = rows * cols
+        n_components = size * size
+        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
+        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
+        pinv = np.linalg.pinv(proj_matrix)
+
+        # channel projections
+        # flat_images = tf.reshape(tensor=inputs, shape=(self.batch_size, rows * cols, channels))
+        for channel in range(channels):
+            flat_images = tf.reshape(tensor=inputs[:, :, :, channel], shape=(self.batch_size, rows * cols))
+            # project
+            channel_projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
+            channel_inverse_projection = tf.matmul(a=channel_projection, b=pinv, transpose_b=True)
+            channel_inverse_projection = tf.reshape(channel_inverse_projection, shape=(self.batch_size, rows, cols, 1))
+
+            # compute regularization
+            proj_logits = self._get_logits(inputs=channel_inverse_projection)
+            axis = 1 if self.data_format == "channels_first" else -1
+            loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
+            # target = y_true / outputs
+            loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
+            regularization += tf.reduce_sum(loss_gradient)  # tf.norm(loss_gradient, ord=2, axis=0)
+
         return regularization / self.batch_size*self.n_proj
 
     def train(self, x_train, y_train):
@@ -164,10 +188,11 @@ class RandomRegularizer(sklKerasClassifier):
         for batch in range(self.batches):
             print("\n=== training batch", batch+1,"/",self.batches,"===")
             inputs = tf.convert_to_tensor(x_train_batches[batch])
+            outputs = tf.convert_to_tensor(y_train_batches[batch])
 
             for proj in range(self.n_proj):
                 print("\nprojection",proj+1,"/",self.n_proj)
-                loss = self.loss_wrapper(inputs)#, batch)
+                loss = self.loss_wrapper(inputs,outputs)
                 self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
                 self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
 
@@ -249,8 +274,8 @@ class RandomRegularizer(sklKerasClassifier):
         """
         if adversaries_path is None:
             classifier = artKerasClassifier((MIN, MAX), trained_classifier.model, use_logits=False)
-            classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x))
-            classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x))
+            classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
+            classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
             print("\nGenerating adversaries with", method, "method on", dataset_name)
             x_adv = None
             if method == 'fgsm':
@@ -283,18 +308,18 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             return x_adv
 
-class EpochIdxCallback(keras.callbacks.Callback):
-    def __init__(self, model):
-        super(EpochIdxCallback,self).__init__()
-        self.model = model
-    def on_epoch_begin(self, epoch, logs={}):
-        self.epoch = epoch
-        return epoch
-    def set_model(self, model):
-        return self.model
+# class EpochIdxCallback(keras.callbacks.Callback):
+#     def __init__(self, model):
+#         super(EpochIdxCallback,self).__init__()
+#         self.model = model
+#     def on_epoch_begin(self, epoch, logs={}):
+#         self.epoch = epoch
+#         return epoch
+#     def set_model(self, model):
+#         return self.model
 
 
-def main(dataset_name, test, lam):
+def main(dataset_name, test, lam, projection_mode):
 
     # Tensorflow session and initialization
     sess = tf.Session()
@@ -306,12 +331,12 @@ def main(dataset_name, test, lam):
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, test=test)
+                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
 
     modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
                 "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+".h5"
     model_path = RESULTS+time.strftime('%Y-%m-%d') +"/"+ modelname
-    #model_path = TRAINED_MODELS+"random_regularizer/" + modelname
+    # model_path = TRAINED_MODELS+"random_regularizer/" + modelname
 
     classifier.train(x_train, y_train)
     classifier.model.save_weights(model_path)
@@ -319,7 +344,7 @@ def main(dataset_name, test, lam):
     ######### todo: bug on adversarial evaluation. It only works on loaded models..
     del classifier
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, test=test)
+                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
 
     classifier.model.load_weights(model_path)
 
@@ -328,7 +353,7 @@ def main(dataset_name, test, lam):
 
     print("\nBaseline adversaries")
     for attack in ['fgsm','pgd','deepfool','carlini_linf']:
-        filename = dataset_name + "_x_test_" + attack + ".pkl" #"_randreg.pkl"
+        filename = dataset_name + "_x_test_" + attack + ".pkl"
         x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
                                                      adversaries_path=DATA_PATH+filename,
                                                      test=test)
@@ -339,7 +364,7 @@ def main(dataset_name, test, lam):
         x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
                                                      #adversaries_path=DATA_PATH+filename,
                                                      test=test)
-        save_to_pickle(data=x_test_adv, filename=filename)
+        # save_to_pickle(data=x_test_adv, filename=filename)
 
 
 if __name__ == "__main__":
@@ -347,10 +372,12 @@ if __name__ == "__main__":
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
         lam = float(sys.argv[3])
+        projection_mode = sys.argv[4]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         lam = input("\nChoose lambda regularization weight.")
+        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
 
-    main(dataset_name=dataset_name, test=test, lam=lam)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode)
