@@ -5,22 +5,10 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
-from art.classifiers import KerasClassifier
-from baseline_convnet import BaselineConvnet
-from keras.models import load_model
-from utils import *
-import time
-from keras import backend as K
-import multiprocessing as mp
-import logging
-import sys
-import matplotlib.pyplot as plt
-import argparse
 from adversarial_classifier import *
+from baseline_convnet import BaselineConvnet
+import sys
 
-############
-# defaults #
-############
 
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
@@ -55,9 +43,6 @@ class RandomEnsemble(BaselineConvnet):
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
-    ############
-    # training #
-    ############
     def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
@@ -71,8 +56,12 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         start_time = time.time()
-        x_train_projected = compute_projections(x_train, random_seeds=self.random_seeds,
+        x_train_projected, _ = compute_projections(x_train, random_seeds=self.random_seeds,
                                                 n_proj=self.n_proj, size_proj=self.size_proj)
+
+        # eventually adjust input dimension to a single channel projection
+        if x_train_projected.shape[4] == 1:
+            self.input_shape = (self.input_shape[0],self.input_shape[1],1)
 
         classifiers = []
         for i in range(self.n_proj):
@@ -89,79 +78,6 @@ class RandomEnsemble(BaselineConvnet):
         self.trained = True
         return classifiers
 
-    def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
-        """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
-        K.clear_session()
-        # use the same model architecture (not weights) for all trainings
-        baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                   dataset_name=self.dataset_name, data_format=self.data_format)
-
-        start_time = time.time()
-        x_train_projected = compute_single_projection(input_data=x_train, random_seed=self.random_seeds[idx],
-                                                      size_proj=self.size_proj)
-
-        # train n_proj classifiers on different training data
-        classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
-
-        print("\nTraining time for single projection with size_proj=", str(self.size_proj),
-              "): --- %s seconds ---" % (time.time() - start_time))
-
-        if save:
-            start = time.time()
-            classifier.save(filename=MODEL_NAME + "_size="+str(self.size_proj)+"_"+str(self.random_seeds[idx])+".h5",
-                            path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
-                                 MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
-            saving_time = time.time() - start
-            self.training_time -= saving_time
-
-        return classifier
-
-    def parallel_train(self, x_train, y_train, batch_size, epochs):
-        """
-        Trains the baseline model over `n_proj` random projections of the training data whose input shape is
-        `(size_proj, size_proj, 1)` and parallelizes training over the different projections.
-
-        :param x_train:
-        :param y_train:
-        :param batch_size:
-        :param epochs:
-        :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
-        """
-        mpl = mp.log_to_stderr()
-        mpl.setLevel(logging.INFO)
-
-        start = time.time()
-        x_train_projected = compute_projections(x_train, random_seeds=self.random_seeds,
-                                                n_proj=self.n_proj, size_proj=self.size_proj)
-
-        # Define an output queue
-        #output = mp.Queue()
-        # Setup a list of processes that we want to run
-        processes = [mp.Process(target=self.train_single_projection,
-                                args=(x_train, y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
-        # Run processes
-        for p in processes:
-            p.start()
-
-        # Exit the completed processes
-        for p in processes:
-            p.join()
-            #output.close()
-
-        self.training_time += time.time() - start
-
-        # Get process results from the output queue
-        #classifiers = [output.get() for p in processes]
-
-        print("\nParallel training time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
-              "): --- %s seconds ---" % (self.training_time))
-        classifiers = self.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
-                                           model_name="random_ensemble")
-
-        self.trained = True
-
-        return classifiers
-    #################
 
     @staticmethod
     def _sum_ensemble_classifier(classifiers, projected_data):
@@ -252,7 +168,7 @@ class RandomEnsemble(BaselineConvnet):
         :param method: ensemble method chosen. Only sum and mode are currently implemented.
         :return: final predictions for the input data
         """
-        projected_data = compute_projections(data, random_seeds=self.random_seeds,
+        projected_data, _ = compute_projections(data, random_seeds=self.random_seeds,
                                              n_proj=self.n_proj, size_proj=self.size_proj)
 
         if self.ensemble_method == 'sum':
@@ -265,18 +181,17 @@ class RandomEnsemble(BaselineConvnet):
             baseline_classifier = baseline.load_classifier("../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
             baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
             # sum the probabilities across all predictors
-            final_predictions = np.add(predictions, baseline_predictions)
+            final_predictions = np.add(predictions/self.n_proj, baseline_predictions)
             ###############################
-            #print(baseline_predictions.shape)
-            #print(final_predictions.shape)
+            #print(baseline_predictions.shape, final_predictions.shape)
 
-            #return final_predictions
-            return predictions
+            return final_predictions
+            # return predictions
+
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
             return predictions
 
-    # todo: refactor this!
     def evaluate_test_projections(self, classifiers, x_test, y_test):
         """
         Performs a test evaluation on each projected version of the data and also on the final predictions.
@@ -288,7 +203,7 @@ class RandomEnsemble(BaselineConvnet):
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
         if self.x_test_proj is None:
-            self.x_test_proj = compute_projections(x_test, random_seeds=self.random_seeds,
+            self.x_test_proj, _ = compute_projections(x_test, random_seeds=self.random_seeds,
                                                    n_proj=self.n_proj, size_proj=self.size_proj)
         y_test_pred = np.argmax(self.predict(classifiers, x_test, method=self.ensemble_method), axis=1)
 
@@ -362,9 +277,11 @@ def main(dataset_name, test, n_proj, size_proj, attack):
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
 
+    # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj)
+
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
+    # model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
 
     # === load classifier === #
     #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
