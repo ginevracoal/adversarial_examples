@@ -14,6 +14,7 @@ ATTACK=None # supported: "fgsm, "pgd", "deepfool", "carlini_linf"
 
 # === randens === #
 N_PROJ_LIST=[6,9,12,15] # Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15]
+PROJ_MODE="channels" # Supported: flat, channels, one_channel, grayscale
 
 # === randens, parallel_randens === #
 SIZE_PROJ_LIST=[8,12,16,20] # Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20]
@@ -51,7 +52,7 @@ if [ $SCRIPT = "baseline" ]; then
   python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK > $OUT
   sed -n '/ETA:/!p' $OUT > $CLEAN_OUT
 elif [ $SCRIPT = "randens" ]; then
-  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $ATTACK >> $OUT
+  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $ATTACK $PROJ_MODE >> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
   for proj_idx in $(seq 0 15); do

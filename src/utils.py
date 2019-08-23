@@ -247,13 +247,13 @@ def one_channel_projection(input_data, random_seed, size_proj, channel=0):
     return flat_projection(single_channel, random_seed, size_proj)
 
 
-def greyscale_projection(input_data, random_seed, size_proj):
+def grayscale_projection(input_data, random_seed, size_proj):
     samples, rows, cols, channels = input_data.shape
     greyscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
     return flat_projection(greyscale_data, random_seed, size_proj)
 
 
-def compute_projections(input_data, random_seeds, n_proj, size_proj):
+def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given list of random seeds.
 
@@ -277,10 +277,22 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj):
     projections = []
     inverse_projections = []
     for proj_idx in range(n_proj):
-        projection, inverse_projection = flat_projection(input_data=input_data, size_proj=size_proj,
-                                                         random_seed=random_seeds[proj_idx])
         # all_projections[proj_idx,:,:,:,:] = compute_single_projection_channel(input_data=input_data,
         #                                     size_proj=size_proj, random_seed=random_seeds[proj_idx])
+        projection = None
+        inverse_projection = None
+        if projection_mode == "flat":
+            projection, inverse_projection = flat_projection(input_data=input_data, size_proj=size_proj,
+                                                             random_seed=random_seeds[proj_idx])
+        elif projection_mode == "channels":
+            projection, inverse_projection = channels_projection(input_data=input_data, size_proj=size_proj,
+                                                             random_seed=random_seeds[proj_idx])
+        elif projection_mode == "one_channel":
+            projection, inverse_projection = one_channel_projection(input_data=input_data, size_proj=size_proj,
+                                                             random_seed=random_seeds[proj_idx])
+        elif projection_mode == "grayscale":
+            projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
+                                                             random_seed=random_seeds[proj_idx])
         projections.append(projection)
         inverse_projections.append(inverse_projection)
 
@@ -342,7 +354,7 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
     exit()
 
 
-def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, im_idxs=range(10), proj_idx=0):
+def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, projection_mode, test=False, im_idxs=range(10), proj_idx=0):
     """
     Plots input data in the first row, projected data in the second row and inverse projected data in the third row.
     By default it only takes the first 10 samples and the first projection.
@@ -353,7 +365,7 @@ def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, im_idx
     :param size_proj: size of a projection
     """
 
-    projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj)
+    projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
     # print(input_data.shape, projections.shape, inverse_projections.shape)
 
     fig, axs = plt.subplots(nrows=3, ncols=len(im_idxs), figsize=(10, 8))
@@ -365,9 +377,11 @@ def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, im_idx
         axs[1, im_idx].imshow(np.squeeze(projections[proj_idx,im_idx]), cmap=cmap)
         axs[2, im_idx].imshow(np.squeeze(inverse_projections[proj_idx,im_idx]), cmap=cmap)
 
-    plt.show(block=False)
-    input("Press ENTER to exit")
-    exit()
+    if test == False:
+        # If not in testing mode, block imshow.
+        plt.show(block=False)
+        input("Press ENTER to exit")
+        exit()
 
 
 def rgb2gray(rgb):

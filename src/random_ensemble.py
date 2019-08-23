@@ -12,6 +12,7 @@ import sys
 
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
+PROJ_MODE = "flat, channels, one_channel, grayscale"
 
 
 class RandomEnsemble(BaselineConvnet):
@@ -20,7 +21,7 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, data_format, dataset_name):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
         :param n_proj: number of random projections
@@ -34,6 +35,7 @@ class RandomEnsemble(BaselineConvnet):
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
+        self.projection_mode = projection_mode
         # the model is currently implemented on 15 projections max
         self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         self.trained = False
@@ -57,7 +59,8 @@ class RandomEnsemble(BaselineConvnet):
 
         start_time = time.time()
         x_train_projected, _ = compute_projections(x_train, random_seeds=self.random_seeds,
-                                                n_proj=self.n_proj, size_proj=self.size_proj)
+                                                   n_proj=self.n_proj, size_proj=self.size_proj,
+                                                   projection_mode=self.projection_mode)
 
         # eventually adjust input dimension to a single channel projection
         if x_train_projected.shape[4] == 1:
@@ -169,7 +172,8 @@ class RandomEnsemble(BaselineConvnet):
         :return: final predictions for the input data
         """
         projected_data, _ = compute_projections(data, random_seeds=self.random_seeds,
-                                             n_proj=self.n_proj, size_proj=self.size_proj)
+                                                n_proj=self.n_proj, size_proj=self.size_proj,
+                                                projection_mode=self.projection_mode)
 
         if self.ensemble_method == 'sum':
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
@@ -262,26 +266,27 @@ class RandomEnsemble(BaselineConvnet):
 # MAIN #
 ########
 
-def main(dataset_name, test, n_proj, size_proj, attack):
+def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
-    :param attack: choose between "fgsm", "pgd", "deepfool","carlini_linf", "virtual", "newtonfool"
     :param n_proj: number of projections. Trained models used values: 6, 9, 12, 15.
     :param size_proj: size of each projection. You can currently load models with values: 8, 12, 16, 20.
+    :param attack: choose between "fgsm", "pgd", "deepfool","carlini_linf", "virtual", "newtonfool"
     """
 
     # === load data === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, data_format=data_format, dataset_name=dataset_name)
+                           n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
+                           data_format=data_format, dataset_name=dataset_name)
 
-    # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj)
+    # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj, projection_mode)
 
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    # model.save_model(classifier=classifier, model_name="random_ensemble_size=" + str(model.size_proj))
+    # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
     #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
@@ -310,16 +315,19 @@ if __name__ == "__main__":
         test = eval(sys.argv[2])
         n_proj_list = list(map(int, sys.argv[3].strip('[]').split(',')))
         size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
-        attack = sys.argv[5]
+        projection_mode = sys.argv[5]
+        attack = sys.argv[6]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         n_proj_list = input("\nChoose the number of projections (type=list): ")
         size_proj_list = input("\nChoose the size of projections (type=list): ")
+        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
         attack = input("\nChoose an attack ("+ATTACKS+"): ")
 
     for n_proj in n_proj_list:
         for size_proj in size_proj_list:
             K.clear_session()
-            main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj, attack=attack)
+            main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj,
+                 projection_mode=projection_mode, attack=attack)
