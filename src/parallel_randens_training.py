@@ -1,6 +1,5 @@
-from random_ensemble import RandomEnsemble
+from random_ensemble import *
 import sys
-from adversarial_classifier import *
 import multiprocessing as mp
 import logging
 from baseline_convnet import BaselineConvnet
@@ -10,25 +9,26 @@ MODEL_NAME = "random_ensemble"
 
 class ParallelRandomEnsemble(RandomEnsemble):
 
-    def __init__(self, input_shape, num_classes, size_proj, data_format, dataset_name):
-        super(ParallelRandomEnsemble, self).__init__(input_shape, num_classes, None, size_proj, data_format, dataset_name)
-        # None refers to size proj. #todo: explain
-
+    def __init__(self, input_shape, num_classes, size_proj, data_format, dataset_name, projection_mode):
+        super(ParallelRandomEnsemble, self).__init__(input_shape, num_classes, None, size_proj, projection_mode, data_format, dataset_name)
+        # None refers to n_proj since we only have to compute a single projection
 
     def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
+
+        start_time = time.time()
+        x_train_projected, x_train_inverse_projected = compute_single_projection(input_data=x_train, seed=self.random_seeds[idx],
+                                                      size_proj=self.size_proj, projection_mode=self.projection_mode)
+
+        # eventually adjust input dimension to a single channel projection
+        if x_train_projected.shape[3] == 1:
+            self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
+
         # use the same model architecture (not weights) for all trainings
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    dataset_name=self.dataset_name, data_format=self.data_format)
-
-        start_time = time.time()
-        x_train_projected = compute_single_projection(input_data=x_train, random_seed=self.random_seeds[idx],
-                                                      size_proj=self.size_proj)
-
-        # train n_proj classifiers on different training data
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
-
         print("\nTraining time for single projection with size_proj=", str(self.size_proj),
               "): --- %s seconds ---" % (time.time() - start_time))
 
@@ -90,12 +90,12 @@ class ParallelRandomEnsemble(RandomEnsemble):
         return classifiers
 
 
-def main(dataset_name, test, proj_idx, size_proj):
+def main(dataset_name, test, proj_idx, size_proj, proj_mode):
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
     model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
-                                   data_format=data_format, dataset_name=dataset_name)
+                                   data_format=data_format, dataset_name=dataset_name, projection_mode=proj_mode)
     model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
                                   epochs=model.epochs, idx=proj_idx, save=True)
 
@@ -112,15 +112,17 @@ if __name__ == "__main__":
         test = eval(sys.argv[2])
         proj_idx = int(sys.argv[3])
         size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
+        projection_mode = sys.argv[5]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         proj_idx = input("\nChoose the projection idx. ")
         size_proj_list = input("\nChoose size for the projection. ")
+        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
 
     for size_proj in size_proj_list:
         K.clear_session()
-        main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, size_proj=size_proj)
+        main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, size_proj=size_proj, proj_mode=projection_mode)
 
 

@@ -156,27 +156,27 @@ def load_dataset(dataset_name, test):
 #     return projection
 
 
-# todo: this is only used in parallel implementation, extend it to the other methods.
-def compute_single_projection_par(input_data, random_seed, size_proj):
-    """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
-         matrix entries sampling, using the given random_seed.
-
-     :param input_data: high dimensional input data
-     :param random_seed: projection seed
-     :param size_proj: size of a projection
-     :return: np.array containing all random projections of input_data
-     """
-    projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
-    flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
-    single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
-
-    #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
-    for channel in range(input_data.shape[3]):
-        channel_projection = projector.fit_transform(flat_images[:, :, channel]) \
-            .reshape((input_data.shape[0], size_proj, size_proj))
-        single_projection[:, :, :, channel] = channel_projection
-
-    return single_projection
+# todo: this is only used in parallel implementation
+# def compute_single_projection_par(input_data, random_seed, size_proj):
+#     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
+#          matrix entries sampling, using the given random_seed.
+#
+#      :param input_data: high dimensional input data
+#      :param random_seed: projection seed
+#      :param size_proj: size of a projection
+#      :return: np.array containing all random projections of input_data
+#      """
+#     projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
+#     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
+#     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
+#
+#     #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
+#     for channel in range(input_data.shape[3]):
+#         channel_projection = projector.fit_transform(flat_images[:, :, channel]) \
+#             .reshape((input_data.shape[0], size_proj, size_proj))
+#         single_projection[:, :, :, channel] = channel_projection
+#
+#     return single_projection
 
 
 def flat_projection(input_data, random_seed, size_proj):
@@ -263,6 +263,7 @@ def grayscale_projection(input_data, random_seed, size_proj):
     greyscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
     return flat_projection(greyscale_data, random_seed, size_proj)
 
+
 def compute_single_projection(input_data, seed, size_proj, projection_mode):
     # print("\ncomputing",projection_mode,"projection")
 
@@ -280,7 +281,8 @@ def compute_single_projection(input_data, seed, size_proj, projection_mode):
     elif projection_mode == "grayscale":
         projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
                                                               random_seed=seed)
-    return projection,inverse_projection
+    return projection, inverse_projection
+
 
 def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode):
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
