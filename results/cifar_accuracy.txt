@@ -1,22 +1,24 @@
 === BASELINE ===
 
-model            test        fgsm        pgd       deepfool   carlini_linf
-
-original         81.06      70.78       75.72       11.20      68.86
-fgsm_robust      84.83      84.33       84.75       84.05      84.61
-deepfool_robust  84.09      83.92       83.98       83.69      84.06
-pgd_robust       85.03      84.38       84.77       83.80      84.81
-carlini_robust   85.04      84.14       84.58       83.34      84.84
+model            test       fgsm    pgd    deepfool carlini    fgsm    pgd    deepfool carlini
+                             -----baseline adversaries-----     -----robust adversaries-----
+                             
+original         81.06      70.78   75.72   11.20   68.86                   -
+fgsm_robust      84.83      84.33   84.75   84.05   84.61      
+deepfool_robust  84.09      83.92   83.98   83.69   84.06
+pgd_robust       85.03      84.38   84.77   83.80   84.81
+carlini_robust   85.04      84.14   84.58   83.34   84.84
 
 === RANDREG ===
 
-lambda  batch_s  epochs proj  test   fgsm   pgd   deepfool  carlini_linf   time (s)
+lambda  batch_s  epochs proj    mode      test    fgsm    pgd    deepfool carlini    fgsm    pgd    deepfool carlini
+                                                   -----baseline adversaries-----     -----randreg adversaries-----
 
-0.5     1000     120    5         --- estremamente lento ---                          # job 20 ago 21:43
-0.5     1000     36     3                                                             # job 21 ago 08:49
-0.5     1000     50     1
-0.5     1000     36     3       75.79   73.77   74.50   71.48   75.59
-
+0.5     1000     36     3     channels    75.79   73.77   74.50   71.48   75.59
+0.5     1000     36     3     grayscale   75.00   73.15   73.83   70.73   74.79      64.81  69.14  13.43   60.89         # 23 ago 17:23:27 size=(10,20)
+0.5     1000     36     1     channels    73.39   71.65   72.35   69.48   73.08      64.55  68.82  13.86   60.99         # 23 ago 17:23:59 size=(10,20)
+0.5     1000     36     3     channels              # 23 ago 17:25 size=(18,28)
+0.5     1000     120    1     grayscale             # 24 ago 13:32 size=(18,28)
 
 === RANDENS ===
 
@@ -25,17 +27,17 @@ lambda  batch_s  epochs proj  test   fgsm   pgd   deepfool  carlini_linf   time 
 (6,8)          64.55        60.89       62.21       52.79       63.64
 (9,8)          53.47        53.34       53.41       53.23       53.46                   # job 12:58 21 ago
 (12,8)         53.80        53.60       53.74       53.39       53.80
-(15,8)                                                  
+(15,8)
 (6,12)         63.59        60.36       61.72       52.81       62.84
 (9,12)         53.34        53.23       53.25       53.05       53.32
 (12,12)        53.74        53.57       53.64       53.35       53.73
 (15,12)                                                 
 (6,16)         62.19        59.20       60.45       52.62       61.62
 (9,16)         53.15        53.16       53.20       52.92       53.17
-(12,16)     
-(15,16)     
-(6,20)      
+(12,16)
+(15,16)
+(6,20)
 (9,20)         53.25        53.06       53.14       52.91       53.22
-(12,20)     
-(15,20)     
+(12,20)
+(15,20)
 
