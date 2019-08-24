@@ -4,10 +4,10 @@ model            test       fgsm    pgd    deepfool carlini    fgsm    pgd    de
                              -----baseline adversaries-----     -----robust adversaries-----
                              
 original         81.06      70.78   75.72   11.20   68.86                   -
-fgsm_robust      84.83      84.33   84.75   84.05   84.61      
-deepfool_robust  84.09      83.92   83.98   83.69   84.06
-pgd_robust       85.03      84.38   84.77   83.80   84.81
-carlini_robust   85.04      84.14   84.58   83.34   84.84
+fgsm_robust      84.83      84.33   84.75   84.05   84.61      71.48   77.23   9.29   70.80    # 24 ago 10:21:14
+deepfool_robust  84.09      83.92   83.98   83.69   84.06      71.65   77.65   9.13   71.13    # 24 ago 10:21:37
+pgd_robust       85.03      84.38   84.77   83.80   84.81             # 24 ago 10:24
+carlini_robust   85.04      84.14   84.58   83.34   84.84      70.71   77.45   9.09   70.97    # 24 ago 10:22:45
 
 === RANDREG ===
 
@@ -20,7 +20,7 @@ lambda  batch_s  epochs proj    mode      test    fgsm    pgd    deepfool carlin
 0.5     1000     36     3     channels              # 23 ago 17:25 size=(18,28)
 0.5     1000     120    1     grayscale             # 24 ago 13:32 size=(18,28)
 
-=== RANDENS ===
+=== RANDENS ===         # proj_mode = channels
 
 (proj, size)   test         fgsm         pgd       deepfool   carlini_linf
 
@@ -31,7 +31,7 @@ lambda  batch_s  epochs proj    mode      test    fgsm    pgd    deepfool carlin
 (6,12)         63.59        60.36       61.72       52.81       62.84
 (9,12)         53.34        53.23       53.25       53.05       53.32
 (12,12)        53.74        53.57       53.64       53.35       53.73
-(15,12)                                                 
+(15,12)
 (6,16)         62.19        59.20       60.45       52.62       61.62
 (9,16)         53.15        53.16       53.20       52.92       53.17
 (12,16)
@@ -41,3 +41,4 @@ lambda  batch_s  epochs proj    mode      test    fgsm    pgd    deepfool carlin
 (12,20)
 (15,20)
 
+                  # 24 ago 15:07 (6,8) proj_mode = grayscale

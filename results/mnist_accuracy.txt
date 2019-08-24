@@ -4,10 +4,10 @@ model            test      fgsm    pgd    deepfool carlini    fgsm    pgd    dee
                             -----baseline adversaries-----     -----robust adversaries-----
                             
 original         99.13     5.91    0.71   34.83    28.96
-fgsm_robust      99.07     98.91   32.55  96.08    95.82      2.86    0.75   29.52    43.67    # robust adv modello del 24 ago, non quello salvato... rivalutare
-deepfool_robust  99.03     23.11   35.55  99.20    95.70                                       # 24 ago 13:09:18
-pgd_robust       99.10     44.60   99.02  98.34    97.19      1.40                             # 24 ago 13:08
-carlini_robust   99.10     14.74   3.85   94.63    99.06                                       # 24 ago 13:09:45
+fgsm_robust      99.06     98.91   32.55  96.08    95.82      3.62    1.12   31.70    39.89    # 24 ago 15:49
+deepfool_robust  99.03     23.11   35.55  99.20    95.70      17.41   0.70   54.31    35.48    # 24 ago 13:09:18
+pgd_robust       99.10     44.60   99.02  98.34    97.19      1.40    0.68   35.64    58.64    # 24 ago 13:08
+carlini_robust   99.10     14.74   3.85   94.63    99.06      2.42    0.68   33.27    31.18    # 24 ago 13:09:45
 
 === RANDREG ===                                              
                                                              
@@ -18,8 +18,8 @@ lambda  batch_s  epochs proj     test    fgsm    pgd  deepfool  carlini      fgs
 0.5     1000      12     3       98.31   15.95   21.93   94.00   91.33       13.80   1.4    -
 0.5     1000      5      5       98.15   17.72   25.75   93.49   91.00                      -
 0.5     500       12     3       98.39   15.18   16.20   93.16   90.45       21.22   2.38    33.08   38.10       # axis=1 norm
-0.5     1000      12     3       98.25   17.28   23.82   94.73   92.04       14.15   1.29    49.40   36.76                                                                                # 22 ago, 10:25, no norma, flat inputs nel gradiente
-0.5     1000      12     3       70.00   27.00   50.00   65.00   64.00       5.00    8.00                        # 23 ago 14:25:13 size=(18,28)
+0.5     1000      12     3       98.25   17.28   23.82   94.73   92.04       14.15   1.29    49.40   36.76       # 22 ago, 10:25, no norma, flat inputs nel gradiente
+0.5     1000      12     3       70.00   27.00   50.00   65.00   64.00       5.00    8.00    -                   # 23 ago 14:25:13 size=(18,28)
 0.5     1000      12     3       98.31   15.18   17.54   93.62   90.96       15.61   1.32    54.50   36.29       # 23 ago 17:20 size=(10,20)
 
 === RANDENS ===
