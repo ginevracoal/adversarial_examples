@@ -60,7 +60,6 @@ class BaselineConvnet(AdversarialClassifier):
             model = Sequential()
             model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same',
                              input_shape=self.input_shape))
-                             #input_shape=(32, 32, 3)))
             model.add(BatchNormalization())
             model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
             model.add(BatchNormalization())
@@ -103,14 +102,16 @@ def main(dataset_name, test, attack):
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name)
 
     # train classifier #
-    #classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    #model.save_model(classifier = classifier, model_name = dataset_name+"_baseline")
+    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    # model.save_model(classifier = classifier, model_name = dataset_name+"_baseline")
 
     # load classifier #
     # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_baseline.h5"
-    # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
-    rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
-    classifier = model.load_classifier(relative_path=rel_path)
+    # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
+    # classifier = model.load_classifier(relative_path=rel_path)
+
+    rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
+    robust_classifier = model.load_classifier(relative_path=rel_path)
 
     # adversarial training #
     # robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
@@ -118,7 +119,8 @@ def main(dataset_name, test, attack):
     # model.save_model(classifier = robust_classifier, model_name = dataset_name+"_"+attack+"_robust_baseline")
 
     # evaluations #
-    model.evaluate_test(classifier, x_test, y_test)
+    # model.evaluate_test(classifier, x_test, y_test)
+    model.evaluate_test(robust_classifier, x_test, y_test)
 
     #############
     # todo: solve this bug eventually... not urgent
@@ -127,12 +129,14 @@ def main(dataset_name, test, attack):
     # x_test_adv, _ = model.evaluate_adversaries(...)
     #############
 
-    x_test_adv = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
-                                            method=attack, test=test, dataset_name=dataset_name)
-    save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
+    for method in ['fgsm', 'pgd', 'deepfool', 'carlini_linf']:
+        # x_test_adv = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
+        x_test_adv = model.evaluate_adversaries(classifier=robust_classifier, x_test=x_test, y_test=y_test,
+                                                method=method, test=test, dataset_name=dataset_name)
+    # save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
 
-    # for attack in ['fgsm','pgd','deepfool','carlini_linf']:
-    #     x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, dataset_name=dataset_name,
+    # for method in ['fgsm','pgd','deepfool','carlini_linf']:
+    #     x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
     #                                             adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
 
 if __name__ == "__main__":

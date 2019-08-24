@@ -1,40 +1,63 @@
 #!/bin/bash
 
-############
-# settings #
-############
-SCRIPT="randreg" # "baseline", "randens", "parallel_randens", "randreg"
+###########
+#  guide  #
+###########
+##  DATASET_NAME    Supported: mnist,cifar
+##  TEST            If True only takes 100 samples
+##  ATTACK          Supported: None, fgsm, pgd, deepfool, carlini_linf
+##  N_PROJ_LIST     Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15]
+##  SIZE_PROJ_LIST  Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20]
+##  PROJ_MODE       Supported: flat, channels, one_channel, grayscale (only channels and grayscale for randreg)
+                                                                                                                                       
+##########################################                                                                                                                                 ############
+# settings -> deactivate unwanted lines! #
+##########################################
 
-# === all scripts === #
-DATASET_NAME="mnist" # supported: "mnist","cifar"
-TEST="False" # if True only takes 100 samples
+# === baseline === #
+#SCRIPT="baseline"
+#DATASET_NAME="mnist"
+#TEST="True"
+#ATTACK=None 
 
-# === baseline, randens === #
-ATTACK=None # supported: "fgsm, "pgd", "deepfool", "carlini_linf"
 
 # === randens === #
-N_PROJ_LIST=[6,9,12,15] # Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15]
+#SCRIPT="randens"
+#DATASET_NAME="mnist"
+#TEST="True"
+#ATTACK=None
+#N_PROJ_LIST=[6] #,9,12,15]
+#SIZE_PROJ_LIST=[8] #,12,16,20]
+#PROJ_MODE="channels" 
 
-# === randens, parallel_randens === #
-SIZE_PROJ_LIST=[8,12,16,20] # Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20]
 
 # === parallel_randens === #
-#N_PROJ=15 # default is 15
+SCRIPT="parallel_randens"
+DATASET_NAME="mnist"
+TEST="True"
+N_PROJ=1
+SIZE_PROJ_LIST=[8] # , 12, 16, 20]
+PROJ_MODE="grayscale"
+
 
 # === randreg === #
-LAMBDA=0.5
+#SCRIPT="randreg"
+#DATASET_NAME="mnist"
+#TEST="True"
+#LAMBDA=0.5
+#PROJ_MODE="channels" 
 
-# === randens, randreg === #
-PROJ_MODE="channels" # Supported: flat, channels, one_channel, grayscale (only channels and grayscale for randreg)
-
-# === clusterino === #
-#rm screenlog.0
-cd ~/adversarial_examples/src/
-#export CUDA_VISIBLE_DEVICES=-1 # GPU
 
 ##############
 # run script #
 ##############
+
+## cluster
+if [ $HOSTNAME != "zenbook" ] ; then
+  cd ~/adversarial_examples/src/
+  ##export CUDA_VISIBLE_DEVICES=-1 # GPU
+fi
+
 source ~/virtualenvs/venv/bin/activate
 
 DATE=$(date +%Y-%m-%d)
@@ -57,8 +80,8 @@ elif [ $SCRIPT = "randens" ]; then
   python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $ATTACK $PROJ_MODE >> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
-  for proj_idx in $(seq 0 15); do
-    python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST >> $OUT
+  for proj_idx in $(seq 0 $N_PROJ); do
+    python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
     sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
     grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
   done
