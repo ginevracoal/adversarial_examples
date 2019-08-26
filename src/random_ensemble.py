@@ -45,6 +45,16 @@ class RandomEnsemble(BaselineConvnet):
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
+    def compute_projections(self, input_data, random_seeds, n_proj, size_proj, projection_mode):
+        """ Extends utils.compute_projections method in order to handle the third input dimension."""
+        projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
+
+        # eventually adjust input dimension to a single channel projection
+        if projections.shape[4] == 1:
+            self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
+
+        return projections, inverse_projections
+
     def train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
@@ -58,13 +68,12 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         start_time = time.time()
-        x_train_projected, _ = compute_projections(x_train, random_seeds=self.random_seeds,
-                                                   n_proj=self.n_proj, size_proj=self.size_proj,
-                                                   projection_mode=self.projection_mode)
+        x_train_projected, _ = self.compute_projections(x_train, random_seeds=self.random_seeds, n_proj=self.n_proj,
+                                                        size_proj=self.size_proj, projection_mode=self.projection_mode)
 
-        # eventually adjust input dimension to a single channel projection
-        if x_train_projected.shape[4] == 1:
-            self.input_shape = (self.input_shape[0],self.input_shape[1],1)
+        # # eventually adjust input dimension to a single channel projection
+        # if x_train_projected.shape[4] == 1:
+        #     self.input_shape = (self.input_shape[0],self.input_shape[1],1)
 
         classifiers = []
         for i in range(self.n_proj):
@@ -169,9 +178,8 @@ class RandomEnsemble(BaselineConvnet):
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
         :return: final predictions for the input data
         """
-        projected_data, _ = compute_projections(data, random_seeds=self.random_seeds,
-                                                n_proj=self.n_proj, size_proj=self.size_proj,
-                                                projection_mode=self.projection_mode)
+        projected_data, _ = self.compute_projections(data, random_seeds=self.random_seeds, n_proj=self.n_proj,
+                                                     size_proj=self.size_proj, projection_mode=self.projection_mode)
 
         predictions = None
         if self.ensemble_method == 'sum':
@@ -197,9 +205,8 @@ class RandomEnsemble(BaselineConvnet):
         Computes classification reports for each projection.
         """
         if self.x_test_proj is None:
-            self.x_test_proj, _ = compute_projections(x_test, random_seeds=self.random_seeds,
-                                                      n_proj=self.n_proj, size_proj=self.size_proj,
-                                                      projection_mode=self.projection_mode)
+            self.x_test_proj, _ = self.compute_projections(x_test, random_seeds=self.random_seeds, n_proj=self.n_proj,
+                                                           size_proj=self.size_proj, projection_mode=self.projection_mode)
 
             # evaluate each classifier on its projected test set
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -242,9 +249,10 @@ class RandomEnsemble(BaselineConvnet):
         # todo: salvare il modello soltanto nel caso n_proj=15. Per le valutazioni su n_proj inferiori basta il loading corretto.
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
-                proj_classifier.save(filename=model_name+"_size="+str(self.size_proj)+"_"+str(self.random_seeds[i])+".h5",
-                                     path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
-                                          MODEL_NAME + "_sum_size=" + str(self.size_proj) +"/" )
+                filename = model_name + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[i])+".h5"
+                folder = str(self.dataset_name) + "_" + model_name + "_sum_size=" + str(self.size_proj) + "_"+ str(self.projection_mode)+"/"
+                proj_classifier.save(filename=filename,
+                                     path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder )
         else:
             raise ValueError("Model has not been fitted!")
 
@@ -257,7 +265,9 @@ class RandomEnsemble(BaselineConvnet):
         """
         start_time = time.time()
         # load all trained models
-        trained_models = [load_model(relative_path+model_name+"_size=" + str(self.size_proj)+"_"+str(seed)+".h5")
+        folder = str(self.dataset_name) + "_" + model_name + "_sum_size=" + str(self.size_proj) + "_" + \
+                  str(self.projection_mode) + "/"
+        trained_models = [load_model(relative_path+folder+model_name + "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
                           for seed in self.random_seeds[:self.n_proj]]
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
@@ -292,8 +302,7 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
 
     # === adversarial train === #
     #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
