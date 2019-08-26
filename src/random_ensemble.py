@@ -81,7 +81,6 @@ class RandomEnsemble(BaselineConvnet):
         self.trained = True
         return classifiers
 
-
     @staticmethod
     def _sum_ensemble_classifier(classifiers, projected_data):
         """
@@ -110,7 +109,6 @@ class RandomEnsemble(BaselineConvnet):
         # sum the probabilities across all predictors
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
-
 
     @staticmethod
     def _mode_ensemble_classifier(classifiers, projected_data):
@@ -162,67 +160,68 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def predict(self, classifiers, data, *args, **kwargs):
+    def predict(self, classifiers, data, add_baseline_prob=True, *args, **kwargs):
         """
         Compute the average prediction over the trained models.
 
         :param classifiers: list of trained classifiers over different projections
         :param data: input data
-        :param method: ensemble method chosen. Only sum and mode are currently implemented.
+        :param add_baseline_prob: if True adds baseline probabilities to logits layer
         :return: final predictions for the input data
         """
         projected_data, _ = compute_projections(data, random_seeds=self.random_seeds,
                                                 n_proj=self.n_proj, size_proj=self.size_proj,
                                                 projection_mode=self.projection_mode)
 
+        predictions = None
         if self.ensemble_method == 'sum':
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
-
-            #################################
-            # todo: test with this new code which adds probs from the baseline:
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                       data_format=self.data_format, dataset_name=self.dataset_name)
-            baseline_classifier = baseline.load_classifier("../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
-            baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
-            # sum the probabilities across all predictors
-            final_predictions = np.add(predictions/self.n_proj, baseline_predictions)
-            ###############################
-            #print(baseline_predictions.shape, final_predictions.shape)
-
-            return final_predictions
-            # return predictions
-
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
             return predictions
 
-    def evaluate_test_projections(self, classifiers, x_test, y_test):
-        """
-        Performs a test evaluation on each projected version of the data and also on the final predictions.
-        :param classifiers: list of trained classifiers over different projections
-        :param x_test: test data
-        :param y_test: test labels
-        :return: y_test predictions
-        """
-        print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
+        if add_baseline_prob:
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                       data_format=self.data_format, dataset_name=self.dataset_name)
+            baseline_classifier = baseline.load_classifier(
+                "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
+            baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
+            # sum the probabilities across all predictors
+            final_predictions = np.add(predictions / self.n_proj, baseline_predictions)
+            return final_predictions
+        else:
+            return predictions
 
+    def report_projections(self, classifier, x_test, y_test):
+        """
+        Computes classification reports for each projection.
+        """
         if self.x_test_proj is None:
             self.x_test_proj, _ = compute_projections(x_test, random_seeds=self.random_seeds,
-                                                   n_proj=self.n_proj, size_proj=self.size_proj)
-        y_test_pred = np.argmax(self.predict(classifiers, x_test, method=self.ensemble_method), axis=1)
+                                                      n_proj=self.n_proj, size_proj=self.size_proj,
+                                                      projection_mode=self.projection_mode)
 
-        # evaluate each classifier on its projected test set
+            # evaluate each classifier on its projected test set
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name)
-        for i, classifier in enumerate(classifiers):
-            print("\nTest evaluation on projection ", self.random_seeds[i])  # i
-            baseline.evaluate_test(classifier, self.x_test_proj[i], y_test)
+        for i, proj_classifier in enumerate(classifier):
+            print("\nTest evaluation on projection ", self.random_seeds[i])
+            baseline.evaluate_test(proj_classifier, self.x_test_proj[i], y_test)
 
-        # final classifier evaluation on the original test set
-        print("\nFinal test evaluation")
-        super(BaselineConvnet, self).evaluate_test(classifiers, x_test, y_test)
+    def evaluate_test(self, classifier, x_test, y_test, report_projections=False):
+        """ Extends evaluate_test() with projections reports"""
+        if report_projections:
+            self.report_projections(classifier, x_test, y_test)
+        return super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
 
-        return y_test_pred
+    def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
+                             report_projections=False):
+        """ Extends evaluate_adversaries() with projections reports"""
+        if report_projections:
+            self.report_projections(classifier, x_test, y_test)
+        return super(RandomEnsemble, self).evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
+                                                                method=method, dataset_name=dataset_name,
+                                                                adversaries_path=adversaries_path, test=test)
 
     def _generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
         """ Adversaries are generated on the baseline classifier """
@@ -285,12 +284,12 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj, projection_mode)
 
     # === train === #
-    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    #relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
-    #classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
+    relpath = dataset_name + "_random_ensemble_sum_size=" + str(model.size_proj) + "/"
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS + relpath, model_name=MODEL_NAME)
 
     # === adversarial train === #
     #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
@@ -299,12 +298,12 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     #                 "_robust_random_ensemble_size=" + str(model.size_proj))
 
     # === evaluate === #
-    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
+    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test, report_projections=True)
     #model.evaluate_test(robust_classifier, x_test, y_test)
 
     for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
         model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-                                   adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl')
+                                   adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl', report_projections=True)
         #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
     del classifier
 
