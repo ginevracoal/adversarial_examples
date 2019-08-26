@@ -9,7 +9,7 @@ from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
 
-
+REPORT_PROJECTIONS = True
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
@@ -192,7 +192,7 @@ class RandomEnsemble(BaselineConvnet):
         else:
             return predictions
 
-    def report_projections(self, classifier, x_test, y_test):
+    def report_projections(self, classifier, x_test, y_test, eval_set, adversaries_path=None):
         """
         Computes classification reports for each projection.
         """
@@ -206,19 +206,23 @@ class RandomEnsemble(BaselineConvnet):
                                    data_format=self.data_format, dataset_name=self.dataset_name)
         for i, proj_classifier in enumerate(classifier):
             print("\nTest evaluation on projection ", self.random_seeds[i])
-            baseline.evaluate_test(proj_classifier, self.x_test_proj[i], y_test)
+            if eval_set == "test":
+                baseline.evaluate_test(proj_classifier, self.x_test_proj[i], y_test)
+            else:
+                baseline.evaluate_adversaries(classifier=proj_classifier, x_test=x_test, y_test=y_test, method=eval_set,
+                                              dataset_name=dataset_name, adversaries_path=adversaries_path, test=test)
 
-    def evaluate_test(self, classifier, x_test, y_test, report_projections=False):
+    def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_test() with projections reports"""
         if report_projections:
-            self.report_projections(classifier, x_test, y_test)
+            self.report_projections(classifier, x_test, y_test, eval_set="test", adversaries_path=None)
         return super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
 
     def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
                              report_projections=False):
         """ Extends evaluate_adversaries() with projections reports"""
         if report_projections:
-            self.report_projections(classifier, x_test, y_test)
+            self.report_projections(classifier, x_test, y_test, eval_set=method, adversaries_path=adversaries_path)
         return super(RandomEnsemble, self).evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
                                                                 method=method, dataset_name=dataset_name,
                                                                 adversaries_path=adversaries_path, test=test)
@@ -298,12 +302,13 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     #                 "_robust_random_ensemble_size=" + str(model.size_proj))
 
     # === evaluate === #
-    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test, report_projections=True)
-    #model.evaluate_test(robust_classifier, x_test, y_test)
+    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
+    # model.evaluate_test(robust_classifier, x_test, y_test)
 
     for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
+        adversaries_path = '../data/'+dataset_name+'_x_test_'+method+'.pkl'
         model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-                                   adversaries_path='../data/'+dataset_name+'_x_test_'+method+'.pkl', report_projections=True)
+                                   adversaries_path=adversaries_path)
         #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
     del classifier
 
