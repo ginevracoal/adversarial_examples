@@ -8,8 +8,10 @@ from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 import keras.losses
 from random_ensemble import *
 
-# todo: docstrings!
+# todo: docstrings
 # todo: unittest
+
+PROJ_MODE = "grayscale, channels"
 
 
 class RandomRegularizer(sklKerasClassifier):
@@ -40,7 +42,7 @@ class RandomRegularizer(sklKerasClassifier):
             else:
                 self.batch_size = 1000
         elif self.dataset_name == "cifar":
-            self.epochs = 36
+            self.epochs = 60
             self.n_proj = 3
             if test:
                 self.batch_size = 100
@@ -91,8 +93,6 @@ class RandomRegularizer(sklKerasClassifier):
         logits = self._get_logits(inputs=inputs)
         self.outputs = logits
         self.model = Model(inputs=inputs, outputs=logits)
-        #model.compile(loss=self.loss_wrapper(inputs, 0), optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-        # model.summary()
         #return self.model
 
     def loss_wrapper(self, inputs, outputs):
@@ -101,12 +101,27 @@ class RandomRegularizer(sklKerasClassifier):
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "channels":
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
+            else:
+                raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
         return custom_loss
+
+    def regularize_logits(self, inputs, flat_inputs, inverse_projection, outputs, project_points=False):
+        # todo: refactor
+        axis = 1 if self.data_format == "channels_first" else -1
+        if project_points:
+            proj_logits = self._get_logits(inputs=inverse_projection)
+            loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
+            loss_gradient = K.gradients(loss=loss, variables=flat_inputs)[0]
+        else:
+            logits = self._get_logits(inputs=inputs)
+            loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
+            loss_gradient = K.gradients(loss=loss, variables=inputs)[0]
+        return loss_gradient
 
     def grayscale_regularizer(self, inputs, outputs):
         regularization = 0
 
-        size = random.randint(18, 28)
+        size = random.randint(26, 28)
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
@@ -131,12 +146,16 @@ class RandomRegularizer(sklKerasClassifier):
                                          shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
 
         # compute regularization
-        proj_logits = self._get_logits(inputs=inverse_projections)
-        axis = 1 if self.data_format == "channels_first" else -1
-        loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True,
-                                          axis=axis)  # target = y_true / outputs
-        loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
-        regularization += tf.reduce_sum(loss_gradient)  # tf.norm(loss_gradient, ord=2, axis=0)
+        # proj_logits = self._get_logits(inputs=inverse_projections)
+        # axis = 1 if self.data_format == "channels_first" else -1
+        # loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True,
+        #                                   axis=axis)  # target = y_true / outputs
+        # loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
+
+        loss_gradient = self.regularize_logits(inputs=inputs, flat_inputs=flat_images,
+                                               inverse_projection=inverse_projections, outputs=outputs)
+        regularization += tf.reduce_sum(loss_gradient)
+        # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
 
         return regularization / self.batch_size*self.n_proj
 
@@ -158,21 +177,32 @@ class RandomRegularizer(sklKerasClassifier):
         pinv = np.linalg.pinv(proj_matrix)
 
         # channel projections
-        # flat_images = tf.reshape(tensor=inputs, shape=(self.batch_size, rows * cols, channels))
         for channel in range(channels):
             flat_images = tf.reshape(tensor=inputs[:, :, :, channel], shape=(self.batch_size, rows * cols))
+
             # project
             channel_projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
             channel_inverse_projection = tf.matmul(a=channel_projection, b=pinv, transpose_b=True)
             channel_inverse_projection = tf.reshape(channel_inverse_projection, shape=(self.batch_size, rows, cols, 1))
 
-            # compute regularization
-            proj_logits = self._get_logits(inputs=channel_inverse_projection)
-            axis = 1 if self.data_format == "channels_first" else -1
-            loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
-            # target = y_true / outputs
-            loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
-            regularization += tf.reduce_sum(loss_gradient)  # tf.norm(loss_gradient, ord=2, axis=0)
+            loss_gradient = self.regularize_logits(inputs=inputs, flat_inputs=flat_images,
+                                                   inverse_projection=channel_inverse_projection, outputs=outputs)
+
+            # todo: old, remove
+            # # compute regularization
+            # axis = 1 if self.data_format == "channels_first" else -1
+            # if proj_logits:
+            #     proj_logits = self._get_logits(inputs=channel_inverse_projection)
+            #     loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
+            #     loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]
+            # else:
+            #     logits = self._get_logits(inputs=inputs)
+            #     loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
+            #     loss_gradient = K.gradients(loss=loss, variables=inputs)[0]
+            #
+
+            regularization += tf.reduce_sum(loss_gradient)
+            # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
 
         return regularization / self.batch_size*self.n_proj
 
@@ -189,12 +219,14 @@ class RandomRegularizer(sklKerasClassifier):
             print("\n=== training batch", batch+1,"/",self.batches,"===")
             inputs = tf.convert_to_tensor(x_train_batches[batch])
             outputs = tf.convert_to_tensor(y_train_batches[batch])
+            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
 
             for proj in range(self.n_proj):
                 print("\nprojection",proj+1,"/",self.n_proj)
                 loss = self.loss_wrapper(inputs,outputs)
                 self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-                self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size) #callbacks=[EpochIdxCallback(self.model)]
+                self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size,
+                               callbacks=[early_stopping]) #callbacks=[EpochIdxCallback(self.model)]
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
@@ -324,8 +356,7 @@ def main(dataset_name, test, lam, projection_mode):
     # Tensorflow session and initialization
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-    #sess = sess.run(tf.local_variables_initializer())
-    #sess = tf.InteractiveSession()
+    os.makedirs(os.path.dirname(RESULTS+time.strftime('%Y-%m-%d')+"/"), exist_ok=True)
 
     # load dataset
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
@@ -334,12 +365,16 @@ def main(dataset_name, test, lam, projection_mode):
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
 
     modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
-                "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+".h5"
+                "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+\
+                "_"+str(classifier.projection_mode)+".h5"
     model_path = RESULTS+time.strftime('%Y-%m-%d') +"/"+ modelname
     # model_path = TRAINED_MODELS+"random_regularizer/" + modelname
 
     classifier.train(x_train, y_train)
     classifier.model.save_weights(model_path)
+
+    # evaluations #
+    classifier.evaluate_test(x_test=x_test, y_test=y_test)
 
     ######### todo: bug on adversarial evaluation. It only works on loaded models..
     del classifier
@@ -347,9 +382,6 @@ def main(dataset_name, test, lam, projection_mode):
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
 
     classifier.model.load_weights(model_path)
-
-    # evaluations #
-    classifier.evaluate_test(x_test=x_test, y_test=y_test)
 
     print("\nBaseline adversaries")
     for attack in ['fgsm','pgd','deepfool','carlini_linf']:

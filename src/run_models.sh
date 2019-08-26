@@ -3,49 +3,47 @@
 ###########
 #  guide  #
 ###########
-##  DATASET_NAME    Supported: mnist,cifar
-##  TEST            If True only takes 100 samples
-##  ATTACK          Supported: None, fgsm, pgd, deepfool, carlini_linf
-##  N_PROJ_LIST     Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15]
-##  SIZE_PROJ_LIST  Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20]
-##  PROJ_MODE       Supported: flat, channels, one_channel, grayscale (only channels and grayscale for randreg)
-                                                                                                                                       
-##########################################                                                                                                                                 ############
+##  DATASET_NAME    Supported: mnist,cifar.
+##  TEST            If True only takes 100 samples.
+##  ATTACK          Supported: None, fgsm, pgd, deepfool, carlini_linf.
+##  N_PROJ_LIST     Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15].
+##  SIZE_PROJ_LIST  Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20].
+##  PROJ_MODE       Supported for randens, parallel_randens: flat, channels, one_channel, grayscale.
+##                  Supported for randreg: channels, grayscale.
+
+##########################################
 # settings -> deactivate unwanted lines! #
 ##########################################
 
 # === baseline === #
 #SCRIPT="baseline"
 #DATASET_NAME="mnist"
-#TEST="True"
-#ATTACK=None 
-
+#TEST="False"
+#ATTACK="fgsm"
 
 # === randens === #
-#SCRIPT="randens"
-#DATASET_NAME="mnist"
-#TEST="True"
-#ATTACK=None
-#N_PROJ_LIST=[6] #,9,12,15]
-#SIZE_PROJ_LIST=[8] #,12,16,20]
-#PROJ_MODE="channels" 
-
+SCRIPT="randens"
+DATASET_NAME="mnist"
+TEST="False"
+N_PROJ_LIST=[6,9,12,15]
+SIZE_PROJ_LIST=[8,12,16,20]
+PROJ_MODE="channels" # Default: channels
+ATTACK=None
 
 # === parallel_randens === #
-SCRIPT="parallel_randens"
-DATASET_NAME="mnist"
-TEST="True"
-N_PROJ=1
-SIZE_PROJ_LIST=[8] # , 12, 16, 20]
-PROJ_MODE="grayscale"
-
+#SCRIPT="parallel_randens"
+#DATASET_NAME="cifar"
+#TEST="True"
+##N_PROJ=15 # train the maximum n. of projections
+#SIZE_PROJ_LIST=[8,12,16,20]
+#PROJ_MODE="grayscale"
 
 # === randreg === #
 #SCRIPT="randreg"
 #DATASET_NAME="mnist"
-#TEST="True"
+#TEST="False"
 #LAMBDA=0.5
-#PROJ_MODE="channels" 
+#PROJ_MODE="channels" # Defaults: channels for mnist, grayscale for cifar
 
 
 ##############
@@ -77,10 +75,10 @@ if [ $SCRIPT = "baseline" ]; then
   python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK > $OUT
   sed -n '/ETA:/!p' $OUT > $CLEAN_OUT
 elif [ $SCRIPT = "randens" ]; then
-  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $ATTACK $PROJ_MODE >> $OUT
+  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK >> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
-  for proj_idx in $(seq 0 $N_PROJ); do
+  for proj_idx in $(seq 15); do
     python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
     sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
     grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY

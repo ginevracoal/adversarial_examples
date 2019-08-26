@@ -34,15 +34,16 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
         if save:
             start = time.time()
-            classifier.save(
-                filename=MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5",
-                path=RESULTS + time.strftime('%Y-%m-%d') + "/" + str(self.dataset_name) + "_" +
-                     MODEL_NAME + "_sum_size=" + str(self.size_proj) + "/")
+            filename = MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5"
+            folder = str(self.dataset_name) + "_" + MODEL_NAME + "_sum_size=" + str(self.size_proj) + "_" + \
+                     str(self.projection_mode) + "/"
+            classifier.save(filename=filename, path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder)
             saving_time = time.time() - start
             self.training_time -= saving_time
 
         return classifier
 
+    # todo: deprecated, remove
     def parallel_train(self, x_train, y_train, batch_size, epochs):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
@@ -98,11 +99,6 @@ def main(dataset_name, test, proj_idx, size_proj, proj_mode):
                                    data_format=data_format, dataset_name=dataset_name, projection_mode=proj_mode)
     model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
                                   epochs=model.epochs, idx=proj_idx, save=True)
-
-    # todo: add new projections functionalities
-    # eventually adjust input dimension to a single channel projection
-    # if x_train_projected.shape[4] == 1:
-    #     self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
 
 
 if __name__ == "__main__":

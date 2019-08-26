@@ -10,6 +10,7 @@ from baseline_convnet import BaselineConvnet
 import sys
 
 REPORT_PROJECTIONS = True
+ADD_BASELINE_PROB = False
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
@@ -169,7 +170,7 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def predict(self, classifiers, data, add_baseline_prob=True, *args, **kwargs):
+    def predict(self, classifiers, data, add_baseline_prob=ADD_BASELINE_PROB, *args, **kwargs):
         """
         Compute the average prediction over the trained models.
 
@@ -186,7 +187,6 @@ class RandomEnsemble(BaselineConvnet):
             predictions = self._sum_ensemble_classifier(classifiers, projected_data)
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
-            return predictions
 
         if add_baseline_prob:
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -195,7 +195,7 @@ class RandomEnsemble(BaselineConvnet):
                 "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
             baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
             # sum the probabilities across all predictors
-            final_predictions = np.add(predictions / self.n_proj, baseline_predictions)
+            final_predictions = np.add(predictions, baseline_predictions)
             return final_predictions
         else:
             return predictions
@@ -226,7 +226,7 @@ class RandomEnsemble(BaselineConvnet):
         return super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
 
     def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
-                             report_projections=False):
+                             report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_adversaries() with projections reports"""
         if report_projections:
             self.report_projections(classifier, x_test, y_test, eval_set=method, adversaries_path=adversaries_path)
