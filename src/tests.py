@@ -73,8 +73,7 @@ class Test(unittest.TestCase):
 
         # save and load
         model.save_model(classifier=classifiers, model_name="random_ensemble")
-        relpath = RESULTS+time.strftime('%Y-%m-%d')+"/"\
-                  +self.dataset+"_random_ensemble_sum_size="+str(model.size_proj)+"/"
+        relpath = RESULTS+time.strftime('%Y-%m-%d')+"/"
         loaded_classifiers = model.load_classifier(relative_path=relpath, model_name="random_ensemble")
         x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
 
@@ -94,6 +93,10 @@ class Test(unittest.TestCase):
                                    projection_mode=projection_mode)
             plot_inverse_projections(self.x_train, model.random_seeds, model.n_proj, model.size_proj, model.projection_mode,
                                      test=True)
+
+    def test_parallel_train(self):
+
+        pass
 
     def test_random_regularizer(self):
         pass
