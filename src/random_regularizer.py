@@ -96,17 +96,22 @@ class RandomRegularizer(sklKerasClassifier):
         #return self.model
 
     def loss_wrapper(self, inputs, outputs):
+        """ Loss wrapper for custom loss function.
+        # todo: docstring and test
+        """
         def custom_loss(y_true, y_pred):
             if self.projection_mode == "grayscale":
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "channels":
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
+            elif self.projection_mode == "projected_loss":
+                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.projected_loss_regularizer(inputs=inputs, outputs=outputs)
             else:
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
         return custom_loss
 
-    def regularize_logits(self, inputs, flat_inputs, inverse_projection, outputs, project_points=False):
-        # todo: refactor
+    def _get_loss_gradient(self, inputs, flat_inputs, inverse_projection, outputs, project_points=False):
+        # todo: docstring & unittest
         axis = 1 if self.data_format == "channels_first" else -1
         if project_points:
             proj_logits = self._get_logits(inputs=inverse_projection)
@@ -119,6 +124,8 @@ class RandomRegularizer(sklKerasClassifier):
         return loss_gradient
 
     def grayscale_regularizer(self, inputs, outputs):
+        # todo: docstring & unittest
+
         regularization = 0
 
         size = random.randint(26, 28)
@@ -145,14 +152,7 @@ class RandomRegularizer(sklKerasClassifier):
         inverse_projections = tf.reshape(inverse_projections,
                                          shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
 
-        # compute regularization
-        # proj_logits = self._get_logits(inputs=inverse_projections)
-        # axis = 1 if self.data_format == "channels_first" else -1
-        # loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True,
-        #                                   axis=axis)  # target = y_true / outputs
-        # loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]  # variables = inputs / flat images
-
-        loss_gradient = self.regularize_logits(inputs=inputs, flat_inputs=flat_images,
+        loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images,
                                                inverse_projection=inverse_projections, outputs=outputs)
         regularization += tf.reduce_sum(loss_gradient)
         # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
@@ -160,6 +160,8 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization / self.batch_size*self.n_proj
 
     def channels_regularizer(self, inputs, outputs):
+        # todo: docstring & unittest
+
         regularization = 0
 
         size = random.randint(18, 28)
@@ -185,24 +187,39 @@ class RandomRegularizer(sklKerasClassifier):
             channel_inverse_projection = tf.matmul(a=channel_projection, b=pinv, transpose_b=True)
             channel_inverse_projection = tf.reshape(channel_inverse_projection, shape=(self.batch_size, rows, cols, 1))
 
-            loss_gradient = self.regularize_logits(inputs=inputs, flat_inputs=flat_images,
+            loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images,
                                                    inverse_projection=channel_inverse_projection, outputs=outputs)
-
-            # todo: old, remove
-            # # compute regularization
-            # axis = 1 if self.data_format == "channels_first" else -1
-            # if proj_logits:
-            #     proj_logits = self._get_logits(inputs=channel_inverse_projection)
-            #     loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
-            #     loss_gradient = K.gradients(loss=loss, variables=flat_images)[0]
-            # else:
-            #     logits = self._get_logits(inputs=inputs)
-            #     loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
-            #     loss_gradient = K.gradients(loss=loss, variables=inputs)[0]
-            #
 
             regularization += tf.reduce_sum(loss_gradient)
             # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
+
+        return regularization / self.batch_size*self.n_proj
+
+    def projected_loss_regularizer(self, inputs, outputs):
+        # todo: docstring & unittest
+
+        # set params
+        size = random.randint(8, 28)
+        seed = random.randint(1, 100)
+        print("\nsize =", size, ", seed =", seed)
+        _, rows, cols, channels = self.inputs.get_shape().as_list()
+        n_features = rows * cols * channels
+        n_components = size * size * channels
+
+        # compute loss gradient
+        flat_images = tf.reshape(tf.cast(inputs, tf.float32), shape=[self.batch_size, n_features])
+        loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images, inverse_projection=None,
+                                                outputs=outputs, project_points=False)
+
+        # project loss gradient
+        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
+        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
+        flat_loss_gradient = tf.reshape(loss_gradient, shape=[self.batch_size, n_features])
+        projected_loss = tf.matmul(a=flat_loss_gradient, b=proj_matrix, transpose_b=True)
+
+        # compute regularization term
+        projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
+        regularization = tf.reduce_sum(projected_loss)
 
         return regularization / self.batch_size*self.n_proj
 
@@ -274,9 +291,9 @@ class RandomRegularizer(sklKerasClassifier):
 
         # generate adversaries on the test set
         x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
-                                                adversaries_path=adversaries_path, test=test)
+                                           adversaries_path=adversaries_path, test=test)
         # debug
-        print(len(x_test), len(x_test_adv))
+        # print(len(x_test), len(x_test_adv))
 
         # evaluate the performance on the adversarial test set
         y_test_adv = self.predict(x_test_adv)
