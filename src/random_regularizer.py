@@ -11,7 +11,7 @@ from random_ensemble import *
 # todo: docstrings
 # todo: unittest
 
-PROJ_MODE = "grayscale, channels"
+PROJ_MODE = "grayscale, channels, projected_loss"
 
 
 class RandomRegularizer(sklKerasClassifier):
@@ -36,7 +36,7 @@ class RandomRegularizer(sklKerasClassifier):
     def _set_training_params(self):
         if self.dataset_name == "mnist":
             self.epochs = 12
-            self.n_proj = 3
+            self.n_proj = 1
             if test:
                 self.batch_size = 100
             else:
@@ -93,7 +93,6 @@ class RandomRegularizer(sklKerasClassifier):
         logits = self._get_logits(inputs=inputs)
         self.outputs = logits
         self.model = Model(inputs=inputs, outputs=logits)
-        #return self.model
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -112,7 +111,14 @@ class RandomRegularizer(sklKerasClassifier):
 
     def _get_loss_gradient(self, inputs, flat_inputs, inverse_projection, outputs, project_points=False):
         # todo: docstring & unittest
+
         axis = 1 if self.data_format == "channels_first" else -1
+
+        def _compute_gradients(tensor, var_list):
+            grads = tf.gradients(tensor, var_list)
+            return [grad if grad is not None else tf.zeros_like(var)
+                    for var, grad in zip(var_list, grads)]
+
         if project_points:
             proj_logits = self._get_logits(inputs=inverse_projection)
             loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
@@ -120,7 +126,7 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             logits = self._get_logits(inputs=inputs)
             loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
-            loss_gradient = K.gradients(loss=loss, variables=inputs)[0]
+            loss_gradient = _compute_gradients(loss, [flat_inputs])[0]
         return loss_gradient
 
     def grayscale_regularizer(self, inputs, outputs):
@@ -132,7 +138,7 @@ class RandomRegularizer(sklKerasClassifier):
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
-        _, rows, cols, channels = self.inputs.get_shape().as_list()  # self.input_shape
+        _, rows, cols, channels = self.inputs.get_shape().as_list()
         inputs = tf.cast(inputs, tf.float32)
         flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
 
@@ -168,7 +174,7 @@ class RandomRegularizer(sklKerasClassifier):
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
-        _, rows, cols, channels = self.inputs.get_shape().as_list()  # self.input_shape
+        _, rows, cols, channels = self.inputs.get_shape().as_list()
         inputs = tf.cast(inputs, tf.float32)
 
         # projection matrices
@@ -243,7 +249,7 @@ class RandomRegularizer(sklKerasClassifier):
                 loss = self.loss_wrapper(inputs,outputs)
                 self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
                 self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size,
-                               callbacks=[early_stopping]) #callbacks=[EpochIdxCallback(self.model)]
+                               callbacks=[early_stopping])  #callbacks=[EpochIdxCallback(self.model)]
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
