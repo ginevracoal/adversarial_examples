@@ -190,6 +190,8 @@ def flat_projection(input_data, random_seed, size_proj):
     :param projection: np.array containing a random projection of input_data
     :param projection: np.array containing the inverse projection of input_data given by the
     pseudoinverse of the projection matrix
+    # todo: docstring types
+
     """
     # this is needed to go from tf tensors to np arrays:
     sess = tf.Session()
@@ -224,6 +226,7 @@ def channels_projection(input_data, random_seed, size_proj):
     :param projection: np.array containing a random projection of input_data
     :param projection: np.array containing the inverse projection of input_data given by the
     pseudoinverse of the projection matrix
+    # todo: docstring types
     """
 
     sess = tf.Session()
@@ -265,7 +268,20 @@ def grayscale_projection(input_data, random_seed, size_proj):
 
 
 def compute_single_projection(input_data, seed, size_proj, projection_mode):
-    # print("\ncomputing",projection_mode,"projection")
+    """
+    Computes a single projection of the whole input data and the associated inverse projection using Moore-Penrose
+     pseudoinverse.
+    :param input_data: high dimensional input data, type=np.ndarray, shape=(batch_size, rows, cols, channels)
+    :param seed: random seed for projection
+    :param size_proj: size for the projections
+    :param projection_mode: choose computation mode for projections.
+                            Supported modes are "flat","channels", "one_channel" and "grayscale"
+    :return:
+    :param projection: projection of the whole input_data
+                       type=np.ndarray, shape=(batch_size, size, size, channels)
+    :param inverse_projection: inverse projection of the projected points
+                               type=np.ndarray, shape=(batch_size, rows, cols, channels)
+    """
 
     projection = None
     inverse_projection = None
@@ -288,11 +304,11 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
     """ Computes `n_proj` projections of the whole input data over `size_proj` randomly chosen directions, using a
     given list of random seeds.
 
-    :param input_data: high dimensional input data
-    :param random_seeds: list of random seeds for the projections
-    :param n_proj: number of projections
-    :param size_proj: size of a projection
-    :return: np.array containing n_proj random projections on the data
+    :param input_data: high dimensional input data, shape=(batch_size, rows, cols, channels) #todo: type?
+    :param random_seeds: random seeds for the projections, type=list
+    :param n_proj: number of projections, type=int
+    :param size_proj: size of a projection, type=int
+    :return: random projections of input_data, type=np.ndarray, shape=(n_proj, batch_size, size, size, channels)
     """
     # this is needed to go from tf tensors to np arrays:
     sess = tf.Session()
@@ -307,9 +323,6 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
     projections = []
     inverse_projections = []
     for proj_idx in range(n_proj):
-        # all_projections[proj_idx,:,:,:,:] = compute_single_projection_channel(input_data=input_data,
-        #                                     size_proj=size_proj, random_seed=random_seeds[proj_idx])
-
         projection, inverse_projection = compute_single_projection(input_data, random_seeds[proj_idx], size_proj, projection_mode)
         projections.append(projection)
         inverse_projections.append(inverse_projection)
