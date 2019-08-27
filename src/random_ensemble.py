@@ -53,6 +53,8 @@ class RandomEnsemble(BaselineConvnet):
         # eventually adjust input dimension to a single channel projection
         if projections.shape[4] == 1:
             self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
+        else:
+            self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
 
         return projections, inverse_projections
 
@@ -200,39 +202,40 @@ class RandomEnsemble(BaselineConvnet):
         else:
             return predictions
 
-    def report_projections(self, classifier, x_test, y_test, eval_set, adversaries_path=None):
+    def report_projections(self, classifier, x_test_proj, y_test):
         """
-        Computes classification reports for each projection.
+        Computes classification reports on each projection.
         """
-        if self.x_test_proj is None:
-            self.x_test_proj, _ = self.compute_projections(x_test, random_seeds=self.random_seeds, n_proj=self.n_proj,
-                                                           size_proj=self.size_proj, projection_mode=self.projection_mode)
-
-            # evaluate each classifier on its projected test set
+        print("\n === projections report ===")
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name)
         for i, proj_classifier in enumerate(classifier):
             print("\nTest evaluation on projection ", self.random_seeds[i])
-            if eval_set == "test":
-                baseline.evaluate_test(proj_classifier, self.x_test_proj[i], y_test)
-            else:
-                baseline.evaluate_adversaries(classifier=proj_classifier, x_test=x_test, y_test=y_test, method=eval_set,
-                                              dataset_name=dataset_name, adversaries_path=adversaries_path, test=test)
+            baseline.evaluate_test(proj_classifier, x_test_proj[i], y_test)
 
     def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_test() with projections reports"""
+        y_test_pred = super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
         if report_projections:
-            self.report_projections(classifier, x_test, y_test, eval_set="test", adversaries_path=None)
-        return super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
+
+            self.x_test_proj, _ = self.compute_projections(x_test, random_seeds=self.random_seeds, n_proj=self.n_proj,
+                                                        size_proj=self.size_proj, projection_mode=self.projection_mode)
+            self.report_projections(classifier=classifier, x_test_proj=self.x_test_proj, y_test=y_test)
+
+        return y_test_pred
 
     def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
                              report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_adversaries() with projections reports"""
+        x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate_adversaries(classifier=classifier, x_test=x_test,
+                                                                                  y_test=y_test, method=method,
+                                                                                  dataset_name=dataset_name, test=test,
+                                                                                  adversaries_path=adversaries_path)
         if report_projections:
-            self.report_projections(classifier, x_test, y_test, eval_set=method, adversaries_path=adversaries_path)
-        return super(RandomEnsemble, self).evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
-                                                                method=method, dataset_name=dataset_name,
-                                                                adversaries_path=adversaries_path, test=test)
+            x_test_adv_proj, _ = self.compute_projections(x_test_adv, random_seeds=self.random_seeds,
+                                                          n_proj=self.n_proj, size_proj=self.size_proj,
+                                                          projection_mode=self.projection_mode)
+            self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
 
     def _generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
         """ Adversaries are generated on the baseline classifier """
@@ -298,11 +301,11 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj, projection_mode)
 
     # === train === #
-    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+    # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
 
     # === adversarial train === #
     #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
@@ -336,7 +339,7 @@ if __name__ == "__main__":
         test = input("\nDo you just want to test the code? (True/False): ")
         n_proj_list = input("\nChoose the number of projections (type=list): ")
         size_proj_list = input("\nChoose the size of projections (type=list): ")
-        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
+        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         attack = input("\nChoose an attack ("+ATTACKS+"): ")
 
     for n_proj in n_proj_list:
