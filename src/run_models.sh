@@ -22,21 +22,21 @@
 #ATTACK="fgsm"
 
 # === randens === #
-SCRIPT="randens"
-DATASET_NAME="mnist"
-TEST="False"
-N_PROJ_LIST=[6,9,12,15]
-SIZE_PROJ_LIST=[8,12,16,20]
-PROJ_MODE="channels" # Default: channels
-ATTACK=None
+#SCRIPT="randens"
+#DATASET_NAME="mnist"
+#TEST="False"
+#N_PROJ_LIST=[6,9,12,15]
+#SIZE_PROJ_LIST=[8,12,16,20]
+#PROJ_MODE="channels" # Default: channels
+#ATTACK=None
 
 # === parallel_randens === #
-#SCRIPT="parallel_randens"
-#DATASET_NAME="cifar"
-#TEST="True"
-##N_PROJ=15 # train the maximum n. of projections
-#SIZE_PROJ_LIST=[8,12,16,20]
-#PROJ_MODE="grayscale"
+SCRIPT="parallel_randens"
+DATASET_NAME="mnist"
+TEST="False"
+#N_PROJ=15 # train the maximum n. of projections
+SIZE_PROJ_LIST=[8,12,16,20]
+PROJ_MODE="one_channel"
 
 # === randreg === #
 #SCRIPT="randreg"
@@ -78,11 +78,12 @@ elif [ $SCRIPT = "randens" ]; then
   python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK >> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
+  python3 "parallel_randens_training.py" $DATASET_NAME $TEST 0 $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
   for proj_idx in $(seq 15); do
     python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
-    sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
-    grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
   done
+  sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
+  grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
   python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
