@@ -23,9 +23,9 @@ proj  lambda  batch_s  epochs   mode      test    fgsm    pgd    deepfool carlin
 
 === RANDENS ===
 
-proj   size_proj              mode            test    fgsm   pgd  deepfool carlini
+proj   size_proj              mode            test    fgsm   pgd  deepfool carlini     # 27 ago 11:22
 
-6        8                    channels    53.31   53.23   53.28   -      -                                      64.55   60.89   62.21   52.79   63.64   |
+6        8                    channels    53.31   53.23   53.28   -      -
 9        8                    channels    53.47   53.34   53.41   53.23   53.46
 12       8                    channels    53.80   53.60   53.74   53.39   53.80
 15       8                    channels
@@ -41,6 +41,8 @@ proj   size_proj              mode            test    fgsm   pgd  deepfool carli
 9        20                   channels    53.25   53.06   53.14   52.91   53.22
 12       20                   channels
 15       20                   channels
+
+# con baseline prob:
 
 6        8                    grayscale   80.70   71.08   75.88   22.81   75.02   # 24 ago 15:07
 3        28                   grayscale   80.28   70.24   74.84   25.44   74.92   # 25 ago 07:24 train, 20:17 eval
