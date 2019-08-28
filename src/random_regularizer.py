@@ -16,12 +16,13 @@ PROJ_MODE = "grayscale, channels, projected_loss"
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, n_proj):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         self.sess=sess
         self.input_shape = input_shape
+        self.n_proj = n_proj
         self.num_classes = num_classes
         self.dataset_name = dataset_name
         self.data_format = data_format
@@ -36,14 +37,12 @@ class RandomRegularizer(sklKerasClassifier):
     def _set_training_params(self):
         if self.dataset_name == "mnist":
             self.epochs = 12
-            self.n_proj = 1
             if test:
                 self.batch_size = 100
             else:
                 self.batch_size = 1000
         elif self.dataset_name == "cifar":
             self.epochs = 60
-            self.n_proj = 3
             if test:
                 self.batch_size = 100
             else:
@@ -100,10 +99,13 @@ class RandomRegularizer(sklKerasClassifier):
         """
         def custom_loss(y_true, y_pred):
             if self.projection_mode == "grayscale":
+                print("\ngrayscale regularization.")
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "channels":
+                print("\nchannels regularization.")
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "projected_loss":
+                print("\nprojected_loss regularization.")
                 return K.binary_crossentropy(y_true, y_pred) + self.lam * self.projected_loss_regularizer(inputs=inputs, outputs=outputs)
             else:
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
@@ -126,7 +128,7 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             logits = self._get_logits(inputs=inputs)
             loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
-            loss_gradient = _compute_gradients(loss, [flat_inputs])[0]
+            loss_gradient = _compute_gradients(loss, [flat_inputs])[0] # flat_inputs/inputs
         return loss_gradient
 
     def grayscale_regularizer(self, inputs, outputs):
@@ -374,7 +376,7 @@ class RandomRegularizer(sklKerasClassifier):
 #         return self.model
 
 
-def main(dataset_name, test, lam, projection_mode):
+def main(dataset_name, test, lam, projection_mode, n_proj):
 
     # Tensorflow session and initialization
     sess = tf.Session()
@@ -385,7 +387,8 @@ def main(dataset_name, test, lam, projection_mode):
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
+                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
+                                   n_proj=n_proj)
 
     modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
                 "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+\
@@ -402,7 +405,8 @@ def main(dataset_name, test, lam, projection_mode):
     ######### todo: bug on adversarial evaluation. It only works on loaded models..
     del classifier
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode)
+                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
+                                   n_proj=n_proj)
 
     classifier.model.load_weights(model_path)
 
@@ -428,11 +432,13 @@ if __name__ == "__main__":
         test = eval(sys.argv[2])
         lam = float(sys.argv[3])
         projection_mode = sys.argv[4]
+        n_proj = int(sys.argv[5])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         lam = input("\nChoose lambda regularization weight.")
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
+        n_proj = input("\nChoose the number of projections (type=int): ")
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, n_proj=n_proj)
