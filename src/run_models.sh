@@ -9,7 +9,7 @@
 ##  N_PROJ_LIST     Supported: lists containing 0,..,15. Default for training is [15], default for testing is [6,9,12,15].
 ##  SIZE_PROJ_LIST  Supported: list containing 8, 12, 16, 20. Default is [8 12 16 20].
 ##  PROJ_MODE       Supported for randens, parallel_randens: flat, channels, one_channel, grayscale.
-##                  Supported for randreg: channels, grayscale.
+##                  Supported for randreg: channels, grayscale, projected_loss
 
 ##########################################
 # settings -> deactivate unwanted lines! #
@@ -23,7 +23,7 @@
 
 # === randens === #
 #SCRIPT="randens"
-#DATASET_NAME="mnist"
+#DATASET_NAME="cifar"
 #TEST="False"
 #N_PROJ_LIST=[6,9,12,15]
 #SIZE_PROJ_LIST=[8,12,16,20]
@@ -31,20 +31,20 @@
 #ATTACK=None
 
 # === parallel_randens === #
-SCRIPT="parallel_randens"
-DATASET_NAME="mnist"
-TEST="False"
-#N_PROJ=15 # train the maximum n. of projections
-SIZE_PROJ_LIST=[8,12,16,20]
-PROJ_MODE="one_channel"
-
-# === randreg === #
-#SCRIPT="randreg"
+#SCRIPT="parallel_randens"
 #DATASET_NAME="mnist"
 #TEST="False"
-#LAMBDA=0.5
-#PROJ_MODE="channels" # Defaults: channels for mnist, grayscale for cifar
+##N_PROJ=15 # train the maximum n. of projections
+#SIZE_PROJ_LIST=[8,12,16,20]
+#PROJ_MODE="one_channel"
 
+# === randreg === #
+SCRIPT="randreg"
+DATASET_NAME="cifar"
+TEST="False"
+LAMBDA=0.6
+PROJ_MODE="projected_loss"
+N_PROJ=1
 
 ##############
 # run script #
@@ -85,6 +85,6 @@ elif [ $SCRIPT = "parallel_randens" ]; then
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
   grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
-  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE >> $OUT
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $N_PROJ >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi
