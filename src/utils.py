@@ -385,7 +385,7 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
     exit()
 
 
-def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, projection_mode, test=False, im_idxs=range(10), proj_idx=0):
+def plot_inverse_projections(input_data, projections, inverse_projections, proj_idx=0, test=False):#input_data,, ):#: random_seeds, n_proj, size_proj, projection_mode, test=False, ):
     """
     Plots input data in the first row, projected data in the second row and inverse projected data in the third row.
     By default it only takes the first 10 samples and the first projection.
@@ -396,14 +396,14 @@ def plot_inverse_projections(input_data, random_seeds, n_proj, size_proj, projec
     :param size_proj: size of a projection
     """
 
-    projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
+    # projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
     # print(input_data.shape, projections.shape, inverse_projections.shape)
+    n_images = 10
+    fig, axs = plt.subplots(nrows=3, ncols=n_images, figsize=(10, 8))
 
-    fig, axs = plt.subplots(nrows=3, ncols=len(im_idxs), figsize=(10, 8))
-
-    # cmap = "gray" if input_data.shape[3] == 1 else None
-    cmap = None
-    for im_idx in range(len(im_idxs)):
+    cmap = "gray" if inverse_projections.shape[4] == 1 else None
+    # cmap = None
+    for im_idx in range(n_images):
         axs[0, im_idx].imshow(np.squeeze(input_data[im_idx]), cmap=cmap)
         axs[1, im_idx].imshow(np.squeeze(projections[proj_idx,im_idx]), cmap=cmap)
         axs[2, im_idx].imshow(np.squeeze(inverse_projections[proj_idx,im_idx]), cmap=cmap)

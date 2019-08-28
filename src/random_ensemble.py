@@ -5,12 +5,13 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
+import random
 from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
 
-REPORT_PROJECTIONS = True
-ADD_BASELINE_PROB = False
+REPORT_PROJECTIONS = False
+ADD_BASELINE_PROB = True
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
@@ -298,14 +299,26 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name)
 
-    # plot_inverse_projections(x_train, model.random_seeds, n_proj, size_proj, projection_mode)
+    # === plot projections === #
+    # projections, inverse_projections = compute_projections(input_data=x_test, n_proj=n_proj, size_proj=size_proj,
+    #                                                        random_seeds=random.sample(range(1, 100), n_proj),
+    #                                                        projection_mode=projection_mode)
+    # plot_inverse_projections(x_test, projections, inverse_projections)
 
     # === train === #
-    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+
+    # === evaluate on first projection === #
+    # projections, inverse_projections = compute_projections(input_data=x_test, n_proj=1, size_proj=size_proj,
+    #                                                        random_seeds=random.sample(range(1, 100), 1),
+    #                                                        projection_mode=projection_mode)
+    # # print(inverse_projections.shape)
+    # model.evaluate_test(classifier, inverse_projections[0], y_test)
+    # exit()
 
     # === adversarial train === #
     #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
