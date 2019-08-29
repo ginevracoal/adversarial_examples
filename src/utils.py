@@ -8,7 +8,6 @@ from sklearn.random_projection import GaussianRandomProjection
 import os
 import matplotlib.pyplot as plt
 import tensorflow as tf
-import random
 
 MIN = 0
 MAX = 255
@@ -185,7 +184,6 @@ def channels_projection(input_data, random_seed, size_proj):
     sess = tf.Session()
     sess.as_default()
     samples, rows, cols, channels = input_data.shape
-
     projection = np.empty((samples, size_proj, size_proj, channels))
     inverse_projection = np.empty(input_data.shape)
     for channel in range(channels):
@@ -194,15 +192,7 @@ def channels_projection(input_data, random_seed, size_proj):
         projection[:, :, :, channel] = np.squeeze(channel_projection)
         inverse_projection[:, :, :, channel] = np.squeeze(channel_inverse_projection)
 
-    # plot_inverse_projection(input_data, projection[:,:,:,2], inverse_projection[:,:,:,2])
-    # plot_inverse_projection(input_data, projection, inverse_projection)
     return projection, inverse_projection
-
-
-def one_channel_projection(input_data, random_seed, size_proj, channel=0):
-    samples, rows, cols, channels = input_data.shape
-    single_channel = input_data[:,:,:,channel].reshape(samples, rows, cols, 1)
-    return flat_projection(single_channel, random_seed, size_proj)
 
 
 def grayscale_projection(input_data, random_seed, size_proj):
@@ -235,9 +225,6 @@ def compute_single_projection(input_data, seed, size_proj, projection_mode):
     elif projection_mode == "channels":
         projection, inverse_projection = channels_projection(input_data=input_data, size_proj=size_proj,
                                                              random_seed=seed)
-    elif projection_mode == "one_channel":
-        projection, inverse_projection = one_channel_projection(input_data=input_data, size_proj=size_proj,
-                                                                random_seed=seed)
     elif projection_mode == "grayscale":
         projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
                                                               random_seed=seed)
@@ -260,9 +247,6 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
 
     print("Input shape: ", input_data.shape)
     print("\nComputing ",n_proj,"random projections in ",projection_mode,"mode: ")
-    # samples, rows, cols, channels = input_data.shape
-    # projections = np.empty(shape=(n_proj, samples, size_proj, size_proj, channels))
-    # inverse_projections = np.empty(shape=(n_proj, samples, rows, cols, channels))
 
     projections = []
     inverse_projections = []
@@ -270,12 +254,21 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
         projection, inverse_projection = compute_single_projection(input_data, random_seeds[proj_idx], size_proj, projection_mode)
         projections.append(projection)
         inverse_projections.append(inverse_projection)
-
     projections = np.array(projections)
     inverse_projections = np.array(inverse_projections)
     print("Projected data dimensions:", projections.shape)
 
     return projections, inverse_projections
+
+
+def compute_perturbations(input_data, inverse_projections):
+    perturbations = np.copy(input_data)
+    for channel in range(input_data.shape[3]):
+        for inv_proj in inverse_projections:
+            perturbations[:, :, :, channel] = np.add(perturbations[:, :, :, channel], inv_proj[:,:,:,channel])
+
+    return perturbations
+
 
 ################
 # Pickle utils #
@@ -315,21 +308,7 @@ def load_from_pickle(path, test):
 ##############
 
 
-def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
-    # todo. deprecated, remove this
-    fig, axs = plt.subplots(len(im_idxs),n_proj+1,figsize=(10, 8))
-    for im_idx, im in enumerate(im_idxs):
-        axs[im_idx, 0].imshow(np.squeeze(input_data)[im_idx])
-        for proj in range(n_proj):
-            axs[im_idx, proj+1].imshow(np.squeeze(projected_data)[proj][im])
-
-    # block plots at the end of code execution
-    plt.show(block=False)
-    input("Press ENTER to exit")
-    exit()
-
-
-def plot_inverse_projection(input_data, projection, inverse_projection, test=False):#input_data,, ):#: random_seeds, n_proj, size_proj, projection_mode, test=False, ):
+def plot_projections(image_data_list, cmap=None, test=False):#input_data,, ):#: random_seeds, n_proj, size_proj, projection_mode, test=False, ):
     """
     Plots input data in the first row, projected data in the second row and inverse projected data in the third row.
     By default it only takes the first 10 samples and the first projection.
@@ -340,18 +319,15 @@ def plot_inverse_projection(input_data, projection, inverse_projection, test=Fal
     :param size_proj: size of a projection
     """
 
-    # projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
-    # print(input_data.shape, projections.shape, inverse_projections.shape)
     n_images = 10
-    fig, axs = plt.subplots(nrows=3, ncols=n_images, figsize=(10, 8))
+    fig, axs = plt.subplots(nrows=len(image_data_list), ncols=n_images, figsize=(10, 8))
 
-    cmap = "gray" if inverse_projection.shape[3] == 1 else None
-    # cmap = "gray" if inverse_projection) == 3 else None
-    # cmap = None
-    for im_idx in range(n_images):
-        axs[0, im_idx].imshow(np.squeeze(input_data[im_idx]), cmap=cmap)
-        axs[1, im_idx].imshow(np.squeeze(projection[im_idx]), cmap=cmap)
-        axs[2, im_idx].imshow(np.squeeze(inverse_projection[im_idx]), cmap=cmap)
+    if image_data_list[0].shape[3] == 1:
+        cmap = "gray"
+
+    for group in range(len(image_data_list)):
+        for im_idx in range(n_images):
+            axs[group, im_idx].imshow(np.squeeze(image_data_list[group][im_idx]), cmap=cmap)
 
     if test is False:
         # If not in testing mode, block imshow.
