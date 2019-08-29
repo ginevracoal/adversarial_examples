@@ -8,6 +8,7 @@ from sklearn.random_projection import GaussianRandomProjection
 import os
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import random
 
 MIN = 0
 MAX = 255
@@ -131,54 +132,6 @@ def load_dataset(dataset_name, test):
 ######################
 
 
-# todo: remove, deprecated
-# def one_channel_projection_old(input_data, random_seed, size_proj, channel=0):
-#     """ Computes one projection over a single channel of the whole input data.
-#      It samples `size_proj` random directions for the projection using the given random_seed.
-#
-#      :param input_data: original input data
-#      :param random_seed: projection seed
-#      :param size_proj: size of a projection
-#      :return: np.array containing the projected version of input_data
-#      """
-#     samples, rows, cols, channels = input_data.shape
-#
-#     projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
-#
-#     flat_images = input_data.reshape((samples, rows*cols, channels))
-#     projection = np.empty((samples, size_proj, size_proj, channels))
-#
-#     for im in range(samples):
-#         projected_image = np.empty(shape=(size_proj * size_proj, channels))
-#         projected_image[:, channel] = projector.fit_transform(flat_images[im, :, channel].reshape(1, -1))
-#         projection[im, :, :] = projected_image.reshape((size_proj, size_proj, channels))
-#
-#     return projection
-
-
-# todo: this is only used in parallel implementation
-# def compute_single_projection_par(input_data, random_seed, size_proj):
-#     """ Computes one projection of the whole input data over `size_proj` randomly chosen directions with Gaussian
-#          matrix entries sampling, using the given random_seed.
-#
-#      :param input_data: high dimensional input data
-#      :param random_seed: projection seed
-#      :param size_proj: size of a projection
-#      :return: np.array containing all random projections of input_data
-#      """
-#     projector = GaussianRandomProjection(n_components=size_proj*size_proj, random_state=random_seed)
-#     flat_images = input_data.reshape((input_data.shape[0], input_data.shape[1] * input_data.shape[2], input_data.shape[3]))
-#     single_projection = np.empty((input_data.shape[0], size_proj, size_proj, input_data.shape[3]))
-#
-#     #channel_projection = np.empty(shape=(input_data.shape[0], size_proj * size_proj))
-#     for channel in range(input_data.shape[3]):
-#         channel_projection = projector.fit_transform(flat_images[:, :, channel]) \
-#             .reshape((input_data.shape[0], size_proj, size_proj))
-#         single_projection[:, :, :, channel] = channel_projection
-#
-#     return single_projection
-
-
 def flat_projection(input_data, random_seed, size_proj):
     """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
     It samples `size_proj` random directions for the projection using the given random_seed.
@@ -233,25 +186,16 @@ def channels_projection(input_data, random_seed, size_proj):
     sess.as_default()
     samples, rows, cols, channels = input_data.shape
 
-    # projection_matrices
-    projector = GaussianRandomProjection(n_components=size_proj * size_proj, random_state=random_seed)
-    proj_matrix = np.float32(projector._make_random_matrix(size_proj * size_proj, rows * cols))
-    pinv = np.linalg.pinv(proj_matrix)
-
-    # compute projections
-    flat_images = tf.cast(input_data.reshape((samples, rows * cols, channels)), dtype=tf.float32)
     projection = np.empty((samples, size_proj, size_proj, channels))
     inverse_projection = np.empty(input_data.shape)
     for channel in range(channels):
-        # projection
-        channel_projections = tf.matmul(a=flat_images[:, :, channel], b=proj_matrix, transpose_b=True)
-        im_channel_projections = tf.reshape(channel_projections, shape=(samples, size_proj, size_proj))
-        projection[:, :, :, channel] = im_channel_projections.eval(session=sess)
-        # inverse projection
-        channel_inverse_projections = tf.matmul(a=channel_projections, b=pinv, transpose_b=True)
-        im_channel_inverse_projections = tf.reshape(channel_inverse_projections, shape=(samples, rows, cols))
-        inverse_projection[:, :, :, channel] = im_channel_inverse_projections.eval(session=sess)
+        single_channel = input_data[:, :, :, channel].reshape(samples, rows, cols, 1)
+        channel_projection, channel_inverse_projection = flat_projection(single_channel, random_seed, size_proj)
+        projection[:, :, :, channel] = np.squeeze(channel_projection)
+        inverse_projection[:, :, :, channel] = np.squeeze(channel_inverse_projection)
 
+    # plot_inverse_projection(input_data, projection[:,:,:,2], inverse_projection[:,:,:,2])
+    # plot_inverse_projection(input_data, projection, inverse_projection)
     return projection, inverse_projection
 
 
@@ -385,7 +329,7 @@ def plot_projected_images(input_data, projected_data, n_proj, im_idxs):
     exit()
 
 
-def plot_inverse_projections(input_data, projections, inverse_projections, proj_idx=0, test=False):#input_data,, ):#: random_seeds, n_proj, size_proj, projection_mode, test=False, ):
+def plot_inverse_projection(input_data, projection, inverse_projection, test=False):#input_data,, ):#: random_seeds, n_proj, size_proj, projection_mode, test=False, ):
     """
     Plots input data in the first row, projected data in the second row and inverse projected data in the third row.
     By default it only takes the first 10 samples and the first projection.
@@ -401,14 +345,15 @@ def plot_inverse_projections(input_data, projections, inverse_projections, proj_
     n_images = 10
     fig, axs = plt.subplots(nrows=3, ncols=n_images, figsize=(10, 8))
 
-    cmap = "gray" if inverse_projections.shape[4] == 1 else None
+    cmap = "gray" if inverse_projection.shape[3] == 1 else None
+    # cmap = "gray" if inverse_projection) == 3 else None
     # cmap = None
     for im_idx in range(n_images):
         axs[0, im_idx].imshow(np.squeeze(input_data[im_idx]), cmap=cmap)
-        axs[1, im_idx].imshow(np.squeeze(projections[proj_idx,im_idx]), cmap=cmap)
-        axs[2, im_idx].imshow(np.squeeze(inverse_projections[proj_idx,im_idx]), cmap=cmap)
+        axs[1, im_idx].imshow(np.squeeze(projection[im_idx]), cmap=cmap)
+        axs[2, im_idx].imshow(np.squeeze(inverse_projection[im_idx]), cmap=cmap)
 
-    if test == False:
+    if test is False:
         # If not in testing mode, block imshow.
         plt.show(block=False)
         input("Press ENTER to exit")

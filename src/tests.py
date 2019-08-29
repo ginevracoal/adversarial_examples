@@ -17,7 +17,7 @@ class Test(unittest.TestCase):
         super(Test, self).__init__(*args, **kwargs)
         self.dataset = "mnist"
         self.x_train, self.y_train, self.x_test, self.y_test, \
-            self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
+        self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
         # baseline on mnist
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format, dataset_name=self.dataset)
@@ -83,19 +83,32 @@ class Test(unittest.TestCase):
     def test_cifar_load_and_train(self):
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True)
         model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                dataset_name=self.dataset)
+                                dataset_name="cifar")
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     def test_plot_projections(self):
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar", test=True)
         for projection_mode in ["flat","channels","one_channel","grayscale"]:
-            model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
-                                   n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
-                                   projection_mode=projection_mode)
-            plot_inverse_projections(self.x_train, model.random_seeds, model.n_proj, model.size_proj, model.projection_mode,
-                                     test=True)
+            projections, inverse_projections = compute_projections(input_data=x_test, n_proj=N_PROJECTIONS,
+                                                                   size_proj=SIZE_PROJECTION,
+                                                                   random_seeds=random.sample(range(1, 100), N_PROJECTIONS),
+                                                                   projection_mode=projection_mode)
+            plot_inverse_projection(x_test, projections[0], inverse_projections[0], test=True)
+
+    # todo: buggy
+    def test_projection_modes_cifar(self):
+        # x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar", test=True)
+        # for projection_mode in ["flat","channels","one_channel","grayscale"]:
+        #     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes, dataset_name="cifar",
+        #                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=data_format,
+        #                            projection_mode=projection_mode)
+        #     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+        #     model.evaluate_test(classifier, x_test, y_test)
+        #     model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', dataset_name="cifar",
+        #                                report_projections=True)
+        pass
 
     def test_parallel_train(self):
-
         pass
 
     def test_random_regularizer(self):
