@@ -31,7 +31,7 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         if size_proj > input_shape[1]:
-            raise ValueError("The number of projections has to be lower than the image size.")
+            raise ValueError("The size of projections has to be lower than the image size.")
 
         super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name)
         self.input_shape = (size_proj, size_proj, input_shape[2])
@@ -42,14 +42,16 @@ class RandomEnsemble(BaselineConvnet):
         self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
         self.trained = False
         self.training_time = 0
+        self.ensemble_method = "sum"  # supported methods: mode, sum
         self.x_test_proj = None
-        self.ensemble_method = "sum"  # possible methods: mode, sum
+        self.baseline_classifier = None
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
-    def compute_projections(self, input_data, random_seeds, n_proj, size_proj, projection_mode):
+    def compute_projections(self, input_data):
         """ Extends utils.compute_projections method in order to handle the third input dimension."""
-        projections, inverse_projections = compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode)
+        projections, inverse_projections = compute_projections(input_data, self.random_seeds, self.n_proj,
+                                                               self.size_proj, self.projection_mode)
 
         # eventually adjust input dimension to a single channel projection
         if projections.shape[4] == 1:
@@ -72,8 +74,7 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         start_time = time.time()
-        x_train_projected, _ = self.compute_projections(x_train, random_seeds=self.random_seeds, n_proj=self.n_proj,
-                                                        size_proj=self.size_proj, projection_mode=self.projection_mode)
+        x_train_projected, _ = self.compute_projections(x_train)
 
         # # eventually adjust input dimension to a single channel projection
         # if x_train_projected.shape[4] == 1:
@@ -182,8 +183,7 @@ class RandomEnsemble(BaselineConvnet):
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
         :return: final predictions for the input data
         """
-        projected_data, _ = self.compute_projections(data, random_seeds=self.random_seeds, n_proj=self.n_proj,
-                                                     size_proj=self.size_proj, projection_mode=self.projection_mode)
+        projected_data, _ = self.compute_projections(data)
 
         predictions = None
         if self.ensemble_method == 'sum':
@@ -194,9 +194,10 @@ class RandomEnsemble(BaselineConvnet):
         if add_baseline_prob:
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name)
-            baseline_classifier = baseline.load_classifier(
-                "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
-            baseline_predictions = np.array(baseline.predict(baseline_classifier, data))
+            if self.baseline_classifier is None:
+                self.baseline_classifier = baseline.load_classifier(
+                    "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
+            baseline_predictions = np.array(baseline.predict(self.baseline_classifier, data))
             # sum the probabilities across all predictors
             final_predictions = np.add(predictions, baseline_predictions)
             return final_predictions
@@ -219,8 +220,7 @@ class RandomEnsemble(BaselineConvnet):
         y_test_pred = super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
         if report_projections:
 
-            self.x_test_proj, _ = self.compute_projections(x_test, random_seeds=self.random_seeds, n_proj=self.n_proj,
-                                                        size_proj=self.size_proj, projection_mode=self.projection_mode)
+            self.x_test_proj, _ = self.compute_projections(x_test)
             self.report_projections(classifier=classifier, x_test_proj=self.x_test_proj, y_test=y_test)
 
         return y_test_pred
@@ -233,9 +233,7 @@ class RandomEnsemble(BaselineConvnet):
                                                                                   dataset_name=dataset_name, test=test,
                                                                                   adversaries_path=adversaries_path)
         if report_projections:
-            x_test_adv_proj, _ = self.compute_projections(x_test_adv, random_seeds=self.random_seeds,
-                                                          n_proj=self.n_proj, size_proj=self.size_proj,
-                                                          projection_mode=self.projection_mode)
+            x_test_adv_proj, _ = self.compute_projections(x_test_adv)
             self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
 
     def _generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
@@ -243,8 +241,10 @@ class RandomEnsemble(BaselineConvnet):
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name)
-        baseline_classifier = baseline.load_classifier("../trained_models/baseline/"+dataset_name+"_baseline.h5")
-        x_adv = baseline._generate_adversaries(baseline_classifier, x, y, method=method, dataset_name=dataset_name,
+        if self.baseline_classifier is None:
+            self.baseline_classifier = baseline.load_classifier(
+                "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
+        x_adv = baseline._generate_adversaries(self.baseline_classifier, x, y, method=method, dataset_name=dataset_name,
                                                adversaries_path=adversaries_path, test=test)
 
         return x_adv
@@ -300,24 +300,24 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
                            data_format=data_format, dataset_name=dataset_name)
 
     # === plot projections === #
-    # projections, inverse_projections = compute_projections(input_data=x_test, n_proj=n_proj, size_proj=size_proj,
-    #                                                        random_seeds=random.sample(range(1, 100), n_proj),
-    #                                                        projection_mode=projection_mode)
-    # plot_inverse_projections(x_test, projections, inverse_projections)
+    projections, inverse_projections = model.compute_projections(input_data=x_test)
+    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
 
     # === train === #
-    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+    # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
 
-    # === evaluate on first projection === #
-    # projections, inverse_projections = compute_projections(input_data=x_test, n_proj=1, size_proj=size_proj,
-    #                                                        random_seeds=random.sample(range(1, 100), 1),
-    #                                                        projection_mode=projection_mode)
-    # # print(inverse_projections.shape)
-    # model.evaluate_test(classifier, inverse_projections[0], y_test)
+    # === evaluate baseline on perturbations === #
+    # baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+    #                         dataset_name=dataset_name)
+    # rel_path = "../trained_models/baseline/" + str(dataset_name) + "_baseline.h5"
+    # baseline_classifier = baseline.load_classifier(relative_path=rel_path)
+    # perturbations = compute_perturbations(x_test, inverse_projections)
+    # plot_projections(image_data_list=[x_test,perturbations])
+    # baseline.evaluate_test(baseline_classifier, perturbations, y_test)
     # exit()
 
     # === adversarial train === #
