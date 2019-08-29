@@ -5,10 +5,10 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
-import random
 from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
+# from projection_functions import compute_projections # todo: test new methods from projection_functions.py
 
 REPORT_PROJECTIONS = False
 ADD_BASELINE_PROB = True
@@ -58,6 +58,8 @@ class RandomEnsemble(BaselineConvnet):
             self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
         else:
             self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
+
+        # todo: use methods from utils defined in tf framework, and here convert them to np.arrays
 
         return projections, inverse_projections
 
@@ -350,8 +352,8 @@ if __name__ == "__main__":
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        n_proj_list = input("\nChoose the number of projections (type=list): ")
-        size_proj_list = input("\nChoose the size of projections (type=list): ")
+        n_proj_list = list(map(int, input("\nChoose the number of projections (type=list): ").strip('[]').split(',')))
+        size_proj_list = list(map(int, input("\nChoose the size of projections (type=list): ").strip('[]').split(',')))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         attack = input("\nChoose an attack ("+ATTACKS+"): ")
 

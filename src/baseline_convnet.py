@@ -4,11 +4,11 @@
 Simple CNN model. This is our benchmark on the MNIST dataset.
 """
 
+from adversarial_classifier import *
 from adversarial_classifier import AdversarialClassifier
 from keras.models import Model, Sequential
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
 from keras.optimizers import SGD
-from adversarial_classifier import *
 import sys
 
 ############
@@ -88,7 +88,6 @@ class BaselineConvnet(AdversarialClassifier):
 
             return model
 
-
 def main(dataset_name, test, attack):
     """
     :param dataset: choose between "mnist" and "cifar"
@@ -106,12 +105,12 @@ def main(dataset_name, test, attack):
     # model.save_model(classifier = classifier, model_name = dataset_name+"_baseline")
 
     # load classifier #
-    # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_baseline.h5"
+    rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_baseline.h5"
     # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
-    # classifier = model.load_classifier(relative_path=rel_path)
+    classifier = model.load_classifier(relative_path=rel_path)
 
-    rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
-    robust_classifier = model.load_classifier(relative_path=rel_path)
+    # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
+    # robust_classifier = model.load_classifier(relative_path=rel_path)
 
     # adversarial training #
     # robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,

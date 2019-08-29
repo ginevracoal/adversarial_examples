@@ -40,11 +40,11 @@
 
 # === randreg === #
 SCRIPT="randreg"
-DATASET_NAME="cifar"
+DATASET_NAME="mnist"
 TEST="False"
 LAMBDA=0.6
-PROJ_MODE="projected_loss"
-N_PROJ=1
+PROJ_MODE="channels"
+N_PROJ=3
 
 ##############
 # run script #
@@ -85,6 +85,6 @@ elif [ $SCRIPT = "parallel_randens" ]; then
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
   grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
-  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $N_PROJ >> $OUT
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $N_PROJ $LAMBDA $PROJ_MODE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi

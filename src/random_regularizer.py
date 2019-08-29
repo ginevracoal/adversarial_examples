@@ -111,7 +111,7 @@ class RandomRegularizer(sklKerasClassifier):
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
         return custom_loss
 
-    def _get_loss_gradient(self, inputs, flat_inputs, inverse_projection, outputs, project_points=False):
+    def _get_loss_gradient(self, inputs, outputs):#flat_inputs, inverse_projection, outputs, project_points=True):
         # todo: docstring & unittest
 
         axis = 1 if self.data_format == "channels_first" else -1
@@ -121,14 +121,9 @@ class RandomRegularizer(sklKerasClassifier):
             return [grad if grad is not None else tf.zeros_like(var)
                     for var, grad in zip(var_list, grads)]
 
-        if project_points:
-            proj_logits = self._get_logits(inputs=inverse_projection)
-            loss = K.categorical_crossentropy(target=outputs, output=proj_logits, from_logits=True, axis=axis)
-            loss_gradient = K.gradients(loss=loss, variables=flat_inputs)[0]
-        else:
-            logits = self._get_logits(inputs=inputs)
-            loss = K.categorical_crossentropy(target=outputs, output=logits, from_logits=True, axis=axis)
-            loss_gradient = _compute_gradients(loss, [flat_inputs])[0] # flat_inputs/inputs
+        loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=inputs),
+                                          from_logits=True, axis=axis)
+        loss_gradient = _compute_gradients(loss, [inputs])[0]
         return loss_gradient
 
     def grayscale_regularizer(self, inputs, outputs):
@@ -136,7 +131,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         regularization = 0
 
-        size = random.randint(26, 28)
+        size = random.randint(6, 15)
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
@@ -160,10 +155,8 @@ class RandomRegularizer(sklKerasClassifier):
         inverse_projections = tf.reshape(inverse_projections,
                                          shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
 
-        loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images,
-                                               inverse_projection=inverse_projections, outputs=outputs)
-        regularization += tf.reduce_sum(loss_gradient)
-        # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
+        loss_gradient = self._get_loss_gradient(inputs=inverse_projections, outputs=outputs)
+        regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=1)))
 
         return regularization / self.batch_size*self.n_proj
 
@@ -195,11 +188,8 @@ class RandomRegularizer(sklKerasClassifier):
             channel_inverse_projection = tf.matmul(a=channel_projection, b=pinv, transpose_b=True)
             channel_inverse_projection = tf.reshape(channel_inverse_projection, shape=(self.batch_size, rows, cols, 1))
 
-            loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images,
-                                                   inverse_projection=channel_inverse_projection, outputs=outputs)
-
-            regularization += tf.reduce_sum(loss_gradient)
-            # regularization += tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=1))
+            loss_gradient = self._get_loss_gradient(inputs=channel_inverse_projection, outputs=outputs)
+            regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=1)))
 
         return regularization / self.batch_size*self.n_proj
 
@@ -215,9 +205,11 @@ class RandomRegularizer(sklKerasClassifier):
         n_components = size * size * channels
 
         # compute loss gradient
-        flat_images = tf.reshape(tf.cast(inputs, tf.float32), shape=[self.batch_size, n_features])
-        loss_gradient = self._get_loss_gradient(inputs=inputs, flat_inputs=flat_images, inverse_projection=None,
-                                                outputs=outputs, project_points=False)
+        # flat_images = tf.reshape(tf.cast(inputs, tf.float32), shape=[self.batch_size, n_features])
+        inputs = tf.cast(inputs, tf.float32)
+        loss_gradient = self._get_loss_gradient(inputs=inputs, outputs=outputs)
+                                                # flat_inputs=flat_images, inverse_projection=None,
+                                                # outputs=outputs, project_points=False)
 
         # project loss gradient
         projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
@@ -227,7 +219,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         # compute regularization term
         projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
-        regularization = tf.reduce_sum(projected_loss)
+        regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=1)))
 
         return regularization / self.batch_size*self.n_proj
 
@@ -430,15 +422,15 @@ if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
-        lam = float(sys.argv[3])
-        projection_mode = sys.argv[4]
-        n_proj = int(sys.argv[5])
+        n_proj = int(sys.argv[3])
+        lam = float(sys.argv[4])
+        projection_mode = sys.argv[5]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        lam = input("\nChoose lambda regularization weight.")
-        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
-        n_proj = input("\nChoose the number of projections (type=int): ")
+        n_proj = int(input("\nChoose the number of projections (type=int): "))
+        lam = float(input("\nChoose lambda regularization weight (type=float): "))
+        projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
 
     main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, n_proj=n_proj)

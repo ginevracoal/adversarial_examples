@@ -166,7 +166,8 @@ class AdversarialClassifier(object):
         x_test_adv = self._generate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
                                                 adversaries_path=adversaries_path, test=test)
         # debug
-        print(len(x_test), len(x_test_adv))
+        # print(x_test.shape, x_test_adv.shape)
+        # exit()
 
         # evaluate the performance on the adversarial test set
         y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
