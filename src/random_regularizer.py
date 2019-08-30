@@ -7,6 +7,7 @@ from art.classifiers import KerasClassifier as artKerasClassifier
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 import keras.losses
 from random_ensemble import *
+from projection_functions import *
 
 # todo: docstrings
 # todo: unittest
@@ -29,12 +30,13 @@ class RandomRegularizer(sklKerasClassifier):
         self.lam = lam
         self.projection_mode = projection_mode
         self._set_training_params()
-        self._set_layers()
+        self._set_model()
         self.inputs = Input(shape=self.input_shape)
         print("\nbatch_size=",self.batch_size,"\nepochs=",self.epochs,"\nn_proj=",self.n_proj)
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self):
+        # todo: set size random range based on image dimensions...
         if self.dataset_name == "mnist":
             self.epochs = 12
             if test:
@@ -87,11 +89,10 @@ class RandomRegularizer(sklKerasClassifier):
             logits = Dense(10, activation='softmax')(x)
             return logits
 
-    def _set_layers(self):
+    def _set_model(self):
         inputs = Input(shape=self.input_shape)
-        logits = self._get_logits(inputs=inputs)
-        self.outputs = logits
-        self.model = Model(inputs=inputs, outputs=logits)
+        outputs = self._get_logits(inputs=inputs)
+        self.model = Model(inputs=inputs, outputs=outputs)
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -111,7 +112,7 @@ class RandomRegularizer(sklKerasClassifier):
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
         return custom_loss
 
-    def _get_loss_gradient(self, inputs, outputs):#flat_inputs, inverse_projection, outputs, project_points=True):
+    def _get_loss_gradient(self, inputs, outputs):
         # todo: docstring & unittest
 
         axis = 1 if self.data_format == "channels_first" else -1
@@ -129,33 +130,17 @@ class RandomRegularizer(sklKerasClassifier):
     def grayscale_regularizer(self, inputs, outputs):
         # todo: docstring & unittest
 
-        regularization = 0
-
         size = random.randint(6, 15)
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
-        _, rows, cols, channels = self.inputs.get_shape().as_list()
-        inputs = tf.cast(inputs, tf.float32)
-        flat_images = tf.reshape(inputs, shape=[self.batch_size, rows * cols * channels])
-
+        channels = self.inputs.get_shape().as_list()[3]
         if channels == 3:
-            grayscale_images = tf.image.rgb_to_grayscale(inputs)
-            flat_images = tf.reshape(tensor=grayscale_images, shape=[self.batch_size, rows * cols * 1])
-            channels = 1
+            inputs = tf.image.rgb_to_grayscale(inputs)
 
-        n_features = rows * cols * channels
-        n_components = size * size * channels
-
-        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
-        pinv = np.linalg.pinv(proj_matrix)
-        projections = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-        inverse_projections = tf.matmul(a=projections, b=pinv, transpose_b=True)
-        inverse_projections = tf.reshape(inverse_projections,
-                                         shape=tf.TensorShape([self.batch_size, rows, cols, channels]))
-
-        loss_gradient = self._get_loss_gradient(inputs=inverse_projections, outputs=outputs)
+        inverse_projection = flat_projection(input_data=inputs, random_seed=seed, size_proj=size)[1]
+        loss_gradient = self._get_loss_gradient(inputs=inverse_projection, outputs=outputs)
+        regularization = 0
         regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=1)))
 
         return regularization / self.batch_size*self.n_proj
@@ -163,61 +148,40 @@ class RandomRegularizer(sklKerasClassifier):
     def channels_regularizer(self, inputs, outputs):
         # todo: docstring & unittest
 
-        regularization = 0
-
         size = random.randint(18, 28)
         seed = random.randint(1, 100)  # one different seed for projecting each batch
         print("\nsize =", size, ", seed =", seed)
 
-        _, rows, cols, channels = self.inputs.get_shape().as_list()
-        inputs = tf.cast(inputs, tf.float32)
-
-        # projection matrices
-        n_features = rows * cols
-        n_components = size * size
-        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
-        pinv = np.linalg.pinv(proj_matrix)
-
-        # channel projections
+        regularization = 0
+        channels  = self.inputs.get_shape().as_list()[3]
         for channel in range(channels):
-            flat_images = tf.reshape(tensor=inputs[:, :, :, channel], shape=(self.batch_size, rows * cols))
-
-            # project
-            channel_projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-            channel_inverse_projection = tf.matmul(a=channel_projection, b=pinv, transpose_b=True)
-            channel_inverse_projection = tf.reshape(channel_inverse_projection, shape=(self.batch_size, rows, cols, 1))
-
+            # todo: make this efficient. each time it computes the pseudoinverse again...
+            # per esempio potrei salvarle in un oggetto della classe e aggiornarle soltanto se non ci sono
+            input_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
+            channel_projection, channel_inverse_projection = flat_projection(input_data=input_data,
+                                                                             random_seed=seed, size_proj=size)
             loss_gradient = self._get_loss_gradient(inputs=channel_inverse_projection, outputs=outputs)
             regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=1)))
 
-        return regularization / self.batch_size*self.n_proj
+            # # todo. test regularization on perturbations
+            # # perturbations = compute_perturbations(inputs.eval(session=self.sess), channel_inverse_projection)
+            # perturb = lambda x: compute_perturbations(x[0], x[1])
+            # # perturbations = tf.map_fn(fn=perturb, elems=[inputs.eval(session=self.sess),channel_inverse_projection])
+            # perturbations = perturb([inputs.eval(session=self.sess),channel_inverse_projection])
+            # loss_gradient = self._get_loss_gradient(inputs=perturbations, outputs=outputs)
+            # #####
+
+        return regularization / self.batch_size * self.n_proj
 
     def projected_loss_regularizer(self, inputs, outputs):
         # todo: docstring & unittest
 
-        # set params
         size = random.randint(8, 28)
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
-        _, rows, cols, channels = self.inputs.get_shape().as_list()
-        n_features = rows * cols * channels
-        n_components = size * size * channels
-
-        # compute loss gradient
-        # flat_images = tf.reshape(tf.cast(inputs, tf.float32), shape=[self.batch_size, n_features])
-        inputs = tf.cast(inputs, tf.float32)
+        channels = self.inputs.get_shape().as_list()[3]
         loss_gradient = self._get_loss_gradient(inputs=inputs, outputs=outputs)
-                                                # flat_inputs=flat_images, inverse_projection=None,
-                                                # outputs=outputs, project_points=False)
-
-        # project loss gradient
-        projector = GaussianRandomProjection(n_components=n_components, random_state=seed)
-        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
-        flat_loss_gradient = tf.reshape(loss_gradient, shape=[self.batch_size, n_features])
-        projected_loss = tf.matmul(a=flat_loss_gradient, b=proj_matrix, transpose_b=True)
-
-        # compute regularization term
+        projected_loss = flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
         projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
         regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=1)))
 
