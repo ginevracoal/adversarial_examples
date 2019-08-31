@@ -3,6 +3,7 @@ import sys
 import multiprocessing as mp
 import logging
 from baseline_convnet import BaselineConvnet
+from projection_functions import compute_single_projection
 
 MODEL_NAME = "random_ensemble"
 
@@ -10,7 +11,8 @@ MODEL_NAME = "random_ensemble"
 class ParallelRandomEnsemble(RandomEnsemble):
 
     def __init__(self, input_shape, num_classes, size_proj, data_format, dataset_name, projection_mode):
-        super(ParallelRandomEnsemble, self).__init__(input_shape, num_classes, None, size_proj, projection_mode, data_format, dataset_name)
+        super(ParallelRandomEnsemble, self).__init__(input_shape, num_classes, None, size_proj, projection_mode,
+                                                     data_format, dataset_name)
         # None refers to n_proj since we only have to compute a single projection
 
     def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
@@ -18,8 +20,10 @@ class ParallelRandomEnsemble(RandomEnsemble):
         K.clear_session()
 
         start_time = time.time()
-        x_train_projected, x_train_inverse_projected = compute_single_projection(input_data=x_train, seed=self.random_seeds[idx],
-                                                      size_proj=self.size_proj, projection_mode=self.projection_mode)
+        x_train_projected, x_train_inverse_projected = compute_single_projection(input_data=x_train,
+                                                                                 seed=self.random_seeds[idx],
+                                                                                 size_proj=self.size_proj,
+                                                                                 projection_mode=self.projection_mode)
 
         # eventually adjust input dimension to a single channel projection
         if x_train_projected.shape[3] == 1:
@@ -43,52 +47,51 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
         return classifier
 
-    # todo: deprecated, remove
-    def parallel_train(self, x_train, y_train, batch_size, epochs):
-        """
-        Trains the baseline model over `n_proj` random projections of the training data whose input shape is
-        `(size_proj, size_proj, 1)` and parallelizes training over the different projections.
-
-        :param x_train:
-        :param y_train:
-        :param batch_size:
-        :param epochs:
-        :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
-        """
-        mpl = mp.log_to_stderr()
-        mpl.setLevel(logging.INFO)
-
-        start = time.time()
-        x_train_projected, _ = compute_projections(x_train, random_seeds=self.random_seeds,
-                                                n_proj=self.n_proj, size_proj=self.size_proj)
-
-        # Define an output queue
-        #output = mp.Queue()
-        # Setup a list of processes that we want to run
-        processes = [mp.Process(target=self.train_single_projection,
-                                args=(x_train, y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
-        # Run processes
-        for p in processes:
-            p.start()
-
-        # Exit the completed processes
-        for p in processes:
-            p.join()
-            #output.close()
-
-        self.training_time += time.time() - start
-
-        # Get process results from the output queue
-        #classifiers = [output.get() for p in processes]
-
-        print("\nParallel training time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
-              "): --- %s seconds ---" % (self.training_time))
-        classifiers = self.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
-                                           model_name="random_ensemble")
-
-        self.trained = True
-
-        return classifiers
+    # def parallel_train(self, x_train, y_train, batch_size, epochs):
+    #     """
+    #     Trains the baseline model over `n_proj` random projections of the training data whose input shape is
+    #     `(size_proj, size_proj, 1)` and parallelizes training over the different projections.
+    #
+    #     :param x_train:
+    #     :param y_train:
+    #     :param batch_size:
+    #     :param epochs:
+    #     :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
+    #     """
+    #     mpl = mp.log_to_stderr()
+    #     mpl.setLevel(logging.INFO)
+    #
+    #     start = time.time()
+    #     x_train_projected, _ = compute_projections(x_train, random_seeds=self.random_seeds,
+    #                                             n_proj=self.n_proj, size_proj=self.size_proj)
+    #
+    #     # Define an output queue
+    #     #output = mp.Queue()
+    #     # Setup a list of processes that we want to run
+    #     processes = [mp.Process(target=self.train_single_projection,
+    #                             args=(x_train, y_train, batch_size, epochs, i, True)) for i in range(self.n_proj)]
+    #     # Run processes
+    #     for p in processes:
+    #         p.start()
+    #
+    #     # Exit the completed processes
+    #     for p in processes:
+    #         p.join()
+    #         #output.close()
+    #
+    #     self.training_time += time.time() - start
+    #
+    #     # Get process results from the output queue
+    #     #classifiers = [output.get() for p in processes]
+    #
+    #     print("\nParallel training time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
+    #           "): --- %s seconds ---" % (self.training_time))
+    #     classifiers = self.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/",
+    #                                        model_name="random_ensemble")
+    #
+    #     self.trained = True
+    #
+    #     return classifiers
 
 
 def main(dataset_name, test, proj_idx, size_proj, proj_mode):

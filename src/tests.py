@@ -3,6 +3,10 @@ from utils import *
 from baseline_convnet import BaselineConvnet
 from random_ensemble import RandomEnsemble
 import time
+from projection_functions import *
+import random
+from random_regularizer import RandomRegularizer
+from parallel_randens_training import ParallelRandomEnsemble
 
 BATCH_SIZE = 20
 EPOCHS = 3
@@ -60,12 +64,13 @@ class Test(unittest.TestCase):
                                    method="fgsm")
 
     def test_random_ensemble(self):
-        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
-                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
-                               projection_mode="flat")
+        for projection_mode in ["flat","channels","grayscale"]:
+            model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
+                                   n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
+                                   projection_mode=projection_mode)
 
-        # train
-        classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+            # train
+            classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
         # evaluate
         x_test_pred = model.evaluate_test(classifiers, self.x_test, self.y_test)
@@ -86,45 +91,38 @@ class Test(unittest.TestCase):
                                 dataset_name="cifar")
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-    def test_plot_projections(self):
+    def test_compute_plot_projections(self):
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar", test=True)
-        for projection_mode in ["flat","channels","one_channel","grayscale"]:
+        for projection_mode in ["flat","channels","grayscale"]:
             projections, inverse_projections = compute_projections(input_data=x_test, n_proj=N_PROJECTIONS,
                                                                    size_proj=SIZE_PROJECTION,
                                                                    random_seeds=random.sample(range(1, 100), N_PROJECTIONS),
                                                                    projection_mode=projection_mode)
-            plot_inverse_projection(x_test, projections[0], inverse_projections[0], test=True)
 
-    # todo: buggy
-    def test_projection_modes_cifar(self):
-        # x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar", test=True)
-        # for projection_mode in ["flat","channels","one_channel","grayscale"]:
-        #     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes, dataset_name="cifar",
-        #                            n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=data_format,
-        #                            projection_mode=projection_mode)
-        #     classifier = model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-        #     model.evaluate_test(classifier, x_test, y_test)
-        #     model.evaluate_adversaries(classifier, x_test, y_test, method='fgsm', dataset_name="cifar",
-        #                                report_projections=True)
-        pass
+        plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]], cmap="gray", test=True)
 
-    def test_parallel_train(self):
-        pass
+    def test_cifar_randreg(self):
+        dataset_name = "cifar"
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=True)
+        for projection_mode in ["channels","grayscale"]:
+            classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                           dataset_name=dataset_name, sess=sess, lam=0.6,
+                                           projection_mode=projection_mode, n_proj=N_PROJECTIONS, test=True)
+            classifier.train(x_train, y_train)
+            classifier.evaluate_test(x_test=x_test, y_test=y_test)
 
-    def test_random_regularizer(self):
-        pass
-        """
-        model = RandomAdversarialProjection(input_shape=self.input_shape, num_classes=self.num_classes,
-                                            n_proj=1, size_proj=SIZE_PROJECTION)
+            # todo:eval on adversaries
 
-        classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-        model.evaluate_test(classifier, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifier, self.x_test, self.y_test)
+    def test_parallel_randens(self):
+        dataset_name=self.dataset
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test=True)
 
-        # classifier = model.load_classifier(TRAINED_MODEL)
-        model.evaluate_test(classifier, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifier, self.x_test, self.y_test)
-        """
+        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=SIZE_PROJECTION,
+                                       data_format=data_format, dataset_name=dataset_name, projection_mode="flat")
+        model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
+                                      epochs=model.epochs, idx=1, save=False)
 
 
 if __name__ == '__main__':

@@ -13,8 +13,9 @@ from projection_functions import *
 # todo: unittest
 
 
-DERIVATIVES_ON_INPUTS = True # compute gradient derivatives w.r.t. the inputs, otherwise w.r.t. the projected inputs
-LOSS_ON_PROJECTIONS = True # gradient of the loss on projected points, otherwise projects the gradient of the loss on inputs
+DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
+LOSS_ON_PROJECTIONS = True  # if True gradient of the loss on projected points,
+                            # else projects the gradient of the loss on inputs
 MIN_SIZE = 15
 MAX_SIZE = 25
 PROJ_MODE = "grayscale, channels, perturbations"
@@ -22,7 +23,7 @@ PROJ_MODE = "grayscale, channels, perturbations"
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, n_proj):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, n_proj, test=False):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -34,25 +35,27 @@ class RandomRegularizer(sklKerasClassifier):
         self.data_format = data_format
         self.lam = lam
         self.projection_mode = projection_mode
-        self._set_training_params()
+        self._set_training_params(test)
         self._set_model()
         self.inputs = Input(shape=self.input_shape)
         print("\nbatch_size=",self.batch_size,"\nepochs=",self.epochs,"\nn_proj=",self.n_proj)
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
-    def _set_training_params(self):
+    def _set_training_params(self, test):
         # todo: set size random range based on image dimensions...
         if self.dataset_name == "mnist":
-            self.epochs = 12
             if test:
+                self.epochs = 1
                 self.batch_size = 100
             else:
+                self.epochs = 1
                 self.batch_size = 1000
         elif self.dataset_name == "cifar":
-            self.epochs = 60
             if test:
+                self.epochs = 2
                 self.batch_size = 100
             else:
+                self.epochs = 60
                 self.batch_size = 1000
 
     def _get_logits(self, inputs):
@@ -101,7 +104,8 @@ class RandomRegularizer(sklKerasClassifier):
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
-        # todo: docstring and test
+        :param inputs: input data for the loss, type=tf.tensor, shape=(batch_size, rows, cols, channels)
+        :param outputs: output data for the loss, type=tf.tensor, shape=(batch_size, n_classes)
         """
         def custom_loss(y_true, y_pred):
             if self.projection_mode == "grayscale":
@@ -118,12 +122,17 @@ class RandomRegularizer(sklKerasClassifier):
         return custom_loss
 
     def _compute_gradients(self, tensor, var_list):
+        """
+        Handles None values in tensors gradient computation.
+        :param tensor: input tensor to be derivated, type=tensor, shape=(batch_size,)
+        :param var_list: list of variables on which to compute derivatives, shape=(batch_size, rows, cols, channels)
+        :return: tf.gradients on tensor w.r.t. var_list
+        """
         grads = tf.gradients(tensor, var_list)
         return [grad if grad is not None else tf.zeros_like(var)
                 for var, grad in zip(var_list, grads)]
 
     def _get_loss_gradient(self, inputs, outputs, size=None, seed=None):
-        # todo:  unittest
         """
         Computes the gradient of the loss function on the input points if DERIVATIVES_ON_INPUTS = True, on their
         projections otherwise.
@@ -140,18 +149,53 @@ class RandomRegularizer(sklKerasClassifier):
 
         if DERIVATIVES_ON_INPUTS:
             loss = K.categorical_crossentropy(target=outputs,
-                                              output=self._get_logits(inputs=flat_projection(input_data=inputs,
+                                              output=self._get_logits(inputs=self.flat_projection(input_data=inputs,
                                                                                              random_seed=seed,
                                                                                              size_proj=size)[1]),
                                               from_logits=True, axis=axis)
             loss_gradient = self._compute_gradients(loss, [inputs])[0]
         else:
-            projected_inputs = flat_projection(input_data=inputs, random_seed=seed, size_proj=size)[1]
+            projected_inputs = self.flat_projection(input_data=inputs, random_seed=seed, size_proj=size)[1]
             loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=projected_inputs),
                                               from_logits=True, axis=axis)
             loss_gradient = self._compute_gradients(loss, [projected_inputs])[0]
 
         return loss_gradient
+
+    def flat_projection(self, input_data, random_seed, size_proj):
+        """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
+        It samples `size_proj` random directions for the projection using the given `random_seed`.
+
+        :param input_data: high dimensional input data, type=tf.tensor, shape=(batch_size, rows, cols, channels)
+        :param random_seed: projection seed, type=int
+        :param size_proj: size of a projection, type=int
+        :return:
+        :param projection: random projection of input_data, type=tf.tensor,
+                           shape=(batch_size, size_proj, size_proj, channels)
+        :param projection: inverse projection of input_data given by the Moore-Penrose pseudoinverse of the projection
+                           matrix, type=tf.tensor, shape=(batch_size, size, size, channels)
+
+        """
+        input_data = tf.cast(input_data, tf.float32)
+        batch_size, rows, cols, channels = input_data.get_shape().as_list()
+        n_features = rows * cols * channels
+        n_components = size_proj * size_proj * channels
+
+        # projection matrices
+        projector = GaussianRandomProjection(n_components=n_components, random_state=random_seed)
+        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
+        pinv = np.linalg.pinv(proj_matrix)
+
+        # compute projections
+        flat_images = tf.reshape(input_data, shape=[batch_size, n_features])
+        projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
+        inverse_projection = tf.matmul(a=projection, b=pinv, transpose_b=True)
+
+        # reshape
+        projection = tf.reshape(projection, shape=tf.TensorShape([batch_size, size_proj, size_proj, channels]))
+        inverse_projection = tf.reshape(inverse_projection, shape=tf.TensorShape([batch_size, rows, cols, channels]))
+
+        return projection, inverse_projection
 
     def regularize(self, inputs, outputs, size, seed):
         channels = self.inputs.get_shape().as_list()[3]
@@ -163,12 +207,12 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             if DERIVATIVES_ON_INPUTS:
                 loss = K.categorical_crossentropy(target=outputs,
-                                                  output=self._get_logits(inputs=flat_projection(input_data=inputs,
+                                                  output=self._get_logits(inputs=self.flat_projection(input_data=inputs,
                                                                                                  random_seed=seed,
                                                                                                  size_proj=size)[1]),
                                                   from_logits=True, axis=axis)
                 loss_gradient = self._compute_gradients(loss, [inputs])[0]
-                projected_loss = flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
+                projected_loss = self.flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
                 projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
                 regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=1)))
             else:
@@ -178,7 +222,17 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization
 
     def channels_regularizer(self, inputs, outputs):
-        # todo: docstring & unittest
+        """ Computes a projection of the whole input data over each channel, then reconstructs the rgb image.
+        It also computes the inverse projections using Moore-Penrose pseudoinverse.
+
+        :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
+        :param random_seed: projection seed, type=int
+        :param size_proj: size of a projection, type=int
+        :return:
+        :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
+        :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
+                                   type=tf.tensor, shape=(n_samples,rows,cols,channels)
+        """
 
         channels = inputs.get_shape().as_list()[3]
         size = random.randint(MIN_SIZE, MAX_SIZE)
@@ -187,7 +241,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         regularization = 0
         for channel in range(channels):
-            # todo: make this efficient. each time it computes the pseudoinverse again...
+            # todo: make this efficient. At each iteration computes the pseudoinverse again...
 
             input_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
             regularization += self.regularize(input_data, outputs, size, seed)
@@ -195,7 +249,15 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization / self.batch_size * self.n_proj
 
     def grayscale_regularizer(self, inputs, outputs):
-        # todo: docstring & unittest
+        """ Transforms input_data into rgb representation and performs regularization on it.
+        :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
+        :param random_seed: projection seed, type=int
+        :param size_proj: size of a projection, type=int
+        :return:
+        :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
+        :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
+                                   type=tf.tensor, shape=(n_samples,rows,cols,channels)
+        """
 
         channels = inputs.get_shape().as_list()[3]
         size = random.randint(MIN_SIZE, MAX_SIZE)
@@ -219,31 +281,17 @@ class RandomRegularizer(sklKerasClassifier):
         # #####
         raise NotImplementedError
 
-    # todo: remove this
-    # def projected_loss_regularizer(self, inputs, outputs):
-    #
-    #     size = random.randint(8, 28)
-    #     seed = random.randint(1, 100)
-    #     print("\nsize =", size, ", seed =", seed)
-    #     channels = self.inputs.get_shape().as_list()[3]
-    #
-    #     projected_loss = flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
-    #     projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
-    #     regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=1)))
-    #
-    #     return regularization / self.batch_size*self.n_proj
-
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        self.batches = int(len(x_train)/self.batch_size)
-        x_train_batches = np.split(x_train, self.batches)
-        y_train_batches = np.split(y_train, self.batches)
+        batches = int(len(x_train)/self.batch_size)
+        x_train_batches = np.split(x_train, batches)
+        y_train_batches = np.split(y_train, batches)
 
         start_time = time.time()
-        for batch in range(self.batches):
-            print("\n=== training batch", batch+1,"/",self.batches,"===")
+        for batch in range(batches):
+            print("\n=== training batch", batch+1,"/",batches,"===")
             inputs = tf.convert_to_tensor(x_train_batches[batch])
             outputs = tf.convert_to_tensor(y_train_batches[batch])
             early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
@@ -390,7 +438,7 @@ def main(dataset_name, test, lam, projection_mode, n_proj):
 
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   n_proj=n_proj)
+                                   n_proj=n_proj, test=test)
 
     modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
                 "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+\
@@ -408,7 +456,7 @@ def main(dataset_name, test, lam, projection_mode, n_proj):
     del classifier
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   n_proj=n_proj)
+                                   n_proj=n_proj, test=test)
 
     classifier.model.load_weights(model_path)
 

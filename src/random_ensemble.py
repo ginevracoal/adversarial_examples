@@ -8,7 +8,7 @@ separately on each projection, then it returns an ensemble classification on the
 from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
-# from projection_functions import compute_projections # todo: test new methods from projection_functions.py
+from projection_functions import * # todo: test new methods from projection_functions.py
 
 REPORT_PROJECTIONS = False
 ADD_BASELINE_PROB = True
@@ -26,6 +26,7 @@ class RandomEnsemble(BaselineConvnet):
     def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
+        It currently supports a maximum of 15 projections.
         :param n_proj: number of random projections
         :param size_proj: size of a random projection
         """
@@ -38,8 +39,7 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
-        # the model is currently implemented on 15 projections max
-        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])  # np.repeat(123, 10)
+        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])
         self.trained = False
         self.training_time = 0
         self.ensemble_method = "sum"  # supported methods: mode, sum
@@ -59,8 +59,10 @@ class RandomEnsemble(BaselineConvnet):
         else:
             self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
 
-        # todo: use methods from utils defined in tf framework, and here convert them to np.arrays
-
+        # sess = tf.Session()
+        # sess.as_default()
+        # projections = projections.eval(session=sess)
+        # inverse_projections = inverse_projections.eval(session=sess)
         return projections, inverse_projections
 
     def train(self, x_train, y_train, batch_size, epochs):
@@ -303,7 +305,11 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
 
     # === plot projections === #
     projections, inverse_projections = model.compute_projections(input_data=x_test)
-    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
+
+    model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
+                           n_proj=n_proj, size_proj=size_proj, projection_mode="grayscale",
+                           data_format=data_format, dataset_name=dataset_name)
+    plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
 
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
@@ -317,13 +323,12 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     #                         dataset_name=dataset_name)
     # rel_path = "../trained_models/baseline/" + str(dataset_name) + "_baseline.h5"
     # baseline_classifier = baseline.load_classifier(relative_path=rel_path)
-    # perturbations = compute_perturbations(x_test, inverse_projections)
-    # plot_projections(image_data_list=[x_test,perturbations])
-    # baseline.evaluate_test(baseline_classifier, perturbations, y_test)
-    # exit()
+    # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
+    # baseline.evaluate_test(baseline_classifier, augmented_inputs, y_test)
+    # plot_projections(image_data_list=[x_test,perturbations,augmented_inputs])
 
     # === adversarial train === #
-    #robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
+    # robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
     #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack)
     #model.save_model(classifier=robust_classifier, model_name=dataset + "_" + str(attack) +
     #                 "_robust_random_ensemble_size=" + str(model.size_proj))
