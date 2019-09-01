@@ -9,13 +9,11 @@ import keras.losses
 from random_ensemble import *
 from projection_functions import *
 
-# todo: docstrings
-# todo: unittest
-
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-LOSS_ON_PROJECTIONS = True  # if True gradient of the loss on projected points,
+LOSS_ON_PROJECTIONS = True # if True gradient of the loss on projected points,
                             # else projects the gradient of the loss on inputs
+
 MIN_SIZE = 15
 MAX_SIZE = 25
 PROJ_MODE = "grayscale, channels, perturbations"
@@ -45,14 +43,14 @@ class RandomRegularizer(sklKerasClassifier):
         # todo: set size random range based on image dimensions...
         if self.dataset_name == "mnist":
             if test:
-                self.epochs = 1
+                self.epochs = 3
                 self.batch_size = 100
             else:
-                self.epochs = 1
+                self.epochs = 12
                 self.batch_size = 1000
         elif self.dataset_name == "cifar":
             if test:
-                self.epochs = 2
+                self.epochs = 3
                 self.batch_size = 100
             else:
                 self.epochs = 60
@@ -107,18 +105,25 @@ class RandomRegularizer(sklKerasClassifier):
         :param inputs: input data for the loss, type=tf.tensor, shape=(batch_size, rows, cols, channels)
         :param outputs: output data for the loss, type=tf.tensor, shape=(batch_size, n_classes)
         """
+        inputs = inputs if self.dataset_name == "mnist" else normalize(inputs)
         def custom_loss(y_true, y_pred):
-            if self.projection_mode == "grayscale":
-                print("\ngrayscale regularization.")
-                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
-            elif self.projection_mode == "channels":
-                print("\nchannels regularization.")
-                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
-            elif self.projection_mode == "perturbations":
-                print("\nperturbations regularization.")
-                return K.binary_crossentropy(y_true, y_pred) + self.lam * self.perturbations_regularizer(inputs=inputs, outputs=outputs)
+            # if self.projection_mode == "grayscale":
+            #     print("\ngrayscale regularization.")
+            #     return K.binary_crossentropy(y_true, y_pred) + self.lam * self.grayscale_regularizer(inputs=inputs, outputs=outputs)
+            # elif self.projection_mode == "channels":
+            #     print("\nchannels regularization.")
+            #     return K.binary_crossentropy(y_true, y_pred) + self.lam * self.channels_regularizer(inputs=inputs, outputs=outputs)
+            if self.projection_mode == "loss_on_projections":
+                regularization_term = self.loss_on_projections_regularizer(inputs=inputs, outputs=outputs)
+            elif self.projection_mode == "projected_loss":
+                regularization_term = self.projected_loss_regularizer(inputs=inputs, outputs=outputs)
+            elif self.projection_mode == "loss_on_perturbations":
+                regularization_term = self.loss_on_perturbations_regularizer(inputs=inputs, outputs=outputs)
             else:
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
+
+            return K.binary_crossentropy(y_true, y_pred) + self.lam * regularization_term
+
         return custom_loss
 
     def _compute_gradients(self, tensor, var_list):
@@ -145,141 +150,187 @@ class RandomRegularizer(sklKerasClassifier):
         """
 
         axis = 1 if self.data_format == "channels_first" else -1
-        inputs = tf.cast(inputs, tf.float32)
+        # inputs = tf.cast(inputs, tf.float32)
 
         if DERIVATIVES_ON_INPUTS:
             loss = K.categorical_crossentropy(target=outputs,
-                                              output=self._get_logits(inputs=self.flat_projection(input_data=inputs,
+                                              output=self._get_logits(inputs=tf_flat_projection(input_data=inputs,
                                                                                              random_seed=seed,
                                                                                              size_proj=size)[1]),
                                               from_logits=True, axis=axis)
             loss_gradient = self._compute_gradients(loss, [inputs])[0]
         else:
-            projected_inputs = self.flat_projection(input_data=inputs, random_seed=seed, size_proj=size)[1]
+            projected_inputs = tf_flat_projection(input_data=inputs, random_seed=seed, size_proj=size)[1]
             loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=projected_inputs),
                                               from_logits=True, axis=axis)
             loss_gradient = self._compute_gradients(loss, [projected_inputs])[0]
 
         return loss_gradient
 
-    def flat_projection(self, input_data, random_seed, size_proj):
-        """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
-        It samples `size_proj` random directions for the projection using the given `random_seed`.
+    # todo: deprecated, remove
+    # def regularize(self, inputs, outputs, size, seed):
+    #     channels = self.inputs.get_shape().as_list()[3]
+    #
+    #     if LOSS_ON_PROJECTIONS:
+    #         regularization = self._get_loss_gradient(inputs=inputs, outputs=outputs, size=size, seed=seed)
+    #         #regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
+    #         # regularization = tf.reduce_sum(tf.norm(loss_gradient, ord=2, axis=0))
+    #     else:
+    #         if DERIVATIVES_ON_INPUTS:
+    #             axis = 1 if self.data_format == "channels_first" else -1
+    #             loss = K.categorical_crossentropy(target=outputs,
+    #                                               output=self._get_logits(inputs=tf_flat_projection(
+    #                                                   input_data=inputs, random_seed=seed, size_proj=size)[1]),
+    #                                               from_logits=True, axis=axis)
+    #             loss_gradient = self._compute_gradients(loss, [inputs])[0]
+    #             projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
+    #             regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
+    #             # regularization = tf.reduce_sum(tf.norm(projected_loss, ord=2, axis=0))
+    #         else:
+    #             raise AttributeError("\n You cannot compute partial derivatives on the projections in "
+    #                                  "LOSS_ON_PROJECTIONS mode. Set DERIVATIVES_ON_INPUTS = True. ")
+    #
+    #     regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
+    #     return regularization / self.batch_size * self.n_proj
 
-        :param input_data: high dimensional input data, type=tf.tensor, shape=(batch_size, rows, cols, channels)
-        :param random_seed: projection seed, type=int
-        :param size_proj: size of a projection, type=int
-        :return:
-        :param projection: random projection of input_data, type=tf.tensor,
-                           shape=(batch_size, size_proj, size_proj, channels)
-        :param projection: inverse projection of input_data given by the Moore-Penrose pseudoinverse of the projection
-                           matrix, type=tf.tensor, shape=(batch_size, size, size, channels)
+    # todo: take the docstring for the new method
+    # def channels_regularizer(self, inputs, outputs):
+    #     """ Computes a projection of the whole input data over each channel, then reconstructs the rgb image.
+    #     It also computes the inverse projections using Moore-Penrose pseudoinverse.
+    #
+    #     :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
+    #     :param random_seed: projection seed, type=int
+    #     :param size_proj: size of a projection, type=int
+    #     :return:
+    #     :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
+    #     :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
+    #                                type=tf.tensor, shape=(n_samples,rows,cols,channels)
+    #     """
+    #
+    #     channels = inputs.get_shape().as_list()[3]
+    #     size = random.randint(MIN_SIZE, MAX_SIZE)
+    #     seed = random.randint(1, 100)
+    #     print("\nsize =", size, ", seed =", seed)
+    #
+    #     regularization = 0
+    #     for channel in range(channels):
+    #
+    #         input_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
+    #         regularization += self.regularize(input_data, outputs, size, seed)
+    #
+    #     return regularization
 
-        """
-        input_data = tf.cast(input_data, tf.float32)
-        batch_size, rows, cols, channels = input_data.get_shape().as_list()
-        n_features = rows * cols * channels
-        n_components = size_proj * size_proj * channels
+    # todo: implement in the new framework + handle self.input_shape
+    # def grayscale_regularizer(self, inputs, outputs):
+    #     """ Transforms input_data into rgb representation and performs regularization on it.
+    #     :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
+    #     :param random_seed: projection seed, type=int
+    #     :param size_proj: size of a projection, type=int
+    #     :return:
+    #     :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
+    #     :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
+    #                                type=tf.tensor, shape=(n_samples,rows,cols,channels)
+    #     """
+    #
+    #     channels = inputs.get_shape().as_list()[3]
+    #     size = random.randint(MIN_SIZE, MAX_SIZE)
+    #     seed = random.randint(1, 100)
+    #     print("\nsize =", size, ", seed =", seed)
+    #
+    #     if channels == 3:
+    #         inputs = tf.image.rgb_to_grayscale(inputs)
+    #
+    #     regularization = self.regularize(inputs, outputs, size, seed)
+    #     return regularization
 
-        # projection matrices
-        projector = GaussianRandomProjection(n_components=n_components, random_state=random_seed)
-        proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
-        pinv = np.linalg.pinv(proj_matrix)
+    #############################################
 
-        # compute projections
-        flat_images = tf.reshape(input_data, shape=[batch_size, n_features])
-        projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-        inverse_projection = tf.matmul(a=projection, b=pinv, transpose_b=True)
-
-        # reshape
-        projection = tf.reshape(projection, shape=tf.TensorShape([batch_size, size_proj, size_proj, channels]))
-        inverse_projection = tf.reshape(inverse_projection, shape=tf.TensorShape([batch_size, rows, cols, channels]))
-
-        return projection, inverse_projection
-
-    def regularize(self, inputs, outputs, size, seed):
-        channels = self.inputs.get_shape().as_list()[3]
-        axis = 1 if self.data_format == "channels_first" else -1
-
-        if LOSS_ON_PROJECTIONS:
-            loss_gradient = self._get_loss_gradient(inputs=inputs, outputs=outputs, size=size, seed=seed)
-            regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=1)))
-        else:
-            if DERIVATIVES_ON_INPUTS:
-                loss = K.categorical_crossentropy(target=outputs,
-                                                  output=self._get_logits(inputs=self.flat_projection(input_data=inputs,
-                                                                                                 random_seed=seed,
-                                                                                                 size_proj=size)[1]),
-                                                  from_logits=True, axis=axis)
-                loss_gradient = self._compute_gradients(loss, [inputs])[0]
-                projected_loss = self.flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
-                projected_loss = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
-                regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=1)))
-            else:
-                raise AttributeError("\n You cannot compute partial derivatives on the projections in "
-                                     "LOSS_ON_PROJECTIONS mode. Set DERIVATIVES_ON_INPUTS = True. ")
-
-        return regularization
-
-    def channels_regularizer(self, inputs, outputs):
-        """ Computes a projection of the whole input data over each channel, then reconstructs the rgb image.
-        It also computes the inverse projections using Moore-Penrose pseudoinverse.
-
-        :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
-        :param random_seed: projection seed, type=int
-        :param size_proj: size of a projection, type=int
-        :return:
-        :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
-        :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
-                                   type=tf.tensor, shape=(n_samples,rows,cols,channels)
-        """
-
-        channels = inputs.get_shape().as_list()[3]
+    def loss_on_projections_regularizer(self, inputs, outputs):
+        inputs = tf.cast(inputs, tf.float32)
         size = random.randint(MIN_SIZE, MAX_SIZE)
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
+        channels = inputs.get_shape().as_list()[3]
+        axis = 1 if self.data_format == "channels_first" else -1
 
         regularization = 0
         for channel in range(channels):
-            # todo: make this efficient. At each iteration computes the pseudoinverse again...
+            channel_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
+            pinv_inputs = tf_flat_projection(input_data=channel_data, random_seed=seed, size_proj=size)[1]
+            loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=pinv_inputs),
+                                              from_logits=True, axis=axis)
+            if DERIVATIVES_ON_INPUTS:
+                loss_gradient = self._compute_gradients(loss, [inputs])[0]
+            else:
+                loss_gradient = self._compute_gradients(loss, [pinv_inputs])[0]
 
-            input_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
-            regularization += self.regularize(input_data, outputs, size, seed)
-
+            regularization +=  tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
         return regularization / self.batch_size * self.n_proj
 
-    def grayscale_regularizer(self, inputs, outputs):
-        """ Transforms input_data into rgb representation and performs regularization on it.
-        :param input_data: high dimensional input data, type=tf.tensor, shape=(n_samples,rows,cols,channels)
-        :param random_seed: projection seed, type=int
-        :param size_proj: size of a projection, type=int
-        :return:
-        :param projection: random projection of input_data, type=tf.tensor, shape=(n_samples,size_proj,size_proj,channels)
-        :param inverse_projection: inverse projection of input_data given by the pseudoinverse of the projection matrix,
-                                   type=tf.tensor, shape=(n_samples,rows,cols,channels)
-        """
+    def projected_loss_regularizer(self, inputs, outputs):
+        if DERIVATIVES_ON_INPUTS is False:
+            raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
+                                 "projected_loss regularizer. ")
 
-        channels = inputs.get_shape().as_list()[3]
+        inputs = tf.cast(inputs, tf.float32)
         size = random.randint(MIN_SIZE, MAX_SIZE)
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
+        channels = inputs.get_shape().as_list()[3]
+        axis = 1 if self.data_format == "channels_first" else -1
 
-        if channels == 3:
-            inputs = tf.image.rgb_to_grayscale(inputs)
+        regularization = 0
+        for channel in range(channels):
+            channel_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
+            loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=channel_data),
+                                              from_logits=True, axis=axis)
+            loss_gradient = self._compute_gradients(loss, [inputs])[0]
+            projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
+            regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
 
-        regularization = self.regularize(inputs, outputs, size, seed)
+        regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
+        return regularization / self.batch_size * self.n_proj
 
-        return regularization / self.batch_size*self.n_proj
+    # todo: implement
+    def loss_on_perturbations_regularizer(self, inputs, outputs):
+        sess = tf.Session()
+        sess.as_default()
 
-    def perturbations_regularizer(self, inputs, outputs):
+        inputs = tf.cast(inputs.eval(session=self.sess), tf.float32)
+        size = random.randint(MIN_SIZE, MAX_SIZE)
+        random_seeds =  random.sample(range(1, 100), self.n_proj)
+        print("\nsize =", size)
+        # channels = inputs.get_shape().as_list()[3]
+        axis = 1 if self.data_format == "channels_first" else -1
 
-        # # perturbations = compute_perturbations(inputs.eval(session=self.sess), channel_inverse_projection)
+        projections, inverse_projections = compute_projections(inputs, random_seeds, self.n_proj, size,
+                                                               self.projection_mode)
+
+        # eventually adjust input dimension to a single channel projection
+        # if projections.shape[4] == 1:
+        #     self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
+
+
+        perturbations, augmented_inputs = compute_perturbations(input_data=inputs,
+                                                                inverse_projections=inverse_projections)
+        # perturbations = compute_perturbations(inputs.eval(session=self.sess), channel_inverse_projection)
+
+        #
         # perturb = lambda x: compute_perturbations(x[0], x[1])
-        # # perturbations = tf.map_fn(fn=perturb, elems=[inputs.eval(session=self.sess),channel_inverse_projection])
+        # perturbations = tf.map_fn(fn=perturb, elems=[inputs.eval(session=self.sess),inverse_projections])
         # perturbations = perturb([inputs.eval(session=self.sess),channel_inverse_projection])
         # loss_gradient = self._get_loss_gradient(inputs=perturbations, outputs=outputs)
         # #####
-        raise NotImplementedError
+
+        loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=perturbations),
+                                          from_logits=True, axis=axis)
+        if DERIVATIVES_ON_INPUTS:
+            loss_gradient = self._compute_gradients(loss, [inputs])[0]
+        else:
+            loss_gradient = self._compute_gradients(loss, [perturbations])[0]
+
+        regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
+        return regularization / self.batch_size
 
     def train(self, x_train, y_train):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
