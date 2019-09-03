@@ -78,7 +78,9 @@ class RandomEnsemble(BaselineConvnet):
         """
 
         start_time = time.time()
-        x_train_projected, _ = self.compute_projections(x_train)
+        input_data = x_train.astype(float)
+        input_data = input_data if dataset_name == "mnist" else normalize(input_data)
+        x_train_projected, _ = self.compute_projections(input_data=input_data)
 
         # # eventually adjust input dimension to a single channel projection
         # if x_train_projected.shape[4] == 1:
@@ -250,7 +252,6 @@ class RandomEnsemble(BaselineConvnet):
                 "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
         x_adv = baseline._generate_adversaries(self.baseline_classifier, x, y, method=method, dataset_name=dataset_name,
                                                adversaries_path=adversaries_path, test=test)
-
         return x_adv
 
     def save_model(self, classifier, model_name=MODEL_NAME):
@@ -302,30 +303,45 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name)
-
-    # === plot projections === #
-    projections, inverse_projections = model.compute_projections(input_data=x_test)
-
-    model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
-                           n_proj=n_proj, size_proj=size_proj, projection_mode="grayscale",
-                           data_format=data_format, dataset_name=dataset_name)
-    plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
-
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    # model.save_model(classifier=classifier, model_name=MODEL_NAME)
+    model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
     # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+
+    # === compute projections === #
+    input_data = x_test.astype(float)
+    input_data = input_data if dataset_name == "mnist" else normalize(input_data)
+
+    projections, inverse_projections = model.compute_projections(input_data=input_data)
+    perturbations, augmented_inputs = compute_perturbations(input_data=input_data,
+                                                            inverse_projections=inverse_projections)
+
+    # print(np.max(augmented_inputs[0,:,:,:]))
+    # print(np.min(augmented_inputs[0,:,:,:]))
+    # idx = 0
+    # print(x_test[0,idx,idx,:],input_data[0,idx,idx,:])
+    # print(projections[0,0,idx,idx,:],inverse_projections[0,0,idx,idx,:])
+    # print(perturbations[0,idx,idx,:],augmented_inputs[0,idx,idx,:],"\n")
+    # print("Distance from attack: ", np.linalg.norm(x_test[0]-augmented_inputs[0]))
+    # exit()
+
+    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
+    # plot_projections(image_data_list=[x_test,projections[0],inverse_projections[0],perturbations,augmented_inputs])
+
 
     # === evaluate baseline on perturbations === #
     # baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
     #                         dataset_name=dataset_name)
     # rel_path = "../trained_models/baseline/" + str(dataset_name) + "_baseline.h5"
     # baseline_classifier = baseline.load_classifier(relative_path=rel_path)
-    # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
+
+
+    # baseline.evaluate_test(baseline_classifier, x_test, y_test)
     # baseline.evaluate_test(baseline_classifier, augmented_inputs, y_test)
-    # plot_projections(image_data_list=[x_test,perturbations,augmented_inputs])
+    # print(np.equal(x_test,augmented_inputs))
+
 
     # === adversarial train === #
     # robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
