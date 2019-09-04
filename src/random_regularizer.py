@@ -10,26 +10,27 @@ from random_ensemble import *
 from projection_functions import *
 
 
-DERIVATIVES_ON_INPUTS = False  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
+DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
 # LOSS_ON_PROJECTIONS = True # if True gradient of the loss on projected points,
 #                             # else projects the gradient of the loss on inputs
 GRAYSCALE = False  # If True, transforms the inputs from rgb to grayscale
-L_RATE = 0.8
 
+L_RATE = 0.8
 MIN_SIZE = 15
 MAX_SIZE = 25
+MIN_PROJ = 2
+MAX_PROJ = 8
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, n_proj, test=False):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, test=False):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         self.sess=sess
         self.input_shape = input_shape
-        self.n_proj = n_proj
         self.num_classes = num_classes
         self.dataset_name = dataset_name
         self.data_format = data_format
@@ -37,8 +38,9 @@ class RandomRegularizer(sklKerasClassifier):
         self.projection_mode = projection_mode
         self._set_training_params(test)
         self._set_model()
+        self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
-        print("\nbatch_size=",self.batch_size,"\nepochs=",self.epochs,"\nn_proj=",self.n_proj)
+        print("\nbatch_size =",self.batch_size,"\nepochs =",self.epochs,"\nlr =",L_RATE)
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self, test):
@@ -109,21 +111,21 @@ class RandomRegularizer(sklKerasClassifier):
         """
         channels = inputs.get_shape().as_list()[3]
         inputs = tf.cast(inputs, tf.float32)
-        inputs = inputs if self.dataset_name == "mnist" else normalize(inputs)
+        # inputs = inputs if self.dataset_name == "mnist" else normalize(inputs)
 
         if GRAYSCALE and channels == 3:
             if channels == 3:
                 inputs = tf.image.rgb_to_grayscale(inputs)
 
         def custom_loss(y_true, y_pred):
-            if self.n_proj == 0 or self.projection_mode == "no_projections":
-                regularization_term = self.no_projections_regularizer(inputs=inputs, outputs=outputs)
+            if self.projection_mode == "no_projections":
+                regularization_term = self._no_projections_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "loss_on_projections":
-                regularization_term = self.loss_on_projections_regularizer(inputs=inputs, outputs=outputs)
+                regularization_term = self._loss_on_projections_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "projected_loss":
-                regularization_term = self.projected_loss_regularizer(inputs=inputs, outputs=outputs)
+                regularization_term = self._projected_loss_regularizer(inputs=inputs, outputs=outputs)
             elif self.projection_mode == "loss_on_perturbations":
-                regularization_term = self.loss_on_perturbations_regularizer(inputs=inputs, outputs=outputs)
+                regularization_term = self._loss_on_perturbations_regularizer(inputs=inputs, outputs=outputs)
             else:
                 raise NotImplementedError("Wrong projection mode. Supported modes: "+PROJ_MODE)
 
@@ -142,7 +144,7 @@ class RandomRegularizer(sklKerasClassifier):
         return [grad if grad is not None else tf.zeros_like(var)
                 for var, grad in zip(var_list, grads)]
 
-    def no_projections_regularizer(self, inputs, outputs):
+    def _no_projections_regularizer(self, inputs, outputs):
         if DERIVATIVES_ON_INPUTS is False:
             raise AttributeError("\nYou can only compute derivatives on the inputs. Set DERIVATIVES_ON_INPUTS = True.")
 
@@ -163,7 +165,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         return regularization / self.batch_size
 
-    def loss_on_projections_regularizer(self, inputs, outputs):
+    def _loss_on_projections_regularizer(self, inputs, outputs):
         size = random.randint(MIN_SIZE, MAX_SIZE)
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
@@ -191,12 +193,11 @@ class RandomRegularizer(sklKerasClassifier):
 
         return regularization / (self.batch_size * self.n_proj)
 
-    def projected_loss_regularizer(self, inputs, outputs):
+    def _projected_loss_regularizer(self, inputs, outputs):
         if DERIVATIVES_ON_INPUTS is False:
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
 
-        # inputs = tf.cast(inputs, tf.float32)
         size = random.randint(MIN_SIZE, MAX_SIZE)
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
@@ -214,22 +215,25 @@ class RandomRegularizer(sklKerasClassifier):
         regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
         return regularization / (self.batch_size * self.n_proj)
 
-    def loss_on_perturbations_regularizer(self, inputs, outputs):
+    def _loss_on_perturbations_regularizer(self, inputs, outputs):
         sess = tf.Session()
         sess.as_default()
         inputs = inputs.eval(session=sess)
 
         axis = 1 if self.data_format == "channels_first" else -1
-        seeds = random.sample(range(1, 100), self.n_proj)
+        n_proj = random.randint(MIN_PROJ, MAX_PROJ)
         size = random.randint(MIN_SIZE, MAX_SIZE)
+        seeds = random.sample(range(1, 100), n_proj)
         print("\nsize =", size)
 
-        projections, inverse_projections = compute_projections(inputs, seeds, self.n_proj, size, "channels")
+        projections, inverse_projections = compute_projections(inputs, seeds, n_proj, size, "channels")
         perturbations, augmented_inputs = compute_perturbations(inputs, inverse_projections)
 
-        print(projections[0,0,0,0,:],inverse_projections[0,0,0,0,:])
-        print(perturbations[0,0,0,:],augmented_inputs[0,0,0,:])
-        plot_projections([inputs,projections[0],inverse_projections[0],perturbations,augmented_inputs])
+        # === plot projections === #
+        # print(projections[0,0,0,0,:],inverse_projections[0,0,0,0,:])
+        # print(perturbations[0,0,0,:],augmented_inputs[0,0,0,:])
+        # plot_projections([inputs,projections[0],inverse_projections[0],perturbations,augmented_inputs])
+        # ======================== #
 
         loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=augmented_inputs),
                                           from_logits=True, axis=axis)
@@ -265,6 +269,8 @@ class RandomRegularizer(sklKerasClassifier):
                 self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
                                batch_size=self.batch_size, callbacks=[early_stopping])
             else:
+                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ)
+                print("\nn_proj=",self.n_proj)
                 for proj in range(self.n_proj):
                     print("\nprojection",proj+1,"/",self.n_proj)
                     loss = self.loss_wrapper(inputs,outputs)
@@ -382,7 +388,7 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             return x_adv
 
-def main(dataset_name, test, lam, projection_mode, n_proj):
+def main(dataset_name, test, lam, projection_mode):
 
     # === Tensorflow session and initialization === #
     sess = tf.Session()
@@ -394,18 +400,13 @@ def main(dataset_name, test, lam, projection_mode, n_proj):
 
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   n_proj=n_proj, test=test)
+                                   test=test)
 
     modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
                 "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+"_proj="+str(classifier.n_proj)+\
                 "_"+str(classifier.projection_mode)+".h5"
     model_path = RESULTS+time.strftime('%Y-%m-%d') +"/"+ modelname
     # model_path = TRAINED_MODELS+"random_regularizer/" + modelname
-
-    # === plot projections === #
-    # inputs = tf.cast(x_train, tf.int32).eval(session=sess)
-    # inputs = x_train
-    # plot_projections([inputs, inputs])
 
     # === train and evaluate === #
     classifier.train(x_train, y_train)
@@ -418,7 +419,7 @@ def main(dataset_name, test, lam, projection_mode, n_proj):
     del classifier
     classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   n_proj=n_proj, test=test)
+                                   test=test)
 
     classifier.model.load_weights(model_path)
 
@@ -442,16 +443,15 @@ if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
-        n_proj = int(sys.argv[3])
-        lam = float(sys.argv[4])
-        projection_mode = sys.argv[5]
+        lam = float(sys.argv[3])
+        projection_mode = sys.argv[4]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        n_proj = int(input("\nChoose the number of projections (type=int): "))
+        # n_proj = int(input("\nChoose the number of projections (type=int): "))
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, n_proj=n_proj)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode)
 
