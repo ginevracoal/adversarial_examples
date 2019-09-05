@@ -11,7 +11,7 @@ import sys
 from projection_functions import * # todo: test new methods from projection_functions.py
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = True
+ADD_BASELINE_PROB = False
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
@@ -23,7 +23,7 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
         It currently supports a maximum of 15 projections.
@@ -34,7 +34,7 @@ class RandomEnsemble(BaselineConvnet):
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
 
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
@@ -45,6 +45,7 @@ class RandomEnsemble(BaselineConvnet):
         self.ensemble_method = "sum"  # supported methods: mode, sum
         self.x_test_proj = None
         self.baseline_classifier = None
+        self.test = test
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
@@ -79,7 +80,6 @@ class RandomEnsemble(BaselineConvnet):
 
         start_time = time.time()
         input_data = x_train.astype(float)
-        input_data = input_data if dataset_name == "mnist" else normalize(input_data)
         x_train_projected, _ = self.compute_projections(input_data=input_data)
 
         # # eventually adjust input dimension to a single channel projection
@@ -90,7 +90,7 @@ class RandomEnsemble(BaselineConvnet):
         for i in range(self.n_proj):
             # use the same model architecture (not weights) for all trainings
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                       data_format=self.data_format, dataset_name=self.dataset_name)
+                                       data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             # train n_proj classifiers on different training data
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
             del baseline
@@ -199,7 +199,7 @@ class RandomEnsemble(BaselineConvnet):
 
         if add_baseline_prob:
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                       data_format=self.data_format, dataset_name=self.dataset_name)
+                                       data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             if self.baseline_classifier is None:
                 self.baseline_classifier = baseline.load_classifier(
                     "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
@@ -246,8 +246,8 @@ class RandomEnsemble(BaselineConvnet):
         """ Adversaries are generated on the baseline classifier """
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                   data_format=self.data_format, dataset_name=self.dataset_name)
-        if self.baseline_classifier is None:
+                                   data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
+        if self.baseline_classifier is None and adversaries_path is None:
             self.baseline_classifier = baseline.load_classifier(
                 "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
         x_adv = baseline._generate_adversaries(self.baseline_classifier, x, y, method=method, dataset_name=dataset_name,
@@ -302,21 +302,21 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name)
+                           data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
     classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    model.save_model(classifier=classifier, model_name=MODEL_NAME)
+    # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
     # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
 
     # === compute projections === #
-    input_data = x_test.astype(float)
-    input_data = input_data if dataset_name == "mnist" else normalize(input_data)
+    # input_data = x_test.astype(float)
+    # input_data = input_data if dataset_name == "mnist" else normalize(input_data)
 
-    projections, inverse_projections = model.compute_projections(input_data=input_data)
-    perturbations, augmented_inputs = compute_perturbations(input_data=input_data,
-                                                            inverse_projections=inverse_projections)
+    # projections, inverse_projections = model.compute_projections(input_data=input_data)
+    # perturbations, augmented_inputs = compute_perturbations(input_data=input_data,
+    #                                                         inverse_projections=inverse_projections)
 
     # print(np.max(augmented_inputs[0,:,:,:]))
     # print(np.min(augmented_inputs[0,:,:,:]))
@@ -383,3 +383,4 @@ if __name__ == "__main__":
             K.clear_session()
             main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj,
                  projection_mode=projection_mode, attack=attack)
+

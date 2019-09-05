@@ -9,17 +9,16 @@ import keras.losses
 from random_ensemble import *
 from projection_functions import *
 
-
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-# LOSS_ON_PROJECTIONS = True # if True gradient of the loss on projected points,
-#                             # else projects the gradient of the loss on inputs
 GRAYSCALE = False  # If True, transforms the inputs from rgb to grayscale
 
 L_RATE = 0.8
 MIN_SIZE = 15
 MAX_SIZE = 25
+TEST_SIZE = 2
 MIN_PROJ = 2
 MAX_PROJ = 8
+TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 
 
@@ -37,6 +36,7 @@ class RandomRegularizer(sklKerasClassifier):
         self.lam = lam
         self.projection_mode = projection_mode
         self._set_training_params(test)
+        self.test = test
         self._set_model()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
@@ -44,19 +44,14 @@ class RandomRegularizer(sklKerasClassifier):
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self, test):
-        # todo: set size random range based on image dimensions...
-        if self.dataset_name == "mnist":
-            if test:
-                self.epochs = 5
-                self.batch_size = 100
-            else:
+        if test:
+            self.epochs = 3
+            self.batch_size = 100
+        else:
+            if self.dataset_name == "mnist":
                 self.epochs = 12
                 self.batch_size = 1000
-        elif self.dataset_name == "cifar":
-            if test:
-                self.epochs = 5
-                self.batch_size = 100
-            else:
+            elif self.dataset_name == "cifar":
                 self.epochs = 60
                 self.batch_size = 1000
 
@@ -111,7 +106,6 @@ class RandomRegularizer(sklKerasClassifier):
         """
         channels = inputs.get_shape().as_list()[3]
         inputs = tf.cast(inputs, tf.float32)
-        # inputs = inputs if self.dataset_name == "mnist" else normalize(inputs)
 
         if GRAYSCALE and channels == 3:
             if channels == 3:
@@ -148,7 +142,7 @@ class RandomRegularizer(sklKerasClassifier):
         if DERIVATIVES_ON_INPUTS is False:
             raise AttributeError("\nYou can only compute derivatives on the inputs. Set DERIVATIVES_ON_INPUTS = True.")
 
-        size = random.randint(MIN_SIZE, MAX_SIZE)
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
         channels = inputs.get_shape().as_list()[3]
@@ -166,7 +160,7 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization / self.batch_size
 
     def _loss_on_projections_regularizer(self, inputs, outputs):
-        size = random.randint(MIN_SIZE, MAX_SIZE)
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
         channels = inputs.get_shape().as_list()[3]
@@ -198,7 +192,7 @@ class RandomRegularizer(sklKerasClassifier):
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
 
-        size = random.randint(MIN_SIZE, MAX_SIZE)
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)
         print("\nsize =", size, ", seed =", seed)
         channels = inputs.get_shape().as_list()[3]
@@ -222,7 +216,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         axis = 1 if self.data_format == "channels_first" else -1
         n_proj = random.randint(MIN_PROJ, MAX_PROJ)
-        size = random.randint(MIN_SIZE, MAX_SIZE)
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seeds = random.sample(range(1, 100), n_proj)
         print("\nsize =", size)
 
@@ -269,14 +263,14 @@ class RandomRegularizer(sklKerasClassifier):
                 self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
                                batch_size=self.batch_size, callbacks=[early_stopping])
             else:
-                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ)
-                print("\nn_proj=",self.n_proj)
+                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
+                print("\nn_proj =",self.n_proj)
                 for proj in range(self.n_proj):
                     print("\nprojection",proj+1,"/",self.n_proj)
                     loss = self.loss_wrapper(inputs,outputs)
                     self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                    self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs, batch_size=self.batch_size,
-                                   callbacks=[early_stopping])  #callbacks=[EpochIdxCallback(self.model)]
+                    self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
+                                   batch_size=self.batch_size, callbacks=[early_stopping])
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
@@ -381,12 +375,19 @@ class RandomRegularizer(sklKerasClassifier):
                 x_adv = attacker.generate(x=x)
         else:
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
-            x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
+            if dataset_name == "mnist":
+                # todo: buggy mnist test data
+                # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
+                # the first element in the list.
+                x_adv = load_from_pickle(path=adversaries_path, test=test)[0]
+            else:
+                x_adv = load_from_pickle(path=adversaries_path, test=test)
 
         if test:
             return x_adv[:TEST_SIZE]
         else:
             return x_adv
+
 
 def main(dataset_name, test, lam, projection_mode):
 
@@ -449,7 +450,6 @@ if __name__ == "__main__":
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        # n_proj = int(input("\nChoose the number of projections (type=int): "))
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
 

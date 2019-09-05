@@ -100,6 +100,11 @@ def load_cifar(test):
     num_classes = 10
     data_format = 'channels_first'
 
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
+    x_train /= 255
+    x_test /= 255
+
     if test:
         x_train = x_train[:TEST_SIZE]
         y_train = y_train[:TEST_SIZE]
@@ -149,11 +154,11 @@ def load_from_pickle(path, test):
     with open(path, 'rb') as f:
         u = pkl._Unpickler(f)
         u.encoding = 'latin1'
-        # In the pickles I'm also saving the labels, so here I only take the data.
-        # todo: solve this issue by adding a special case for the old pkl data or simply transform it.
+        # BUG: In the pickles I'm also saving the labels, so here I only take the data.
         # when loading only x_test it should become:
         # data = u.load()
-        data = u.load()[0]
+        # todo: rigenerare i dati giusti su mnist o trasformare quelli che ho...
+        data = u.load()#[0]
     if test is True:
         data = data[:TEST_SIZE]
     return data
@@ -166,16 +171,16 @@ def load_from_pickle(path, test):
 
 def plot_projections(image_data_list, cmap=None, test=False):
     """
-    Plots the first 10 images of each element in image_data_list, on different rows.
+    Plots the first `n_images` images of each element in image_data_list, on different rows.
 
     :param image_data_list: list of sets of images to plot
     :param cmap: colormap  = gray or None
     :param test: if True it does not hang on the image
     """
 
-    n_images = 10
-    fig, axs = plt.subplots(nrows=len(image_data_list), ncols=n_images, figsize=(10, 8))
-
+    n_images = 5
+    fig, axs = plt.subplots(nrows=len(image_data_list), ncols=n_images, figsize=(n_images, 1.5*len(image_data_list)))
+    # fig.suptitle("CIFAR10 projection", fontsize=20, y=0.95)
     if image_data_list[0].shape[3] == 1:
         cmap = "gray"
 
@@ -196,3 +201,5 @@ def rgb2gray(rgb):
         return rgb
     else:
         return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
+
+
