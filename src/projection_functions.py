@@ -65,9 +65,8 @@ def compute_single_projection(input_data, seed, size_proj, projection_mode):
         projection, inverse_projection = grayscale_projection(input_data=input_data, size_proj=size_proj,
                                                               random_seed=seed)
 
-    # print(np.all(inverse_projection[0, :, :, :] == inverse_projection[0, :, :, :]))
-    # exit()
     return projection, inverse_projection
+
 
 def tf_flat_projection(input_data, random_seed, size_proj):
     """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
@@ -106,6 +105,7 @@ def tf_flat_projection(input_data, random_seed, size_proj):
     inverse_projection = mod_invproj(tf.cast(inverse_projection, tf.float32))
     return projection, inverse_projection
 
+
 def flat_projection(input_data, random_seed, size_proj):
     """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
     It samples `size_proj` random directions for the projection using the given random_seed.
@@ -125,26 +125,6 @@ def flat_projection(input_data, random_seed, size_proj):
     projection = projection.eval(session=sess)
     inverse_projection = inverse_projection.eval(session=sess)
     return projection, inverse_projection
-
-    # samples, rows, cols, channels = input_data.shape
-    # # this is needed to go from tf tensors to np arrays:
-    # sess = tf.Session()
-    # sess.as_default()
-    #
-    # # projection matrices
-    # projector = GaussianRandomProjection(n_components=size_proj * size_proj * channels, random_state=random_seed)
-    # proj_matrix = np.float32(projector._make_random_matrix(size_proj * size_proj * channels, rows * cols * channels))
-    # pinv = np.linalg.pinv(proj_matrix)
-    #
-    # # compute projections
-    # flat_images = tf.cast(input_data.reshape((samples, rows*cols*channels)), dtype=tf.float32)
-    # projection = tf.matmul(a=flat_images, b=proj_matrix, transpose_b=True)
-    # inverse_projection = tf.matmul(a=projection, b=pinv, transpose_b=True)
-    #
-    # # reshape
-    # projection = tf.reshape(projection, shape=(samples, size_proj, size_proj, channels)).eval(session=sess)
-    # inverse_projection = tf.reshape(inverse_projection, shape=(input_data.shape)).eval(session=sess)
-    # return projection, inverse_projection
 
 
 def channels_projection(input_data, random_seed, size_proj):
@@ -201,17 +181,20 @@ def compute_perturbations(input_data, inverse_projections):
 
     perturbations = np.empty(input_data.shape, dtype=float)
     for inverse_projection in inverse_projections:
-        perturbations = np.add(perturbations, inverse_projection)
+        perturbations = np.add(perturbations / n_proj, inverse_projection)
 
     augmented_inputs = np.add(input_data, perturbations)
     augmented_inputs = [mod_augmented_inputs(x.astype(float)) for x in augmented_inputs]
     augmented_inputs = np.array(augmented_inputs)
 
-    return perturbations / n_proj, augmented_inputs
+    return perturbations, augmented_inputs
 
-# TESTING SOME IDEAS
+# TESTING SOME VARIANTS
 
 def mod_invproj(x):
+    return x
+
+def mod_pertubations(x):
     return x
 
 def mod_augmented_inputs(x):
