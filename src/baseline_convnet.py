@@ -19,19 +19,22 @@ MODEL_NAME = "baseline_convnet"
 
 class BaselineConvnet(AdversarialClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         self.dataset_name = dataset_name
-        self.batch_size, self.epochs = self._set_training_params()
+        self.batch_size, self.epochs = self._set_training_params(test=test)
         super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format)
 
-    def _set_training_params(self):
-        if self.dataset_name == "mnist":
-            return 128, 12
-        elif self.dataset_name == "cifar":
-            return 128, 120
+    def _set_training_params(self, test):
+        if test:
+            return 120, 5
+        else:
+            if self.dataset_name == "mnist":
+                return 128, 12
+            elif self.dataset_name == "cifar":
+                return 128, 80
 
     def _set_layers(self):
 
@@ -47,7 +50,6 @@ class BaselineConvnet(AdversarialClassifier):
             x = Dense(128, activation='relu')(x)
             x = Dropout(0.5)(x)
             predictions = Dense(self.num_classes, activation='softmax')(x)
-
             model = Model(inputs=inputs, outputs=predictions)
             model.compile(loss=keras.losses.categorical_crossentropy,
                           optimizer=keras.optimizers.Adadelta(),
@@ -97,8 +99,8 @@ def main(dataset_name, test, attack):
 
     # load dataset #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
-
-    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name)
+    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name,
+                            test=test)
 
     # train classifier #
     # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
@@ -108,14 +110,13 @@ def main(dataset_name, test, attack):
     rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_baseline.h5"
     # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
     classifier = model.load_classifier(relative_path=rel_path)
-
     # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
     # robust_classifier = model.load_classifier(relative_path=rel_path)
 
     # adversarial training #
-    # robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
-    #                                             batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
-    # model.save_model(classifier = robust_classifier, model_name = dataset_name+"_"+attack+"_robust_baseline")
+    robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
+                                                batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
+    model.save_model(classifier=robust_classifier, model_name=dataset_name+"_"+attack+"_robust_baseline")
 
     # evaluations #
     # model.evaluate_test(classifier, x_test, y_test)
@@ -128,15 +129,24 @@ def main(dataset_name, test, attack):
     # x_test_adv, _ = model.evaluate_adversaries(...)
     #############
 
-    for method in ['fgsm', 'pgd', 'deepfool', 'carlini_linf']:
-        # x_test_adv = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
-        x_test_adv = model.evaluate_adversaries(classifier=robust_classifier, x_test=x_test, y_test=y_test,
-                                                method=method, test=test, dataset_name=dataset_name)
-    # save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+attack+".pkl")
+    # x_test_adv, y_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
+    #                                         adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
+    # print(x_test[0,0,0,:],x_test_adv[0,0,0,:])#,np.array(x_test_adv[0,0,0,:],dtype=int))
+    # # exit()
+    # plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
-    # for method in ['fgsm','pgd','deepfool','carlini_linf']:
-    #     x_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
-    #                                             adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
+    for method in ['fgsm', 'pgd', 'deepfool', 'carlini_linf']:
+        # x_test_adv, _ = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
+        #                                                     method=method, test=test, dataset_name=dataset_name)
+        # save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+method+".pkl")
+
+        adversaries_path = DATA_PATH+str(dataset_name)+"_x_test_"+str(method)+".pkl"
+        # model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test,
+        #                                                     dataset_name=dataset_name,
+        #                                                     adversaries_path=adversaries_path)
+        model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test,
+                                   dataset_name=dataset_name, adversaries_path=adversaries_path)
+
 
 if __name__ == "__main__":
     try:
@@ -151,3 +161,4 @@ if __name__ == "__main__":
 
     K.clear_session()
     main(dataset_name=dataset_name, test=test, attack=attack)
+
