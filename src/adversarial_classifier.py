@@ -3,11 +3,10 @@
 from keras.models import load_model
 from art.classifiers import KerasClassifier
 from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method,\
-    ProjectedGradientDescent, NewtonFool, CarliniLInfMethod
+    ProjectedGradientDescent, NewtonFool, CarliniLInfMethod, BoundaryAttack, SpatialTransformation, ZooAttack
 from sklearn.metrics import classification_report
 from utils import *
 import time
-
 
 ############
 # defaults #
@@ -94,14 +93,29 @@ class AdversarialClassifier(object):
                 x_adv = attacker.generate(x=x, y=y)
             elif method == 'pgd':
                 attacker = ProjectedGradientDescent(classifier)
-                x_adv = attacker.generate(x=x)
+                x_adv = attacker.generate(x=x,y=y)
             elif method == 'newtonfool':
                 attacker = NewtonFool(classifier)
+                x_adv = attacker.generate(x=x)
+            elif method == 'boundary':
+                attacker = BoundaryAttack(classifier)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'spatial':
+                attacker = SpatialTransformation(classifier)
+                x_adv = attacker.generate(x=x)
+            elif method == 'zoo':
+                attacker = ZooAttack(classifier)
                 x_adv = attacker.generate(x=x)
 
         else:
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
-            x_adv = load_from_pickle(path=adversaries_path, test=test)  # [0]
+            if dataset_name == "mnist":
+                # todo: buggy mnist test data
+                # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
+                # the first element in the list.
+                x_adv = load_from_pickle(path=adversaries_path, test=test)[0]
+            else:
+                x_adv = load_from_pickle(path=adversaries_path, test=test)
 
         if test:
             return x_adv[:TEST_SIZE]
@@ -138,11 +152,12 @@ class AdversarialClassifier(object):
         print("Correctly classified: {}".format(correct_preds))
         print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
 
+        # print(y_test_pred, y_test_true)
         acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
         print("Test accuracy: %.2f%%" % (acc * 100))
 
         # classification report over single classes
-        print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
+        print(classification_report(y_test_true, y_test_pred, labels=range(self.num_classes)))
 
         return y_test_pred
 
@@ -245,4 +260,5 @@ class AdversarialClassifier(object):
 
         # save_to_pickle(data=x_train_adv, filename="x_train_adv_" + method + ".pkl")
         return robust_classifier
+
 
