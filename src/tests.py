@@ -24,11 +24,11 @@ class Test(unittest.TestCase):
         self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
         # baseline on mnist
         self.baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                        data_format=self.data_format, dataset_name=self.dataset)
+                                        data_format=self.data_format, dataset_name=self.dataset, test=True)
 
     def test_baseline(self):
         model = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                data_format=self.data_format, dataset_name=self.dataset)
+                                data_format=self.data_format, dataset_name=self.dataset, test=True)
 
         # model training
         classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
@@ -67,7 +67,7 @@ class Test(unittest.TestCase):
         for projection_mode in ["flat","channels","grayscale"]:
             model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
                                    n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
-                                   projection_mode=projection_mode)
+                                   projection_mode=projection_mode, test=True)
 
             # train
             classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
@@ -88,15 +88,17 @@ class Test(unittest.TestCase):
     def test_cifar_load_and_train(self):
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True)
         model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                dataset_name="cifar")
+                                dataset_name="cifar", test=True)
         model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     def test_compute_plot_projections(self):
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar", test=True)
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar",
+                                                                                               test=True)
         for projection_mode in ["flat","channels","grayscale"]:
+            random_seeds = random.sample(range(1, 100), N_PROJECTIONS)
             projections, inverse_projections = compute_projections(input_data=x_test, n_proj=N_PROJECTIONS,
                                                                    size_proj=SIZE_PROJECTION,
-                                                                   random_seeds=random.sample(range(1, 100), N_PROJECTIONS),
+                                                                   random_seeds=random_seeds,
                                                                    projection_mode=projection_mode)
 
         plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]], cmap="gray", test=True)
@@ -105,15 +107,14 @@ class Test(unittest.TestCase):
         dataset_name = "cifar"
         sess = tf.Session()
         sess.run(tf.global_variables_initializer())
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=True)
-        for projection_mode in ["channels","grayscale"]:
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
+                                                                                               test=True)
+        for projection_mode in ["no_projections","loss_on_projections","projected_loss"]:
             classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                            dataset_name=dataset_name, sess=sess, lam=0.6,
-                                           projection_mode=projection_mode, n_proj=N_PROJECTIONS, test=True)
+                                           projection_mode=projection_mode, test=True)
             classifier.train(x_train, y_train)
             classifier.evaluate_test(x_test=x_test, y_test=y_test)
-
-            # todo:eval on adversaries
 
     def test_parallel_randens(self):
         dataset_name=self.dataset
