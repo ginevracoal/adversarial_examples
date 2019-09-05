@@ -12,7 +12,7 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
     def __init__(self, input_shape, num_classes, size_proj, data_format, dataset_name, projection_mode):
         super(ParallelRandomEnsemble, self).__init__(input_shape, num_classes, None, size_proj, projection_mode,
-                                                     data_format, dataset_name)
+                                                     data_format, dataset_name, test=False)
         # None refers to n_proj since we only have to compute a single projection
 
     def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
@@ -31,7 +31,7 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
         # use the same model architecture (not weights) for all trainings
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                   dataset_name=self.dataset_name, data_format=self.data_format)
+                                   dataset_name=self.dataset_name, data_format=self.data_format, test=False)
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
         print("\nTraining time for single projection with size_proj=", str(self.size_proj),
               "): --- %s seconds ---" % (time.time() - start_time))
@@ -47,6 +47,7 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
         return classifier
 
+    # todo: buggy
     # def parallel_train(self, x_train, y_train, batch_size, epochs):
     #     """
     #     Trains the baseline model over `n_proj` random projections of the training data whose input shape is
