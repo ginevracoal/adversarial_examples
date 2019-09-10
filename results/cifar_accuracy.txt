@@ -1,49 +1,58 @@
-=== BASELINE ===  # epochs=80    
+=== BASELINE ===
+                                                                                                   # extra
+model                         test   deepfool carlini   test  deepfool carlini            fgsm    pgd      fgsm    pgd
+____________________________|_______ 80 epochs _______|______120 epochs_________|       |___80 epochs___|___120 epochs___|
 
-model                         test    fgsm    pgd   deepfool carlini
-____________________________________|_________adversaries____________|
+original                      76.52   39.77   0.00       82.04  36.79   0.00              10.48   0.00     10.11   0.00
+deepfool_robust               83.16   83.01   81.67                                       10.42   0.15
+carlini_robust                83.44   83.23   82.79                                       10.07   5.92
 
-original                      76.52   10.48   0.00    39.77   0.00                        
-pgd_robust
-carlini_robust
+=== RANDENS ===
 
-=== RANDENS ===  # epochs=80
+n_proj  size_proj             test  deepfool carlini    test  deepfool carlini
+__________________________|________ 80 epochs ________|______ 800 epochs _____|
 
-n_proj  size_proj             test    fgsm    pgd   deepfool carlini
-__________________________|_____________ no baseline_prob _____________|
-
-6        8                    51.25   11.21   15.72   51.09   50.97
-9        8                    51.34   11.39   15.07   51.11   51.01
-12       8                    51.14         -         51.00   50.84
-15       8                    51.42         -         51.27   51.07
-6        12
-9        12
+3        8                    50.54   50.40   50.18     56.85   56.58   56.36
+6        8                    51.25   51.09   50.97     58.81   58.62   58.26
+9        8                    51.34   51.11   51.01     59.08   58.76   58.44
+12       8                    51.14   51.00   50.84     59.65   59.53   59.21
+15       8                    51.42   51.27   51.07     59.78   59.62   59.47    # fare training delle proj mancanti
+3        12
+6        12                   51.38   51.15   50.96
+9        12                   51.30   51.10
 12       12
 15       12
+3        16                   50.13   49.75   49.73
 6        16
 9        16
 12       16
 15       16
-6        20
-9        20
-12       20
-15       20
+
+# accuracy vs epochs on (6,8)
+
+epochs  test  deepfool carlini
+
+80      51.25   51.09   50.97
+150     53.91   53.74   53.50
+300     53.13   56.75   56.49
+800     58.81   58.62   58.26
+
 
 === RANDREG ===
 
-lambda  mode                  test    fgsm    pgd   deepfool carlini        # lr=0.8, size_proj=(15,25), n_proj=(2,8)
-____________________________________|_______baseline adversaries_______|
-0.4     no_proj                                       
+lambda  mode                  test  deepfool carlini | test  deepfool carlini
+_____________________________________________________|_______________________
+0.4     no_proj
 0.4     loss_on_proj                                  
 0.4     proj_loss                                     
-0.5     no_proj               51.93   10.25   9.13   51.42   50.96                         
-0.5     loss_on_proj                                  
-0.5     proj_loss                                     
+0.5     no_proj               51.93   51.42   50.96         
+0.5     loss_on_proj          56.51   55.20   54.29
+0.5     proj_loss             57.10   57.85   56.47
 0.6     no_proj                                       
 0.6     loss_on_proj         
 0.6     proj_loss            
-
-
+                             # n_proj=1, size=(5,10)    # n_proj=(2,8), lr=0.8
+                                      lr=1                  size_proj=(15,25)
 === PERTURBATIONS ===
 
 # evaluations on the first 100 samples
@@ -63,7 +72,7 @@ __________________________________________________________
 23       3         2.6761175713366248    28.00
 23       4         3.0580921535266       28.00
 
-test                    -                78.00
+test               0                     78.00
 deepfool           0.1663116             42.00
 carlini            0.28179914            00.00
 

@@ -10,12 +10,11 @@ carlini_linf robust       7105.352866649628
 
 === RANDREG ===
 
-lambda  batch_s  epochs  n_proj   time (s)
-                                                   
-0.5     1000      12     1        752.8392639160156
-0.5     1000      12     3        5030.289741516113
-0.5     1000      5      5        11197.305961370468
-0.5     500       12     3        19436.56516432762
+mode                       avg training time (s)
+
+no_projections             975.3929748535156
+loss_on_projections        10968.222503185272
+projected_loss             13122.27465391159
 
 === RANDENS ===
 
