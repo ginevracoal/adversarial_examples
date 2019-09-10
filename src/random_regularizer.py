@@ -40,7 +40,8 @@ class RandomRegularizer(sklKerasClassifier):
         self._set_model()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
-        print("\nbatch_size =",self.batch_size,"\nepochs =",self.epochs,"\nlr =",L_RATE)
+        print("\nmode =", self.projection_mode, ", lambda =", self.lam)
+        print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
@@ -51,10 +52,10 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             if self.dataset_name == "mnist":
                 self.epochs = 12
-                self.batch_size = 100
+                self.batch_size = 128
             elif self.dataset_name == "cifar":
                 self.epochs = 12
-                self.batch_size = 100
+                self.batch_size = 128
 
     def _get_logits(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
@@ -242,15 +243,18 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        batches = int(len(x_train)/100)#self.batch_size)
+        batches = 200 #int(len(x_train)/self.batch_size)
         x_train_batches = np.split(x_train, batches)
         y_train_batches = np.split(y_train, batches)
 
         start_time = time.time()
         for batch in range(batches):
             print("\n=== training batch", batch+1,"/",batches,"===")
-            inputs = tf.convert_to_tensor(x_train_batches[batch])
-            outputs = tf.convert_to_tensor(y_train_batches[batch])
+            idxs = np.random.choice(len(x_train_batches[0]), self.batch_size, replace=False)
+            x_train_sample = x_train_batches[batch][idxs]
+            y_train_sample = y_train_batches[batch][idxs]
+            inputs = tf.convert_to_tensor(x_train_sample)
+            outputs = tf.convert_to_tensor(y_train_sample)
             early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
 
             mini_batch = 20
@@ -258,13 +262,13 @@ class RandomRegularizer(sklKerasClassifier):
             if self.projection_mode == "loss_on_perturbations":
                 loss = self.loss_wrapper(inputs, outputs)
                 self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
-                               batch_size=mini_batch, callbacks=[early_stopping])
+                self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
+                               callbacks=[early_stopping])
             elif self.projection_mode == "no_projections":
                 loss = self.loss_wrapper(inputs, outputs)
                 self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-                self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
-                               batch_size=mini_batch, callbacks=[early_stopping])
+                self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
+                               callbacks=[early_stopping])
             else:
                 self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
                 print("\nn_proj =",self.n_proj)
@@ -272,8 +276,8 @@ class RandomRegularizer(sklKerasClassifier):
                     print("\nprojection",proj+1,"/",self.n_proj)
                     loss = self.loss_wrapper(inputs,outputs)
                     self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                    self.model.fit(x_train_batches[batch], y_train_batches[batch], epochs=self.epochs,
-                                   batch_size=mini_batch, callbacks=[early_stopping])
+                    self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
+                                   callbacks=[early_stopping])
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
