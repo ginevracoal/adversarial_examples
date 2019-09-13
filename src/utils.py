@@ -6,6 +6,9 @@ import pickle as pkl
 import time
 import os
 import matplotlib.pyplot as plt
+import math
+
+from sklearn.preprocessing import StandardScaler
 
 MIN = 0
 MAX = 255
@@ -194,7 +197,6 @@ def plot_projections(image_data_list, cmap=None, test=False):
         input("Press ENTER to exit")
         exit()
 
-
 def rgb2gray(rgb):
     """ convert rgb image to greyscale image """
     if rgb.shape[2] == 1:
@@ -203,3 +205,52 @@ def rgb2gray(rgb):
         return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
 
 
+############
+
+def compute_angle(v1, v2):
+    """ Compute the angle between two numpy arrays, eventually flattening them if multidimensional. """
+    if len(v1) != len(v2): raise ValueError("\nYou cannot compute the angle between vectors with different dimensions.")
+    v1 = v1.flatten()
+    v2 = v2.flatten()
+    return math.acos(np.dot(v1, v2) / (np.linalg.norm(v1)*np.linalg.norm(v2)) )
+
+def compute_variances(x,y):
+    """
+    Compute within-class and between-class variances on the given data.
+    :param x: input data, type=np.ndarray, shape=(n_samples, n_features)
+    :param y: data labels, type=np.ndarray, shape=(n_samples, n_classes)
+    :return: average within-class variance, average between-class variance
+    """
+
+    # reshape and standardize data
+    n_features =  x.shape[1]*x.shape[2]*x.shape[3]
+    x = x.reshape(len(x),n_features)
+    x = (x - np.mean(x))/ np.std(x)
+
+    # compute mean and class mean
+    mu = np.mean(x, axis=0).reshape(n_features,1)
+    y_true = np.argmax(y, axis=1)
+    mu_classes = []
+    for i in range(10):
+        mu_classes.append(np.mean(x[np.where(y_true == i)], axis=0))
+    mu_classes = np.array(mu_classes).T
+
+    # compute scatter matrices
+    data_SW = []
+    Nc = []
+    for i in range(10):
+        a = np.array(x[np.where(y_true == i)] - mu_classes[:, i].reshape(1, n_features))
+        data_SW.append(np.dot(a.T, a))
+        Nc.append(np.sum(y_true == i))
+    SW = np.sum(data_SW, axis=0)
+    SB = np.dot(Nc * np.array(mu_classes - mu), np.array(mu_classes - mu).T)
+    SW_min = np.min(SW)
+    SW_mean = np.mean(SW)
+    SW_max = np.max(SW)
+    SB_min = np.min(SB)
+    SB_mean = np.mean(SB)
+    SB_max = np.max(SB)
+    print("\nWithin-class variance: min=",SW_min, ", avg=", SW_mean,", max=", SW_max)
+    print("Between-class variance: min=",SB_min, ", avg=", SB_mean,", max=", SB_max)
+
+    return SW_mean, SB_mean
