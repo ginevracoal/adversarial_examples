@@ -20,17 +20,17 @@ Scalability and parallelizability .
 ### Main results and plots
 
 Adversarial perturbations
-<img src="results/images/mnist_adversaries.png" width="60">
-<img src="results/images/cifar_adversaries.png" width="60">
+<img src="results/images/mnist_adversaries.png" width="200">
+<img src="results/images/cifar_adversaries.png" width="200">
 
 Adversarial robustness
-<img src="results/images/mnist_randens_adversarial_accuracy.png" width="40">
-<img src="results/images/cifar_randens_adversarial_accuracy.png" width="40">
+<img src="results/images/mnist_randens_adversarial_accuracy.png" width="200">
+<img src="results/images/cifar_randens_adversarial_accuracy.png" width="200">
 
 
 Computational complexity
-![](results/images/mnist_randens_complexity.png)
-![](results/images/cifar_randens_complexity.png)
+<img src="results/images/mnist_randens_complexity.png" width="200">
+<img src="results/images/cifar_randens_complexity.png" width="200">
 
 
 
