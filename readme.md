@@ -20,8 +20,8 @@ Scalability and parallelizability .
 ### Main results and plots
 
 Adversarial perturbations
-<img src="results/images/mnist_adversaries.png" width="40">
-<img src="results/images/cifar_adversaries.png" width="40">
+<img src="results/images/mnist_adversaries.png" width="60">
+<img src="results/images/cifar_adversaries.png" width="60">
 
 Adversarial robustness
 <img src="results/images/mnist_randens_adversarial_accuracy.png" width="40">
