@@ -18,7 +18,8 @@ class ParallelRandomEnsemble(RandomEnsemble):
     def train_single_projection(self, x_train, y_train, batch_size, epochs, idx, save):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
         K.clear_session()
-
+        print("\nTraining single randens projection with seed=", str(self.random_seeds[idx]),
+              "and size_proj=", str(self.size_proj))
         start_time = time.time()
         x_train_projected, x_train_inverse_projected = compute_single_projection(input_data=x_train,
                                                                                  seed=self.random_seeds[idx],
@@ -33,8 +34,8 @@ class ParallelRandomEnsemble(RandomEnsemble):
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    dataset_name=self.dataset_name, data_format=self.data_format, test=False)
         classifier = baseline.train(x_train_projected, y_train, batch_size=batch_size, epochs=epochs)
-        print("\nTraining time for single projection with size_proj=", str(self.size_proj),
-              "): --- %s seconds ---" % (time.time() - start_time))
+        print("\nTraining time for single projection with seed=",str(self.random_seeds[idx]),
+              "and size_proj=", str(self.size_proj),": --- %s seconds ---" % (time.time() - start_time))
 
         if save:
             start = time.time()

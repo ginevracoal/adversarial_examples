@@ -7,6 +7,7 @@ from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, 
 from sklearn.metrics import classification_report
 from utils import *
 import time
+from art.utils import to_categorical
 
 ############
 # defaults #
@@ -98,19 +99,21 @@ class AdversarialClassifier(object):
                 attacker = NewtonFool(classifier)
                 x_adv = attacker.generate(x=x)
             elif method == 'boundary':
-                attacker = BoundaryAttack(classifier)
+                attacker = BoundaryAttack(classifier, targeted=True, max_iter=200, delta=0.05, epsilon=0.05)
+                y=np.random.permutation(y)
                 x_adv = attacker.generate(x=x, y=y)
             elif method == 'spatial':
-                attacker = SpatialTransformation(classifier)
-                x_adv = attacker.generate(x=x)
+                attacker = SpatialTransformation(classifier, max_translation=3.0,num_translations=5, max_rotation=8.0,
+                                                 num_rotations=3)
+                x_adv = attacker.generate(x=x, y=y)
             elif method == 'zoo':
                 attacker = ZooAttack(classifier)
-                x_adv = attacker.generate(x=x)
+                x_adv = attacker.generate(x=x, y=y)
 
         else:
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
-            if dataset_name == "mnist":
-                # todo: buggy mnist test data
+            if dataset_name == "mnist" and method in ['fgsm','pgd','deepfool','carlini_linf']:
+                # todo: buggy old mnist test data
                 # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
                 # the first element in the list.
                 x_adv = load_from_pickle(path=adversaries_path, test=test)[0]

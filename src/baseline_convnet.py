@@ -29,7 +29,7 @@ class BaselineConvnet(AdversarialClassifier):
 
     def _set_training_params(self, test):
         if test:
-            return 120, 5
+            return 28, 5
         else:
             if self.dataset_name == "mnist":
                 return 128, 12
@@ -90,6 +90,19 @@ class BaselineConvnet(AdversarialClassifier):
 
             return model
 
+        def _get_logits(inputs):
+            # todo: repeated code + only works for mnist
+            x = Conv2D(32, kernel_size=(3, 3),
+                       activation='relu', data_format=self.data_format)(inputs)
+            x = Conv2D(64, (3, 3), activation='relu')(x)
+            x = MaxPooling2D(pool_size=(2, 2))(x)
+            x = Dropout(0.25)(x)
+            x = Flatten()(x)
+            x = Dense(128, activation='relu')(x)
+            x = Dropout(0.5)(x)
+            predictions = Dense(self.num_classes, activation='softmax')(x)
+            return predictions
+
 def main(dataset_name, test, attack):
     """
     :param dataset: choose between "mnist" and "cifar"
@@ -110,17 +123,18 @@ def main(dataset_name, test, attack):
     rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_baseline.h5"
     # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
     classifier = model.load_classifier(relative_path=rel_path)
+
     # rel_path = TRAINED_MODELS+"baseline/"+str(dataset_name)+"_"+str(attack)+"_robust_baseline.h5"
     # robust_classifier = model.load_classifier(relative_path=rel_path)
 
     # adversarial training #
-    robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
-                                                batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
-    model.save_model(classifier=robust_classifier, model_name=dataset_name+"_"+attack+"_robust_baseline")
+    # robust_classifier = model.adversarial_train(classifier, x_train, y_train, test=test, method=attack,
+    #                                             batch_size=model.batch_size, epochs=model.epochs, dataset_name=dataset_name)
+    # model.save_model(classifier=robust_classifier, model_name=dataset_name+"_"+attack+"_robust_baseline")
 
     # evaluations #
     # model.evaluate_test(classifier, x_test, y_test)
-    model.evaluate_test(robust_classifier, x_test, y_test)
+    # model.evaluate_test(robust_classifier, x_test, y_test)
 
     #############
     # todo: solve this bug eventually... not urgent
@@ -128,24 +142,26 @@ def main(dataset_name, test, attack):
     # loading deals with this issue. the correct code should be:
     # x_test_adv, _ = model.evaluate_adversaries(...)
     #############
+    # adversaries_path = DATA_PATH+dataset_name+"_x_test_"+attack+".pkl"
+    x_test_adv, y_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=attack, test=test,
+                                                        dataset_name=dataset_name)#, adversaries_path=adversaries_path)
+    print(x_test[0,0,0,:],x_test_adv[0,0,0,:])
+    avg_distance = lambda x: np.mean([np.linalg.norm(x[0][idx] - x[1][idx]) for idx in range(len(x_test))])
+    print("Average distance from attack: ", avg_distance([x_test, x_test_adv]))
+    # exit()
+    plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
-    # x_test_adv, y_test_adv = model.evaluate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
-    #                                         adversaries_path=DATA_PATH+dataset_name+"_x_test_"+attack+".pkl", test=test)
-    # print(x_test[0,0,0,:],x_test_adv[0,0,0,:])#,np.array(x_test_adv[0,0,0,:],dtype=int))
-    # # exit()
-    # plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
-
-    for method in ['fgsm', 'pgd', 'deepfool', 'carlini_linf']:
-        # x_test_adv, _ = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
-        #                                                     method=method, test=test, dataset_name=dataset_name)
-        # save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+method+".pkl")
-
-        adversaries_path = DATA_PATH+str(dataset_name)+"_x_test_"+str(method)+".pkl"
-        # model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test,
-        #                                                     dataset_name=dataset_name,
-        #                                                     adversaries_path=adversaries_path)
-        model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test,
-                                   dataset_name=dataset_name, adversaries_path=adversaries_path)
+    # for method in ['boundary','spatial']:#['fgsm', 'pgd', 'deepfool', 'carlini_linf']:
+    #     # x_test_adv, _ = model.evaluate_adversaries(classifier=classifier, x_test=x_test, y_test=y_test,
+    #     #                                                     method=method, test=test, dataset_name=dataset_name)
+    #     # save_to_pickle(data=x_test_adv, filename=dataset_name+"_x_test_"+method+".pkl")
+    #
+    #     adversaries_path = DATA_PATH+str(dataset_name)+"_x_test_"+str(method)+".pkl"
+    #     # model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test,
+    #     #                                                     dataset_name=dataset_name,
+    #     #                                                     adversaries_path=adversaries_path)
+    #     model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, test=test,
+    #                                dataset_name=dataset_name, adversaries_path=adversaries_path)
 
 
 if __name__ == "__main__":
