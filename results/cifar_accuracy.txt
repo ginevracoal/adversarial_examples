@@ -1,32 +1,26 @@
 === BASELINE ===
-                                                                                                   # extra
-model                         test   deepfool carlini   test  deepfool carlini            fgsm    pgd      fgsm    pgd
-____________________________|_______ 80 epochs _______|______120 epochs_________|       |___80 epochs___|___120 epochs___|
+                                                                                              # FAILING ATTACKS
+model                         test   deepfool carlini   test  deepfool carlini          fgsm    pgd      fgsm    pgd
+____________________________|_______ 80 epochs _______|______120 epochs_________|     |___80 epochs___|___120 epochs___|
 
-original                      76.52   39.77   0.00       82.04  36.79   0.00              10.48   0.00     10.11   0.00
-deepfool_robust               83.16   83.01   81.67                                       10.42   0.15
-carlini_robust                83.44   83.23   82.79                                       10.07   5.92
+original                      76.52   39.77   0.00       82.04  36.79   0.00            10.48   0.00     10.11   0.00
+deepfool_robust               83.16   83.01   81.67                                     10.42   0.15
+carlini_robust                83.44   83.23   82.79                                     10.07   5.92
 
-=== RANDENS ===
+=== RANDENS ===   (800 epochs model)
 
-n_proj  size_proj             test  deepfool carlini    test  deepfool carlini
-__________________________|________ 80 epochs ________|______ 800 epochs _____|
+n_proj  size_proj   test  deepfool carlini    test  deepfool carlini
+__________________|_______no baseline_______|______+ baseline _______|
+3        4          52.63  52.32   51.98      67.93  58.52  48.48
+6        4          55.66  55.31   54.96      64.59  58.81  53.78
+9        4          57.13  56.75   56.49      63.15  59.06  55.48
+12       4          56.82  56.52   56.38      61.93  58.65  56.07
+3        8          56.85  56.58   56.36      67.66  61.00  53.61
+6        8          58.81  58.62   58.26      64.83  60.86  57.21
+9        8          59.08  58.76   58.44      63.36  60.35  58.03
+12       8          59.65  59.53   59.21      62.99  60.81  58.75
+15       8          59.78  59.62   59.47      62.32  60.79  58.99
 
-3        8                    50.54   50.40   50.18     56.85   56.58   56.36
-6        8                    51.25   51.09   50.97     58.81   58.62   58.26
-9        8                    51.34   51.11   51.01     59.08   58.76   58.44
-12       8                    51.14   51.00   50.84     59.65   59.53   59.21
-15       8                    51.42   51.27   51.07     59.78   59.62   59.47    
-3        12
-6        12                   51.38   51.15   50.96
-9        12                   51.30   51.10
-12       12
-15       12
-3        16                   50.13   49.75   49.73
-6        16
-9        16
-12       16
-15       16
 
 BLACK BOX      boundary  spatial
 ATTACKS       ____________________
@@ -35,7 +29,8 @@ baseline         23.28    68.73
 randens 80        ~22      ~48
 randens 800       ~25      ~54
 
-# accuracy vs epochs on (6,8)
+
+RANDENS accuracy vs epochs on (6,8)
 
 epochs  test  deepfool carlini
 
@@ -47,15 +42,15 @@ epochs  test  deepfool carlini
 
 === RANDREG ===
 
-lambda  mode                  test  deepfool carlini | test  deepfool carlini
-_____________________________________________________|_______________________
-0.4     no_proj
-0.4     loss_on_proj                                  
-0.4     proj_loss                                     
-0.5     no_proj               51.93   51.42   50.96         
+lambda  mode                  test  deepfool carlini | test  deepfool carlini             
+_____________________________________________________|_______________________             
+0.4     no_proj                                                                           
+0.4     loss_on_proj                                                                      
+0.4     proj_loss                                                                         
+0.5     no_proj               51.93   51.42   50.96
 0.5     loss_on_proj          56.51   55.20   54.29
 0.5     proj_loss             57.10   57.85   56.47
-0.6     no_proj                                       
+0.6     no_proj                                                                           
 0.6     loss_on_proj         
 0.6     proj_loss            
                              # n_proj=1, size=(5,10)    # n_proj=(2,8), lr=0.8
