@@ -214,18 +214,20 @@ def compute_angle(v1, v2):
     v2 = v2.flatten()
     return math.acos(np.dot(v1, v2) / (np.linalg.norm(v1)*np.linalg.norm(v2)) )
 
-def compute_variances(x,y):
+def compute_covariance_matrices(x,y):
     """
     Compute within-class and between-class variances on the given data.
     :param x: input data, type=np.ndarray, shape=(n_samples, n_features)
     :param y: data labels, type=np.ndarray, shape=(n_samples, n_classes)
     :return: average within-class variance, average between-class variance
     """
+    standardize = lambda x: (x - np.mean(x))/ np.std(x)
+    normalize = lambda x: (x - np.min(x))/ (np.max(x)-np.min(x))
 
     # reshape and standardize data
-    n_features =  x.shape[1]*x.shape[2]*x.shape[3]
+    n_features =  x.shape[1]
     x = x.reshape(len(x),n_features)
-    x = (x - np.mean(x))/ np.std(x)
+    x = standardize(x)
 
     # compute mean and class mean
     mu = np.mean(x, axis=0).reshape(n_features,1)
@@ -244,13 +246,10 @@ def compute_variances(x,y):
         Nc.append(np.sum(y_true == i))
     SW = np.sum(data_SW, axis=0)
     SB = np.dot(Nc * np.array(mu_classes - mu), np.array(mu_classes - mu).T)
-    SW_min = np.min(SW)
-    SW_mean = np.mean(SW)
-    SW_max = np.max(SW)
-    SB_min = np.min(SB)
-    SB_mean = np.mean(SB)
-    SB_max = np.max(SB)
-    print("\nWithin-class variance: min=",SW_min, ", avg=", SW_mean,", max=", SW_max)
-    print("Between-class variance: min=",SB_min, ", avg=", SB_mean,", max=", SB_max)
 
-    return SW_mean, SB_mean
+    SW = normalize(SW)
+    SB = normalize(SB)
+    print("\nWithin-class avg normalized variance:", np.mean(SW))
+    print("Between-class avg normalized variance:", np.mean(SB))
+
+    return SW, SB
