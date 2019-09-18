@@ -39,9 +39,10 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
         if save:
             start = time.time()
+
             filename = MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[idx]) + ".h5"
-            folder = str(self.dataset_name) + "_" + MODEL_NAME + "_sum_size=" + str(self.size_proj) + "_" + \
-                     str(self.projection_mode) + "/"
+            folder = str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) +  "_epochs=" + \
+                     str(self.epochs) + "_" + str(self.projection_mode) + "/"
             classifier.save(filename=filename, path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder)
             saving_time = time.time() - start
             self.training_time -= saving_time
