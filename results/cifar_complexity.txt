@@ -10,11 +10,12 @@ carlini_robust      65423.28578591347
 === PARALLEL RANDENS ===                           
 size_proj           training time (s)
 
-8                   7509.4587280750275    52017.7775683403
+8                   7509.4587280750275    52017.7775683403    105720.28502964973
 12                  16324.886883497238
 16                  19994.329442739487
+epochs              80                    300                 800
+mode                channels              channels            grayscale
 
-                      # 80 epochs            # 300 epochs
 
 === RANDREG ===
 mode                            training time (s)

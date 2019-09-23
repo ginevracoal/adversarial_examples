@@ -1,6 +1,6 @@
 === BASELINE ===
 
-model                          test    fgsm    pgd   deepfool carlini      fgsm    pgd    deepfool carlini
+model                          test    fgsm    pgd   deepfool carlini     fgsm  pgd  deepfool carlini
 ____________________________________|___________baseline adversaries__ |_______robust adversaries_________|
 
 original                       99.13   5.91    0.71    34.83   28.96                      -
