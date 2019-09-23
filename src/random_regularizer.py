@@ -10,17 +10,16 @@ from random_ensemble import *
 from projection_functions import *
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-GRAYSCALE = False  # If True, transforms the inputs from rgb to grayscale
 
 L_RATE = 5
 MIN_SIZE = 2
 MAX_SIZE = 4
 MIN_PROJ = 1
-MAX_PROJ = 1
+MAX_PROJ = 3
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
-CHANNEL_MODE = "one_channel" # "channels"
+CHANNEL_MODE = "grayscale" # "channels, grayscale"
 
 class RandomRegularizer(sklKerasClassifier):
 
@@ -40,7 +39,7 @@ class RandomRegularizer(sklKerasClassifier):
         self._set_model()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
-        print("\nmode =", self.projection_mode, ", lambda =", self.lam)
+        print("\nprojection mode =", self.projection_mode, "channel mode =", CHANNEL_MODE,", lambda =", self.lam)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
@@ -109,9 +108,8 @@ class RandomRegularizer(sklKerasClassifier):
         channels = inputs.get_shape().as_list()[3]
         inputs = tf.cast(inputs, tf.float32)
 
-        if GRAYSCALE and channels == 3:
-            if channels == 3:
-                inputs = tf.image.rgb_to_grayscale(inputs)
+        if CHANNEL_MODE == "grayscale" and channels == 3:
+            inputs = tf.image.rgb_to_grayscale(inputs)
 
         def custom_loss(y_true, y_pred):
             if self.projection_mode == "no_projections":
@@ -141,12 +139,13 @@ class RandomRegularizer(sklKerasClassifier):
                 for var, grad in zip(var_list, grads)]
 
     def _get_n_channels(self, inputs, channel_mode=CHANNEL_MODE):
-        if channel_mode == "channels":
-            return inputs.get_shape().as_list()[3]
-        elif channel_mode == "one_channel":
-            return 1
-        else:
-            raise ValueError("Projection mode not supported. Choose between:", CHANNEL_MODE)
+        # if channel_mode == "channels":
+        #     return inputs.get_shape().as_list()[3]
+        # elif channel_mode == "one_channel":
+        #     return 1
+        # else:
+        #     raise ValueError("Projection mode not supported. Choose between:", CHANNEL_MODE)
+        return inputs.get_shape().as_list()[3]
 
     def _no_projections_regularizer(self, inputs, outputs):
         if DERIVATIVES_ON_INPUTS is False:
@@ -315,7 +314,7 @@ class RandomRegularizer(sklKerasClassifier):
         print("\n===== Test set evaluation =====")
         print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
 
-        y_test_pred = self.predict(x_test) # self.predict
+        y_test_pred = self.predict(x_test)
         y_test_true = np.argmax(y_test, axis=1)
         correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
 
