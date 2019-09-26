@@ -123,14 +123,16 @@ def load_dataset(dataset_name, test):
     :param dataset_name: choose between "mnist" and "cifar"
     :param test: If True only loads the first 100 samples
     """
-    global x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
+    # global x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
     if dataset_name == "mnist":
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = preprocess_mnist(test=test)
+        return preprocess_mnist(test=test)
     elif dataset_name == "cifar":
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=test)
+        return load_cifar(test=test)
+    else:
+        raise ValueError("\nWrong dataset name.")
 
-    return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
+    # return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
 
 ################
@@ -154,6 +156,7 @@ def unpickle(file):
 
 def load_from_pickle(path, test):
     """ loads data from pickle containing: x_test, y_test."""
+    print("\nLoading from pickle: ",path)
     with open(path, 'rb') as f:
         u = pkl._Unpickler(f)
         u.encoding = 'latin1'
@@ -253,3 +256,21 @@ def compute_covariance_matrices(x,y):
     print("Between-class avg normalized variance:", np.mean(SB))
 
     return SW, SB
+
+
+def compute_distances(x1,x2,ord):
+    """
+    Computes min, avg and max distances between the inputs and their perturbations
+    :param x1: input points, shape=(n_samples, rows, cols, channels), type=np.ndarray
+    :param x2: perturbations, shape=(n_samples, rows, cols, channels), type=np.ndarray
+    :param ord: norm order for np.linalg.norm
+    :return: min, average, max distances between all couples of points, type=dict
+    """
+    if x1.shape != x2.shape:
+        raise ValueError("\nThe arrays need to have the same shape.")
+    flat_x1 = x1.reshape(x1.shape[0], np.prod(x1.shape[1:]))
+    flat_x2 = x2.reshape(x2.shape[0], np.prod(x2.shape[1:]))
+    min = np.min([np.linalg.norm(flat_x1[idx] - flat_x2[idx], ord=ord) for idx in range(len(x1))])
+    mean = np.mean([np.linalg.norm(flat_x1[idx] - flat_x2[idx], ord=ord) for idx in range(len(x1))])
+    max = np.max([np.linalg.norm(flat_x1[idx] - flat_x2[idx], ord=ord) for idx in range(len(x1))])
+    return {"min":min,"mean": mean,"max": max}
