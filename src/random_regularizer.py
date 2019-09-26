@@ -8,8 +8,10 @@ from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 import keras.losses
 from random_ensemble import *
 from projection_functions import *
+from adversarial_classifier import AdversarialClassifier as myAdvClassifier
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
+TRAINED_MODELS = "../trained_models/random_regularizer/"
 
 L_RATE = 5
 MIN_SIZE = 2
@@ -23,7 +25,7 @@ CHANNEL_MODE = "grayscale" # "channels, grayscale"
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, test=False):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, eps, test=False):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -39,6 +41,8 @@ class RandomRegularizer(sklKerasClassifier):
         self._set_model()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
+        self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
+                                                            data_format=self.data_format, eps=eps)
         print("\nprojection mode =", self.projection_mode, "channel mode =", CHANNEL_MODE,", lambda =", self.lam)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
@@ -46,15 +50,15 @@ class RandomRegularizer(sklKerasClassifier):
 
     def _set_training_params(self, test):
         if test:
-            self.epochs = 3
+            self.epochs = 1
             self.batch_size = 100
         else:
             if self.dataset_name == "mnist":
                 self.epochs = 12
-                self.batch_size = 100
+                self.batch_size = 1000
             elif self.dataset_name == "cifar":
                 self.epochs = 12
-                self.batch_size = 100
+                self.batch_size = 1000
 
     def _get_logits(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
@@ -296,6 +300,37 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
+    def evaluate(self, classifier, x, y):
+        """
+        Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
+        :param classifier: trained classifier
+        :param x: test data
+        :param y: test labels
+        :return: predictions
+        """
+        # setting classes_ attribute for loaded models
+        if len(y.shape) == 2 and y.shape[1] > 1:
+            self.classes_ = np.arange(y.shape[1])
+        elif (len(y.shape) == 2 and y.shape[1] == 1) or len(y.shape) == 1:
+            self.classes_ = np.unique(y)
+
+        # return self.adversarial_classifier.evaluate(classifier, x, y)
+        # evaluate the performance on the adversarial test set
+        y_pred = classifier.predict(x)
+        y_true = np.argmax(y, axis=1)
+        nb_correct_adv_pred = np.sum(y_pred == y_true)
+
+        print("\nAdversarial test data.")
+        print("Correctly classified: {}".format(nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x) - nb_correct_adv_pred))
+
+        acc = nb_correct_adv_pred / y.shape[0]
+        print("Adversarial accuracy: %.2f%%" % (acc * 100))
+
+        # classification report
+        print(classification_report(np.argmax(y, axis=1), y_pred, labels=range(self.num_classes)))
+
+    # todo: deprecated
     def evaluate_test(self, x_test, y_test):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
@@ -329,6 +364,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         return y_test_pred
 
+    # todo: deprecated
     def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
         print("\n===== Adversarial evaluation =====")
 
@@ -357,6 +393,10 @@ class RandomRegularizer(sklKerasClassifier):
         print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
         return x_test_adv, y_test_adv
 
+    def load_adversaries(self, dataset_name, attack, eps, test):
+        return self.adversarial_classifier.load_adversaries(dataset_name, attack, eps, test)
+
+    # todo: implement generate adversaries using method from adversarial classifier
     def _get_adversaries(self, trained_classifier, x, y, test, method, dataset_name, adversaries_path):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
@@ -407,8 +447,37 @@ class RandomRegularizer(sklKerasClassifier):
 
         return x_adv
 
+    def save_classifier(self, classifier):
+        """
+        Saves the trained model and adds the current datetime to the filepath.
 
-def main(dataset_name, test, lam, projection_mode):
+        :param classifier: trained classifier
+        """
+        modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
+                    "_batch=" + str(classifier.batch_size) + "_epochs=" + str(classifier.epochs) + \
+                    "_" + str(classifier.projection_mode) + ".h5"
+        model_path = RESULTS + time.strftime('%Y-%m-%d') + "/" + modelname
+        classifier.model.save_weights(model_path)
+
+    def load_classifier(self, current_day_folder=False):
+        """
+        Loads a pretrained classifier. It load either the baseline model or the adversarially trained robust version.
+        :param dataset_name: dataset name
+        :param attack: attack method for loading adversarially trained robust models
+        :param eps: threshold for the norm of a perturbation
+        returns: trained classifier
+        """
+        modelname = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
+                    "_" + str(self.projection_mode) + ".h5"
+        if current_day_folder:
+            model_path = RESULTS + time.strftime('%Y-%m-%d') + "/" + modelname
+        else:
+            model_path = TRAINED_MODELS + modelname
+
+        self.model.load_weights(model_path)
+        return self
+
+def main(dataset_name, test, lam, projection_mode, eps):
 
     # === Tensorflow session and initialization === #
     sess = tf.Session()
@@ -418,39 +487,32 @@ def main(dataset_name, test, lam, projection_mode):
     # === model initialization === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
-    classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+    randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   test=test)
+                                   test=test,eps=eps)
 
-    modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
-                "_batch="+str(classifier.batch_size)+"_epochs="+str(classifier.epochs)+ \
-                "_"+str(classifier.projection_mode)+".h5"
-    model_path = RESULTS+time.strftime('%Y-%m-%d') +"/"+ modelname
-    # model_path = TRAINED_MODELS+"random_regularizer/" + modelname
+    # === train === #
+    # classifier = randreg.train(x_train, y_train)
+    # randreg.save_classifier(classifier)
+    classifier = randreg.load_classifier(current_day_folder=False)
 
-    # === train and evaluate === #
-    classifier.train(x_train, y_train)
-    classifier.model.save_weights(model_path)
-
-    # # evaluations #
-    classifier.evaluate_test(x_test=x_test, y_test=y_test)
+    # === evaluate === #
+    randreg.evaluate(classifier=classifier, x=x_test, y=y_test)
 
     ######### todo: bug on adversarial evaluation. It only works on loaded models..
-    del classifier
-    classifier = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   test=test)
+    # del randreg, classifier
+    # randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+    #                                dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
+    #                                test=test,eps=eps)
+    # classifier = randreg.load_classifier(current_day_folder=True)
+    #########
 
-    classifier.model.load_weights(model_path)
+    # === baseline adversaries === #
+    for method in ['fgsm','pgd','deepfool','carlini_linf']:
+        x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
+        randreg.evaluate(classifier, x_test_adv, y_test)
 
-
-    print("\nBaseline adversaries")
-    for attack in ['deepfool','carlini_linf']: #['fgsm','pgd','deepfool','carlini_linf']:
-        filename = dataset_name + "_x_test_" + attack + ".pkl"
-        x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
-                                                     adversaries_path=DATA_PATH+filename,
-                                                     test=test)
-
+    # todo: refactor
     # print("\nRandreg adversaries")
     # for attack in ['fgsm','pgd','deepfool','carlini_linf']:
     #     filename = dataset_name + "_x_test_" + attack + "_randreg.pkl"
@@ -466,12 +528,14 @@ if __name__ == "__main__":
         test = eval(sys.argv[2])
         lam = float(sys.argv[3])
         projection_mode = sys.argv[4]
+        eps = float(sys.argv[5])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
+        eps = float(input("\nSet a ths for perturbation norm: "))
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps)
 

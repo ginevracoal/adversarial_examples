@@ -8,14 +8,13 @@ separately on each projection, then it returns an ensemble classification on the
 from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
-from projection_functions import * # todo: test new methods from projection_functions.py
+from projection_functions import *
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = False
+ADD_BASELINE_PROB = True
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
-
 
 class RandomEnsemble(BaselineConvnet):
     """
@@ -23,7 +22,7 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test, eps):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
         It currently supports a maximum of 15 projections.
@@ -34,12 +33,13 @@ class RandomEnsemble(BaselineConvnet):
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
 
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, eps=eps)
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
-        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156])
+        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
+                                      54, 42, 150, 184, 52, 17, 127, 13])
         self.trained = False
         self.training_time = 0
         self.ensemble_method = "sum"  # supported methods: mode, sum
@@ -48,6 +48,15 @@ class RandomEnsemble(BaselineConvnet):
         self.test = test
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
+
+    def _set_training_params(self, test):
+        if test:
+            return 28, 5
+        else:
+            if self.dataset_name == "mnist":
+                return 128, 12
+            elif self.dataset_name == "cifar":
+                return 128, 800
 
     def compute_projections(self, input_data):
         """ Extends utils.compute_projections method in order to handle the third input dimension."""
@@ -89,7 +98,7 @@ class RandomEnsemble(BaselineConvnet):
         classifiers = []
         for i in range(self.n_proj):
             # use the same model architecture (not weights) for all trainings
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, eps=self.eps,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             # train n_proj classifiers on different training data
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
@@ -198,7 +207,7 @@ class RandomEnsemble(BaselineConvnet):
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
 
         if add_baseline_prob:
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, eps=self.eps,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             if self.baseline_classifier is None:
                 self.baseline_classifier = baseline.load_classifier(
@@ -216,7 +225,7 @@ class RandomEnsemble(BaselineConvnet):
         """
         print("\n === projections report ===")
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                   data_format=self.data_format, dataset_name=self.dataset_name)
+                                   data_format=self.data_format, dataset_name=self.dataset_name, test=True)
         for i, proj_classifier in enumerate(classifier):
             print("\nTest evaluation on projection ", self.random_seeds[i])
             baseline.evaluate_test(proj_classifier, x_test_proj[i], y_test)
@@ -259,7 +268,8 @@ class RandomEnsemble(BaselineConvnet):
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 filename = model_name + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[i])+".h5"
-                folder = str(self.dataset_name) + "_" + model_name + "_sum_size=" + str(self.size_proj) + "_"+ str(self.projection_mode)+"/"
+                folder = str(self.dataset_name) + "_" + model_name + "_size=" + str(self.size_proj) + "_epochs=" + \
+                         str(self.epochs) + "_" + str(self.projection_mode) + "/"
                 proj_classifier.save(filename=filename,
                                      path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder )
         else:
@@ -274,8 +284,9 @@ class RandomEnsemble(BaselineConvnet):
         """
         start_time = time.time()
         # load all trained models
-        folder = str(self.dataset_name) + "_" + model_name + "_sum_size=" + str(self.size_proj) + "_" + \
-                  str(self.projection_mode) + "/"
+        epochs = self._set_training_params(test=False)[1] # load full epochs model
+        folder = str(self.dataset_name) + "_" + model_name + "_size=" + str(self.size_proj) + "_epochs=" + \
+                 str(epochs) + "_" + str(self.projection_mode)+ "/"
         trained_models = [load_model(relative_path+folder+model_name + "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
                           for seed in self.random_seeds[:self.n_proj]]
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
@@ -288,7 +299,7 @@ class RandomEnsemble(BaselineConvnet):
 # MAIN #
 ########
 
-def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
+def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
@@ -302,64 +313,45 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack):
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name, test=test)
+                           data_format=data_format, dataset_name=dataset_name, test=test, eps=eps)
     # === train === #
-    classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    # classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
-
-    # === compute projections === #
-    # input_data = x_test.astype(float)
-    # input_data = input_data if dataset_name == "mnist" else normalize(input_data)
-
-    # projections, inverse_projections = model.compute_projections(input_data=input_data)
-    # perturbations, augmented_inputs = compute_perturbations(input_data=input_data,
-    #                                                         inverse_projections=inverse_projections)
-
-    # print(np.max(augmented_inputs[0,:,:,:]))
-    # print(np.min(augmented_inputs[0,:,:,:]))
-    # idx = 0
-    # print(x_test[0,idx,idx,:],input_data[0,idx,idx,:])
-    # print(projections[0,0,idx,idx,:],inverse_projections[0,0,idx,idx,:])
-    # print(perturbations[0,idx,idx,:],augmented_inputs[0,idx,idx,:],"\n")
-    # print("Distance from attack: ", np.linalg.norm(x_test[0]-augmented_inputs[0]))
-    # exit()
-
-    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
-    # plot_projections(image_data_list=[x_test,projections[0],inverse_projections[0],perturbations,augmented_inputs])
-
-
-    # === evaluate baseline on perturbations === #
-    # baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-    #                         dataset_name=dataset_name)
-    # rel_path = "../trained_models/baseline/" + str(dataset_name) + "_baseline.h5"
-    # baseline_classifier = baseline.load_classifier(relative_path=rel_path)
-
-
-    # baseline.evaluate_test(baseline_classifier, x_test, y_test)
-    # baseline.evaluate_test(baseline_classifier, augmented_inputs, y_test)
-    # print(np.equal(x_test,augmented_inputs))
-
-
-    # === adversarial train === #
-    # robust_classifier = model.adversarial_train(classifier, x_train, y_train, dataset_name=dataset, test=test,
-    #                                            batch_size=model.batch_size, epochs=model.epochs, method=attack)
-    #model.save_model(classifier=robust_classifier, model_name=dataset + "_" + str(attack) +
-    #                 "_robust_random_ensemble_size=" + str(model.size_proj))
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
 
     # === evaluate === #
-    model.evaluate_test(classifier=classifier, x_test=x_test, y_test=y_test)
-    # model.evaluate_test(robust_classifier, x_test, y_test)
+    # model.evaluate(classifier=classifier, x=x_test, y=y_test)
 
-    for method in ["fgsm", "pgd","deepfool","carlini_linf"]:
-        adversaries_path = '../data/'+dataset_name+'_x_test_'+method+'.pkl'
-        model.evaluate_adversaries(classifier, x_test, y_test, method=method, test=test, dataset_name=dataset_name,
-                                   adversaries_path=adversaries_path)
-        #model.evaluate_adversaries(robust_classifier, x_test, y_test, method=method, dataset_name=dataset, test=test)
-    del classifier
+    x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
+    print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
+    model.evaluate(classifier=classifier, x=x_test_adv, y=y_test)
 
+    # === generate perturbations === #
+    # compute_variances(x_test, y_test)
+    # projections, inverse_projections = model.compute_projections(input_data=x_test)
+    # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
+    #
+    # # print(np.mean([compute_angle(x_test[i],augmented_inputs[i]) for i in range(len(x_test))]))
+    # # exit()
+    # eig_vals, eig_vecs = compute_linear_discriminants(x_test, y_test)
+    # print(eig_vals,"\n",eig_vecs)
+    # exit()
+    # # print(x_test[0,0,0,:],augmented_inputs[0,0,0,:],"\n")
+    # avg_distance = lambda x: np.mean([np.linalg.norm(x[0][idx]-x[1][idx]) for idx in range(len(x_test))])
+    # print("Average distance from attack: ", avg_distance([x_test, augmented_inputs]))
+
+    # # # === evaluate baseline on perturbations === #
+    # baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+    #                         dataset_name=dataset_name, test=True)
+    # rel_path = "../trained_models/baseline/" + str(dataset_name) + "_baseline.h5"
+    # baseline_classifier = baseline.load_classifier(relative_path=rel_path)
+    # baseline.evaluate(baseline_classifier, augmented_inputs, y_test)
+
+    # === plot perturbations === #
+    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
+    # plot_projections(image_data_list=[x_test,perturbations,augmented_inputs])
 
 if __name__ == "__main__":
     try:
@@ -369,6 +361,7 @@ if __name__ == "__main__":
         size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
         projection_mode = sys.argv[5]
         attack = sys.argv[6]
+        eps = float(sys.argv[7])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -377,10 +370,12 @@ if __name__ == "__main__":
         size_proj_list = list(map(int, input("\nChoose the size of projections (type=list): ").strip('[]').split(',')))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         attack = input("\nChoose an attack ("+ATTACKS+"): ")
+        eps = float(input("\nSet a ths for perturbation norm: "))
+
 
     for n_proj in n_proj_list:
         for size_proj in size_proj_list:
             K.clear_session()
             main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj,
-                 projection_mode=projection_mode, attack=attack)
+                 projection_mode=projection_mode, attack=attack, eps=eps)
 
