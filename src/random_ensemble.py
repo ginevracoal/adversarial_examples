@@ -22,18 +22,24 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test, eps):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
-        It currently supports a maximum of 15 projections.
+
+        :param input_shape:
+        :param num_classes:
         :param n_proj: number of random projections
         :param size_proj: size of a random projection
+        :param projection_mode: method for computing projections on RGB images
+        :param data_format: channels first or last
+        :param dataset_name:
+        :param test: if True only takes the first 100 samples
         """
 
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
 
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, eps=eps)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
@@ -45,18 +51,8 @@ class RandomEnsemble(BaselineConvnet):
         self.ensemble_method = "sum"  # supported methods: mode, sum
         self.x_test_proj = None
         self.baseline_classifier = None
-        self.test = test
 
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
-
-    def _set_training_params(self, test):
-        if test:
-            return 28, 5
-        else:
-            if self.dataset_name == "mnist":
-                return 128, 12
-            elif self.dataset_name == "cifar":
-                return 128, 800
 
     def compute_projections(self, input_data):
         """ Extends utils.compute_projections method in order to handle the third input dimension."""
@@ -98,7 +94,7 @@ class RandomEnsemble(BaselineConvnet):
         classifiers = []
         for i in range(self.n_proj):
             # use the same model architecture (not weights) for all trainings
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, eps=self.eps,
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             # train n_proj classifiers on different training data
             classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
@@ -207,11 +203,11 @@ class RandomEnsemble(BaselineConvnet):
             predictions = self._mode_ensemble_classifier(classifiers, projected_data)
 
         if add_baseline_prob:
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, eps=self.eps,
+            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             if self.baseline_classifier is None:
-                self.baseline_classifier = baseline.load_classifier(
-                    "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
+                self.baseline_classifier = baseline.load_classifier(relative_path="../trained_models/baseline/")
+
             baseline_predictions = np.array(baseline.predict(self.baseline_classifier, data))
             # sum the probabilities across all predictors
             final_predictions = np.add(predictions, baseline_predictions)
@@ -228,11 +224,11 @@ class RandomEnsemble(BaselineConvnet):
                                    data_format=self.data_format, dataset_name=self.dataset_name, test=True)
         for i, proj_classifier in enumerate(classifier):
             print("\nTest evaluation on projection ", self.random_seeds[i])
-            baseline.evaluate_test(proj_classifier, x_test_proj[i], y_test)
+            baseline.evaluate(classifier=proj_classifier, x=x_test_proj[i], y=y_test)
 
     def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_test() with projections reports"""
-        y_test_pred = super(RandomEnsemble, self).evaluate_test(classifier, x_test, y_test)
+        y_test_pred = super(RandomEnsemble, self).evaluate(classifier, x_test, y_test)
         if report_projections:
 
             self.x_test_proj, _ = self.compute_projections(x_test)
@@ -243,27 +239,23 @@ class RandomEnsemble(BaselineConvnet):
     def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
                              report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate_adversaries() with projections reports"""
-        x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate_adversaries(classifier=classifier, x_test=x_test,
-                                                                                  y_test=y_test, method=method,
-                                                                                  dataset_name=dataset_name, test=test,
-                                                                                  adversaries_path=adversaries_path)
+        x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate(classifier=classifier, x=x_test, y=y_test)
         if report_projections:
             x_test_adv_proj, _ = self.compute_projections(x_test_adv)
             self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
 
-    def _generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
+    def generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
         """ Adversaries are generated on the baseline classifier """
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
         if self.baseline_classifier is None and adversaries_path is None:
-            self.baseline_classifier = baseline.load_classifier(
-                "../trained_models/baseline/" + self.dataset_name + "_baseline.h5")
-        x_adv = baseline._generate_adversaries(self.baseline_classifier, x, y, method=method, dataset_name=dataset_name,
-                                               adversaries_path=adversaries_path, test=test)
+            self.baseline_classifier = baseline.load_classifier(relative_path=TRAINED_MODELS)
+        x_adv = baseline.generate_adversaries(classifier=self.baseline_classifier, x=x, y=y, method=method,
+                                              dataset_name=dataset_name, test=test, eps=eps)
         return x_adv
 
-    def save_model(self, classifier, model_name=MODEL_NAME):
+    def save_classifier(self, classifier, model_name=MODEL_NAME):
         # todo: salvare il modello soltanto nel caso n_proj=15. Per le valutazioni su n_proj inferiori basta il loading corretto.
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
@@ -275,29 +267,42 @@ class RandomEnsemble(BaselineConvnet):
         else:
             raise ValueError("Model has not been fitted!")
 
-    def load_classifier(self, relative_path, model_name=MODEL_NAME):
+    def load_classifier(self, relative_path):
         """
         Loads a pretrained classifier and sets the projector with the training seed.
-        :param relative_path: here refers to the relative path of the folder containing the list of trained classifiers
-        :param model_name: name of the model used when files were saved
+        :param relative_path: relative path of the folder containing the list of trained classifiers
         :return: list of trained classifiers
         """
         start_time = time.time()
-        # load all trained models
-        epochs = self._set_training_params(test=False)[1] # load full epochs model
-        folder = str(self.dataset_name) + "_" + model_name + "_size=" + str(self.size_proj) + "_epochs=" + \
-                 str(epochs) + "_" + str(self.projection_mode)+ "/"
-        trained_models = [load_model(relative_path+folder+model_name + "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
-                          for seed in self.random_seeds[:self.n_proj]]
+        # # epochs = self._set_training_params(test=False)[1] # load full epochs model
+        # folder = relative_path + str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + \
+        #          "_epochs=" + str(self.epochs) + "_" + str(self.projection_mode)+ "/"
+        # trained_models = [load_model(folder +
+        #                              MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
+        #                   for seed in self.random_seeds[:self.n_proj]]
+        # print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
+        #
+        #
+        # classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
+
+        # new
+        paths = [relative_path + str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + \
+                 "_epochs=" + str(self.epochs) + "_" + str(self.projection_mode)+ "/" + MODEL_NAME + "_size=" +
+                 str(self.size_proj) + "_" + str(seed) + ".h5" for seed in self.random_seeds[:self.n_proj]]
+
+        classifiers = [super(BaselineConvnet, self).load_classifier(path) for path in paths]
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
-        classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
         return classifiers
+
+    def load_robust_classifier(self, relative_path, attack, eps):
+        raise NotImplementedError
 
 
 ########
 # MAIN #
 ########
+
 
 def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     """
@@ -313,13 +318,13 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name, test=test, eps=eps)
+                           data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
     # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
     # model.save_model(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS, model_name=MODEL_NAME)
+    classifier = model.load_classifier(dataset_name)
 
     # === evaluate === #
     # model.evaluate(classifier=classifier, x=x_test, y=y_test)

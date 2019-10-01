@@ -11,7 +11,7 @@ from projection_functions import *
 from adversarial_classifier import AdversarialClassifier as myAdvClassifier
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/"
+TRAINED_MODELS = "../trained_models/random_regularizer/" #RESULTS + time.strftime('%Y-%m-%d') + "/"
 
 L_RATE = 5
 MIN_SIZE = 2
@@ -23,9 +23,10 @@ TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "grayscale" # "channels, grayscale"
 
+
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, eps, test=False):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, test=False):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -36,29 +37,28 @@ class RandomRegularizer(sklKerasClassifier):
         self.data_format = data_format
         self.lam = lam
         self.projection_mode = projection_mode
-        self._set_training_params(test)
         self.test = test
         self._set_model()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
         self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
-                                                            data_format=self.data_format, eps=eps)
+                                                      data_format=self.data_format, dataset_name=dataset_name, test=test)
+        self.batch_size, self.epochs = self._set_training_params(test=test).values()
         print("\nprojection mode =", self.projection_mode, "channel mode =", CHANNEL_MODE,", lambda =", self.lam)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _set_training_params(self, test):
+        """
+        Defines training parameters
+        :param test: if True only takes the first 100 samples
+        :return: batch_size, epochs
+        """
         if test:
-            self.epochs = 1
-            self.batch_size = 100
+            return {'batch_size':100,'epochs':1}
         else:
-            if self.dataset_name == "mnist":
-                self.epochs = 12
-                self.batch_size = 1000
-            elif self.dataset_name == "cifar":
-                self.epochs = 12
-                self.batch_size = 1000
+            return {'batch_size':100,'epochs':12}
 
     def _get_logits(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
@@ -459,7 +459,7 @@ class RandomRegularizer(sklKerasClassifier):
         model_path = RESULTS + time.strftime('%Y-%m-%d') + "/" + modelname
         classifier.model.save_weights(model_path)
 
-    def load_classifier(self, current_day_folder=False):
+    def load_classifier(self, relative_path):
         """
         Loads a pretrained classifier. It load either the baseline model or the adversarially trained robust version.
         :param dataset_name: dataset name
@@ -469,11 +469,7 @@ class RandomRegularizer(sklKerasClassifier):
         """
         modelname = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
                     "_" + str(self.projection_mode) + ".h5"
-        if current_day_folder:
-            model_path = RESULTS + time.strftime('%Y-%m-%d') + "/" + modelname
-        else:
-            model_path = TRAINED_MODELS + modelname
-
+        model_path = relative_path + modelname
         self.model.load_weights(model_path)
         return self
 
@@ -494,7 +490,7 @@ def main(dataset_name, test, lam, projection_mode, eps):
     # === train === #
     # classifier = randreg.train(x_train, y_train)
     # randreg.save_classifier(classifier)
-    classifier = randreg.load_classifier(current_day_folder=False)
+    classifier = randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
     randreg.evaluate(classifier=classifier, x=x_test, y=y_test)

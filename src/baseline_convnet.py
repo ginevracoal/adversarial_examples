@@ -14,27 +14,20 @@ import sys
 ############
 # defaults #
 ############
-MODEL_NAME = "baseline_convnet"
+
+MODEL_NAME = "baseline"
 
 
 class BaselineConvnet(AdversarialClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, eps):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
+        self.test = test
         self.dataset_name = dataset_name
-        self.batch_size, self.epochs = self._set_training_params(test=test)
-        super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, eps)
+        super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
 
-    def _set_training_params(self, test):
-        if test:
-            return 28, 5
-        else:
-            if self.dataset_name == "mnist":
-                return 128, 12
-            elif self.dataset_name == "cifar":
-                return 128, 800
 
     def _set_layers(self):
 
@@ -103,29 +96,35 @@ class BaselineConvnet(AdversarialClassifier):
             predictions = Dense(self.num_classes, activation='softmax')(x)
             return predictions
 
-    def load_classifier(self, dataset_name, attack=None, eps=None):
+    def save_classifier(self, classifier, model_name=MODEL_NAME):
+        return super(BaselineConvnet, self).save_classifier(classifier=classifier,
+                                                            model_name=self.dataset_name+"_"+model_name)
+
+    def load_classifier(self, relative_path):
         """
-        Loads a pretrained classifier. It load either the baseline model or the adversarially trained robust version.
+        Loads a pretrained baseline classifier. It load either the baseline model or the adversarially trained robust version.
+        :param dataset_name: dataset name
+        returns: trained classifier
+        """
+        path = relative_path + str(self.dataset_name) + "_baseline.h5"
+        return super(BaselineConvnet, self).load_classifier(path)
+
+    def load_robust_classifier(self, relative_path, attack, eps):
+        """
+        Loads an adversarially trained robust classifier.
         :param dataset_name: dataset name
         :param attack: attack method for loading adversarially trained robust models
         :param eps: threshold for the norm of a perturbation
         returns: trained classifier
         """
-        if attack:
-            # loads the adversarially trained classifier
-            if attack == "deepfool":
-                rel_path = TRAINED_MODELS + "baseline/" + str(dataset_name) + "_" + str(attack) + "_robust_baseline.h5"
-            else:
-                if eps is None:
-                    raise ValueError("\nProvide a ths distance for the attacks.")
-                rel_path = TRAINED_MODELS + "baseline/" + str(dataset_name) + "_" + str(attack) + "_" + str(eps) \
-                           + "_robust_baseline.h5"
-
-            return super(BaselineConvnet, self).load_classifier(rel_path)
-
+        if attack == "deepfool":
+            path = relative_path + "baseline/" + str(self.dataset_name) + "_" + str(attack) + "_robust_baseline.h5"
         else:
-            rel_path = TRAINED_MODELS + "baseline/" + str(dataset_name) + "_baseline.h5"
-            return super(BaselineConvnet, self).load_classifier(rel_path)
+            if eps is None:
+                raise ValueError("\nProvide a ths distance for the attacks.")
+            path = relative_path + "baseline/" + str(self.dataset_name) + "_" + str(attack) + "_" + str(eps) \
+                       + "_robust_baseline.h5"
+        return super(BaselineConvnet, self).load_classifier(path)
 
 
 def main(dataset_name, test, attack, eps):
@@ -138,7 +137,7 @@ def main(dataset_name, test, attack, eps):
 
     # === initialize === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
-    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format, eps=eps,
+    model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                             dataset_name=dataset_name, test=test)
 
     # === training === #
@@ -154,7 +153,7 @@ def main(dataset_name, test, attack, eps):
     # === load classifier === #
     # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
 
-    # classifier = model.load_classifier(dataset_name=dataset_name)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS+MODEL_NAME+"/")
     # robust_classifier = model.load_classifier(dataset_name=dataset_name, attack=attack, eps=eps)
 
     # === evaluations === #
@@ -172,9 +171,10 @@ def main(dataset_name, test, attack, eps):
     print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
     # plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
-    # for method in ['fgsm', 'pgd', 'deepfool','carlini_linf']:
-    #     x_test_adv = model.load_adversaries(attack=method,dataset_name=dataset_name,eps=0.5,test=test)
-    #     model.evaluate(robust_classifier, x_test_adv, y_test)
+    for method in ['fgsm', 'pgd', 'deepfool','carlini_linf']:
+        x_test_adv = model.load_adversaries(attack=method, dataset_name=dataset_name, eps=0.5, test=test)
+        model.evaluate(classifier, x_test_adv, y_test)
+        # model.evaluate(robust_classifier, x_test_adv, y_test)
 
 
 if __name__ == "__main__":

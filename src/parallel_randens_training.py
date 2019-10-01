@@ -115,6 +115,7 @@ if __name__ == "__main__":
         proj_idx = int(sys.argv[3])
         size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
         projection_mode = sys.argv[5]
+        eps = float(sys.argv[6])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -122,6 +123,7 @@ if __name__ == "__main__":
         proj_idx = input("\nChoose the projection idx. ")
         size_proj_list = input("\nChoose size for the projection. ")
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+")")
+        eps = float(input("\nSet a ths for perturbation norm: "))
 
     for size_proj in size_proj_list:
         K.clear_session()

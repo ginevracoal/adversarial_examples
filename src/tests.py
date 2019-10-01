@@ -9,9 +9,10 @@ from random_regularizer import RandomRegularizer
 from parallel_randens_training import ParallelRandomEnsemble
 
 BATCH_SIZE = 20
-EPOCHS = 3
-N_PROJECTIONS = 2
+EPOCHS = 1
+N_PROJECTIONS = 1
 SIZE_PROJECTION = 6
+EPS = 0.3
 TRAINED_MODELS = "../trained_models/"
 
 
@@ -19,6 +20,7 @@ class Test(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(Test, self).__init__(*args, **kwargs)
+        # self.eps=0.3
         self.dataset = "mnist"
         self.x_train, self.y_train, self.x_test, self.y_test, \
         self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
@@ -31,37 +33,30 @@ class Test(unittest.TestCase):
                                 data_format=self.data_format, dataset_name=self.dataset, test=True)
 
         # model training
-        classifier = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
-        model.evaluate_test(classifier, self.x_test, self.y_test)
-        x_test_adv = model.evaluate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
-                                                method="fgsm")
-
-        # save to pickle
+        classifier = model.train(self.x_train, self.y_train, batch_size=model.batch_size, epochs=model.epochs)
+        model.evaluate(classifier, self.x_test, self.y_test)
+        x_test_adv = model.generate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
+                                                method="fgsm", eps=EPS, test=True)
         save_to_pickle(data=x_test_adv, filename=self.dataset+"_x_test_fgsm.pkl")
+        model.evaluate(classifier, x_test_adv, self.y_test)
 
-        # save and load
-        model.save_model(classifier=classifier, model_name="baseline_convnet")
-        loaded_classifier = model.load_classifier(
-            relative_path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
+        # save and load classifier
+        model.save_classifier(classifier=classifier)
+        loaded_classifier = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/")
+        # loaded_classifier = super(BaselineConvnet, model).load_classifier(
+        #     path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
 
-        model.evaluate_test(loaded_classifier, self.x_test, self.y_test)
-        model.evaluate_adversaries(loaded_classifier, self.x_test, self.y_test, test=True, dataset_name=self.dataset,
-                                   adversaries_path=RESULTS+time.strftime('%Y-%m-%d')+"/mnist_x_test_fgsm.pkl",
-                                   method="fgsm")
+        model.evaluate(loaded_classifier, self.x_test, self.y_test)
+        x_test_adv = model.load_adversaries(dataset_name=self.dataset,attack="fgsm",eps=EPS,test=True)
+        model.evaluate(loaded_classifier, x_test_adv, self.y_test)
 
         # complete model loading
-        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/mnist_baseline.h5")
-
-        model.evaluate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
-                                   method='deepfool', adversaries_path='../data/mnist_x_test_deepfool.pkl', test=True)
+        # classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/mnist_baseline.h5")
+        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/")
 
         # adversarial training
-        robust_classifier = model.adversarial_train(classifier, self.x_train, self.y_train,
-                                                    batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', test=True,
-                                                    dataset_name=self.dataset)
-        model.evaluate_adversaries(robust_classifier, self.x_test, self.y_test, test=True, dataset_name=self.dataset,
-                                   adversaries_path=RESULTS + time.strftime('%Y-%m-%d') + "/mnist_x_test_fgsm.pkl",
-                                   method="fgsm")
+        model.adversarial_train(classifier, dataset_name=model.dataset_name, x_train=self.x_train, y_train=self.y_train,
+                                batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', eps=EPS, test=True)
 
     def test_random_ensemble(self):
         for projection_mode in ["flat","channels","grayscale"]:
@@ -70,17 +65,18 @@ class Test(unittest.TestCase):
                                    projection_mode=projection_mode, test=True)
 
             # train
-            classifiers = model.train(self.x_train, self.y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+            classifiers = model.train(self.x_train, self.y_train, batch_size=model.batch_size, epochs=model.epochs)
 
         # evaluate
-        x_test_pred = model.evaluate_test(classifiers, self.x_test, self.y_test)
-        model.evaluate_adversaries(classifiers, self.x_test, self.y_test, method='fgsm', dataset_name=self.dataset)
+        x_test_pred = model.evaluate(classifiers, self.x_test, self.y_test)
+        x_test_adv = self.baseline.load_adversaries(dataset_name=self.dataset,attack="fgsm",eps=EPS,test=True)
+        model.evaluate(classifiers, x_test_adv, self.y_test)
 
         # save and load
-        model.save_model(classifier=classifiers, model_name="random_ensemble")
+        model.save_classifier(classifier=classifiers, model_name="random_ensemble")
         relpath = RESULTS+time.strftime('%Y-%m-%d')+"/"
-        loaded_classifiers = model.load_classifier(relative_path=relpath, model_name="random_ensemble")
-        x_test_pred_loaded = model.evaluate_test(loaded_classifiers, self.x_test, self.y_test)
+        loaded_classifiers = model.load_classifier(relative_path=relpath)
+        x_test_pred_loaded = model.evaluate(loaded_classifiers, self.x_test, self.y_test)
 
         # check equal test predictions
         np.array_equal(x_test_pred, x_test_pred_loaded)

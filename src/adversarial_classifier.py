@@ -28,13 +28,28 @@ class AdversarialClassifier(object):
     Keras Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, data_format, eps):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
         self.model = self._set_layers()
+        self.batch_size, self.epochs = self._set_training_params(dataset_name=dataset_name, test=test).values()
         self.trained = False
-        self.eps = eps
+
+    def _set_training_params(self, dataset_name, test):
+        """
+        Defines training parameters
+        :param dataset_name:
+        :param test: if True only takes the first 100 samples
+        :return: batch_size, epochs
+        """
+        if test:
+            return {'batch_size':10,'epochs':1}
+        else:
+            if dataset_name == "mnist":
+                return {'batch_size':128,'epochs':12}
+            elif dataset_name == "cifar":
+                return {'batch_size':128,'epochs':800}
 
     def _set_layers(self):
         """
@@ -53,7 +68,7 @@ class AdversarialClassifier(object):
         :param epochs:
         :return: trained classifier
         """
-        print("\nTraining infos:\nbatch_size = ", batch_size, "\nepochs =", epochs, "\neps =", self.eps,
+        print("\nTraining infos:\nbatch_size = ", batch_size, "\nepochs =", epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         # old
@@ -167,74 +182,6 @@ class AdversarialClassifier(object):
 
         return y_pred
 
-    # todo: deprecated, remove
-    # def evaluate_test(self, classifier, x_test, y_test):
-    #     """
-    #     Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
-    #     :param classifier: trained classifier
-    #     :param x_test: test data
-    #     :param y_test: test labels
-    #     :return: x_test predictions
-    #     """
-    #     print("\n===== Test set evaluation =====")
-    #     print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
-    #
-    #     y_test_pred = np.argmax(self.predict(classifier, x_test), axis=1)
-    #     y_test_true = np.argmax(y_test, axis=1)
-    #     correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
-    #
-    #     print("Correctly classified: {}".format(correct_preds))
-    #     print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
-    #
-    #     # print(y_test_pred, y_test_true)
-    #     acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
-    #     print("Test accuracy: %.2f%%" % (acc * 100))
-    #
-    #     # classification report over single classes
-    #     print(classification_report(y_test_true, y_test_pred, labels=range(self.num_classes)))
-    #
-    #     return y_test_pred
-
-    # todo: deprecated, remove
-    # def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
-    #     """
-    #     Evaluates the trained model against FGSM and prints the number of misclassifications.
-    #     :param classifier: trained classifier
-    #     :param x_test: test data
-    #     :param y_test: test labels
-    #     :param method: art.attack method
-    #     :param adversaries_path: path of saved pickle data
-    #     :param test: if true only takes TEST_SIZE samples
-    #     :return:
-    #     x_test_pred: test set predictions
-    #     x_test_adv: adversarial perturbations of test data
-    #     y_test_adv: adversarial test set predictions
-    #     """
-    #     print("\n===== Adversarial evaluation =====")
-    #
-    #     # generate adversaries on the test set
-    #     x_test_adv = self.generate_adversaries(classifier, x_test, y_test, method=method, dataset_name=dataset_name,
-    #                                            test=test, eps=self.eps)
-    #     # debug
-    #     # print(x_test.shape, x_test_adv.shape)
-    #     # exit()
-    #
-    #     # evaluate the performance on the adversarial test set
-    #     y_test_adv = np.argmax(self.predict(classifier, x_test_adv), axis=1)
-    #     y_test_true = np.argmax(y_test, axis=1)
-    #     nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
-    #
-    #     print("\nAdversarial test data.")
-    #     print("Correctly classified: {}".format(nb_correct_adv_pred))
-    #     print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
-    #
-    #     acc = nb_correct_adv_pred / y_test.shape[0]
-    #     print("Adversarial accuracy: %.2f%%" % (acc * 100))
-    #
-    #     # classification report
-    #     print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
-    #     return x_test_adv, y_test_adv
-
     def save_classifier(self, classifier, model_name):
         """
         Saves the trained model and adds the current datetime to the filename.
@@ -246,19 +193,19 @@ class AdversarialClassifier(object):
         if self.trained:
             classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
-    def load_classifier(self, relative_path):
+    def load_classifier(self, path):
         """
         Loads a pre-trained classifier.
         :param relative_path: relative path w.r.t. trained_models folder
         returns: trained classifier
         """
-        print("\nLoading model:", str(relative_path))
+        print("\nLoading model:", str(path))
         # load a trained model
-        trained_model = load_model(relative_path)
+        trained_model = load_model(path)
         classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
         return classifier
 
-    def adversarial_train(self, classifier, x_train, y_train, batch_size, epochs, method, dataset_name, test=False):
+    def adversarial_train(self, classifier, dataset_name, x_train, y_train, method, eps, batch_size, epochs, test=False):
         """
         Performs adversarial training on the given classifier using an attack method.
         :param classifier: trained classifier
@@ -270,7 +217,7 @@ class AdversarialClassifier(object):
         print("\n===== Adversarial training =====")
         # generate adversarial examples on train and test sets
         x_train_adv = self.generate_adversaries(classifier, x_train, y_train, method=method,
-                                                dataset_name=dataset_name, test=test, eps=self.eps)
+                                                dataset_name=dataset_name, test=test, eps=eps)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
@@ -282,11 +229,11 @@ class AdversarialClassifier(object):
 
         return robust_classifier
 
-    def save_adversaries(self, data, dataset_name, attack):
+    def save_adversaries(self, data, dataset_name, attack, eps):
         if attack == "deepfool":
             save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + ".pkl")
         else:
-            save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + "_" + str(self.eps) + ".pkl")
+            save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + "_" + str(eps) + ".pkl")
 
     def load_adversaries(self, dataset_name, attack, eps, test):
         print("\nLoading adversaries generated with", attack, "method on", dataset_name)
