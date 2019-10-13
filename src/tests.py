@@ -110,7 +110,7 @@ class Test(unittest.TestCase):
                                            dataset_name=dataset_name, sess=sess, lam=0.6,
                                            projection_mode=projection_mode, test=True)
             classifier.train(x_train, y_train)
-            classifier.evaluate_test(x_test=x_test, y_test=y_test)
+            classifier.evaluate(x=x_test, y=y_test)
 
     def test_parallel_randens(self):
         dataset_name=self.dataset
