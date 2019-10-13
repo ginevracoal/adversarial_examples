@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from sklearn.random_projection import GaussianRandomProjection
-from utils import rgb2gray
+from utils import rgb2gray, plot_projections
 
 MIN = 0
 MAX = 255
@@ -163,9 +163,9 @@ def grayscale_projection(input_data, random_seed, size_proj):
                                type=np.ndarray, shape=(n_samples,rows,cols,channels)
     """
     samples, rows, cols, channels = input_data.shape
-    greyscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
-    return flat_projection(greyscale_data, random_seed, size_proj)
-
+    grayscale_data = np.array([rgb2gray(rgb_im) for rgb_im in input_data]).reshape((samples, rows, cols, 1))
+    # plot_projections([input_data,grayscale_data])
+    return flat_projection(grayscale_data, random_seed, size_proj)
 
 def compute_perturbations(input_data, inverse_projections):
     """
@@ -181,7 +181,7 @@ def compute_perturbations(input_data, inverse_projections):
 
     perturbations = np.empty(input_data.shape, dtype=float)
     for inverse_projection in inverse_projections:
-        perturbations = np.add(perturbations / n_proj, inverse_projection)
+        perturbations = np.add(perturbations, inverse_projection / n_proj)
 
     augmented_inputs = np.add(input_data, perturbations)
     augmented_inputs = [mod_augmented_inputs(x.astype(float)) for x in augmented_inputs]
