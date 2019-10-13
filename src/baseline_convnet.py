@@ -28,8 +28,7 @@ class BaselineConvnet(AdversarialClassifier):
         self.dataset_name = dataset_name
         super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
 
-
-    def _set_layers(self):
+    def _set_model(self):
 
         if self.dataset_name == "mnist":
 
@@ -44,42 +43,70 @@ class BaselineConvnet(AdversarialClassifier):
             x = Dropout(0.5)(x)
             predictions = Dense(self.num_classes, activation='softmax')(x)
             model = Model(inputs=inputs, outputs=predictions)
-            model.compile(loss=keras.losses.categorical_crossentropy,
-                          optimizer=keras.optimizers.Adadelta(),
-                          metrics=['accuracy'])
+            # model.compile(loss=keras.losses.categorical_crossentropy,
+            #               optimizer=keras.optimizers.Adadelta(),
+            #               metrics=['accuracy'])
             # model.summary()
             return model
 
         elif self.dataset_name == "cifar":
 
-            model = Sequential()
-            model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same',
-                             input_shape=self.input_shape))
-            model.add(BatchNormalization())
-            model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-            model.add(BatchNormalization())
-            #model.add(MaxPooling2D((2, 2)))
-            model.add(Dropout(0.2))
-            model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-            model.add(BatchNormalization())
-            model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-            model.add(BatchNormalization())
-            model.add(MaxPooling2D((2, 2)))
-            model.add(Dropout(0.3))
-            model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-            model.add(BatchNormalization())
-            model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-            model.add(BatchNormalization())
-            model.add(MaxPooling2D((2, 2)))
-            model.add(Dropout(0.4))
-            model.add(Flatten())
-            model.add(Dense(128, activation='relu', kernel_initializer='he_uniform'))
-            model.add(BatchNormalization())
-            model.add(Dropout(0.5))
-            model.add(Dense(10, activation='softmax'))
+            # model = Sequential()
+            # model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same',
+            #                  input_shape=self.input_shape))
+            # model.add(BatchNormalization())
+            # model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
+            # model.add(BatchNormalization())
+            # #model.add(MaxPooling2D((2, 2)))
+            # model.add(Dropout(0.2))
+            # model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
+            # model.add(BatchNormalization())
+            # model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
+            # model.add(BatchNormalization())
+            # model.add(MaxPooling2D((2, 2)))
+            # model.add(Dropout(0.3))
+            # model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
+            # model.add(BatchNormalization())
+            # model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
+            # model.add(BatchNormalization())
+            # model.add(MaxPooling2D((2, 2)))
+            # model.add(Dropout(0.4))
+            # model.add(Flatten())
+            # model.add(Dense(128, activation='relu', kernel_initializer='he_uniform'))
+            # model.add(BatchNormalization())
+            # model.add(Dropout(0.5))
+            # predictions = model.add(Dense(10, activation='softmax'))
+            # model = Model(inputs=inputs, outputs=predictions)
+
             # compile model
-            opt = SGD(lr=0.001, momentum=0.9)
-            model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
+            # opt = SGD(lr=0.001, momentum=0.9)
+            # model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
+
+            inputs = Input(shape=self.input_shape)
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(inputs)
+            x = BatchNormalization()(x)
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.2)(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.3)(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.4)(x)
+            x = Flatten()(x)
+            x = Dense(128, activation='relu', kernel_initializer='he_uniform')(x)
+            x = BatchNormalization()(x)
+            x = Dropout(0.5)(x)
+            predictions = Dense(10, activation='softmax')(x)
+            model = Model(inputs=inputs, outputs=predictions)
 
             return model
 
@@ -131,7 +158,7 @@ def main(dataset_name, test, attack, eps):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True, only takes the first 100 samples.
-    :param attack: choose between "fgsm", "pgd", "deepfool", "carlini_linf", "virtual", "newtonfool"
+    :param attack: attack name
     :param eps: threshold for perturbation norm.
     """
 
@@ -151,13 +178,15 @@ def main(dataset_name, test, attack, eps):
     #                       model_name=dataset_name+"_"+attack+"_"+str(model.eps)+"_robust_baseline")
 
     # === load classifier === #
-    # rel_path = RESULTS+time.strftime('%Y-%m-%d') + "/" + str(dataset_name)+"_baseline.h5"
-
     classifier = model.load_classifier(relative_path=TRAINED_MODELS+MODEL_NAME+"/")
     # robust_classifier = model.load_classifier(dataset_name=dataset_name, attack=attack, eps=eps)
 
     # === evaluations === #
-    # model.evaluate(classifier, x_test, y_test)
+    model.evaluate(classifier, x_test, y_test)
+
+    x_test_adv = model.load_adversaries(attack=attack, dataset_name=dataset_name, eps=0.5, test=test)
+    model.evaluate(classifier, x_test_adv, y_test)
+
     # model.evaluate(robust_classifier, x_test, y_test)
     #
     # x_test_adv = model.generate_adversaries(classifier=classifier, x=x_test, y=y_test, test=test, method=attack,
@@ -171,7 +200,7 @@ def main(dataset_name, test, attack, eps):
     print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
     # plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
-    for method in ['fgsm', 'pgd', 'deepfool','carlini_linf']:
+    for method in ['fgsm', 'pgd', 'deepfool','carlini']:
         x_test_adv = model.load_adversaries(attack=method, dataset_name=dataset_name, eps=0.5, test=test)
         model.evaluate(classifier, x_test_adv, y_test)
         # model.evaluate(robust_classifier, x_test_adv, y_test)

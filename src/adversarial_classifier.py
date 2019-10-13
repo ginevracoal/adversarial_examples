@@ -20,7 +20,9 @@ RESULTS = "../results/"
 MIN = 0
 MAX = 255
 DATASETS = "mnist, cifar"
-ATTACKS = "None, fgsm, pgd, deepfool, carlini_linf"
+ATTACKS = "None, fgsm, pgd, deepfool, carlini"
+
+BASECLASS = "art" # "skl" # todo: implement skl version
 
 
 class AdversarialClassifier(object):
@@ -32,7 +34,7 @@ class AdversarialClassifier(object):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
-        self.model = self._set_layers()
+        self.model = self._set_model()  # this is needed for training with skl wrapper
         self.batch_size, self.epochs = self._set_training_params(dataset_name=dataset_name, test=test).values()
         self.trained = False
 
@@ -51,12 +53,12 @@ class AdversarialClassifier(object):
             elif dataset_name == "cifar":
                 return {'batch_size':128,'epochs':800}
 
-    def _set_layers(self):
+    def _set_model(self):
         """
         defines the layers structure for the classifier
         :return: model
         """
-        return None #raise NotImplementedError
+        raise NotImplementedError
 
     def train(self, x_train, y_train, batch_size, epochs):
         """
@@ -71,19 +73,26 @@ class AdversarialClassifier(object):
         print("\nTraining infos:\nbatch_size = ", batch_size, "\nepochs =", epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        # old
-        classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
-        start_time = time.time()
-        classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
-        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
+        if BASECLASS == "art":
+            classifier = KerasClassifier((MIN, MAX), model=self.model, use_logits=False)
+            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                   metrics=['accuracy'])
+            start_time = time.time()
+            classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
 
-        # new
-        # todo: refactor training method and use skl wrapper instead
-        # early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-        # mini_batch = 20
-        # classifier = sklKerasClassifier(build_fn=self.model, batch_size=batch_size, epochs=epochs)
-        # # self.model.compile(loss=K.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(lr=0.5), metrics=['accuracy'])
-        # self.model.fit(x_train, y_train, epochs=epochs, batch_size=mini_batch, callbacks=[early_stopping])
+        elif BASECLASS == "skl":
+
+            mini_batch = 20
+            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                               metrics=['accuracy'])
+            start_time = time.time()
+            classifier = self.model.fit(x_train, y_train, epochs=epochs, batch_size=mini_batch, callbacks=[early_stopping])
+
+        else:
+            raise AssertionError("\nChoose a baseclass: 'art','skl'.")
+
+        print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
         return classifier
 
@@ -119,7 +128,7 @@ class AdversarialClassifier(object):
         elif method == 'virtual':
             attacker = VirtualAdversarialMethod(classifier)
             x_adv = attacker.generate(x)
-        elif method == 'carlini_linf':
+        elif method == 'carlini':
             attacker = CarliniLInfMethod(classifier, targeted=False, eps=eps)
             x_adv = attacker.generate(x=x, y=y)
         elif method == 'newtonfool':
@@ -151,7 +160,13 @@ class AdversarialClassifier(object):
         :param x: input data
         :return: predictions
         """
-        predictions = classifier.predict(x)
+        if BASECLASS == "art":
+            predictions = classifier.predict(x)
+        elif BASECLASS == "skl":
+            predictions = classifier.model.predict(x)
+        else:
+            raise AssertionError("\nChoose a baseclass: 'art','skl'.")
+
         # print(predictions[:, 0])
         return predictions
 
@@ -229,13 +244,23 @@ class AdversarialClassifier(object):
 
         return robust_classifier
 
-    def save_adversaries(self, data, dataset_name, attack, eps):
+    @staticmethod
+    def save_adversaries(data, dataset_name, attack, eps):
+        """
+        Save adversarially augmented test set.
+        :param data: test set
+        :param dataset_name:
+        :param attack:
+        :param eps:
+        :return:
+        """
         if attack == "deepfool":
             save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + ".pkl")
         else:
             save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + "_" + str(eps) + ".pkl")
 
-    def load_adversaries(self, dataset_name, attack, eps, test):
+    @staticmethod
+    def load_adversaries(dataset_name, attack, eps, test):
         print("\nLoading adversaries generated with", attack, "method on", dataset_name)
         if attack == "deepfool":
             x_test_adv = load_from_pickle(path=DATA_PATH + dataset_name + "_x_test_" + attack + ".pkl", test=test)

@@ -4,14 +4,13 @@ import random
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
 from art.classifiers import KerasClassifier as artKerasClassifier
-from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 import keras.losses
 from random_ensemble import *
 from projection_functions import *
 from adversarial_classifier import AdversarialClassifier as myAdvClassifier
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/" #RESULTS + time.strftime('%Y-%m-%d') + "/"
+TRAINED_MODELS = "../trained_models/random_regularizer/" # RESULTS + time.strftime('%Y-%m-%d') + "/"
 
 L_RATE = 5
 MIN_SIZE = 2
@@ -21,7 +20,7 @@ MAX_PROJ = 3
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
-CHANNEL_MODE = "grayscale" # "channels, grayscale"
+CHANNEL_MODE = "channels" # "channels, grayscale"
 
 
 class RandomRegularizer(sklKerasClassifier):
@@ -58,7 +57,12 @@ class RandomRegularizer(sklKerasClassifier):
         if test:
             return {'batch_size':100,'epochs':1}
         else:
-            return {'batch_size':100,'epochs':12}
+            return {'batch_size':500,'epochs':12}
+
+    def _get_proj_params(self):
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        seed = random.sample(range(1, 100), 100)
+        return {"size":size,"seed":seed}
 
     def _get_logits(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
@@ -103,6 +107,12 @@ class RandomRegularizer(sklKerasClassifier):
         inputs = Input(shape=self.input_shape)
         outputs = self._get_logits(inputs=inputs)
         self.model = Model(inputs=inputs, outputs=outputs)
+
+    def _set_random_params(self):
+        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        seeds = random.sample(range(1, 100), n_proj)
+        # print("\nsize =", size, ", seed =", seed)
+        return {"size":size, "seeds":seeds}
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -155,9 +165,6 @@ class RandomRegularizer(sklKerasClassifier):
         if DERIVATIVES_ON_INPUTS is False:
             raise AttributeError("\nYou can only compute derivatives on the inputs. Set DERIVATIVES_ON_INPUTS = True.")
 
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.randint(1, 100)
-        print("\nsize =", size, ", seed =", seed)
         axis = 1 if self.data_format == "channels_first" else -1
 
         regularization = 0
@@ -174,9 +181,9 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization / self.batch_size
 
     def _loss_on_projections_regularizer(self, inputs, outputs):
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.randint(1, 100)
-        print("\nsize =", size, ", seed =", seed)
+        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        # seed = random.randint(1, 100)
+        # print("\nsize =", size, ", seed =", seed)
 
         channels = self._get_n_channels(inputs)
 
@@ -211,9 +218,10 @@ class RandomRegularizer(sklKerasClassifier):
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
 
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.randint(1, 100)
-        print("\nsize =", size, ", seed =", seed)
+        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        # seed = random.randint(1, 100)
+        # print("\nsize =", size, ", seed =", seed)
+        size, seed = self._get_proj_params()
         channels = self._get_n_channels(inputs)
 
         axis = 1 if self.data_format == "channels_first" else -1
@@ -236,9 +244,10 @@ class RandomRegularizer(sklKerasClassifier):
 
         axis = 1 if self.data_format == "channels_first" else -1
         n_proj = random.randint(MIN_PROJ, MAX_PROJ)
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seeds = random.sample(range(1, 100), n_proj)
-        print("\nsize =", size)
+        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        # seeds = random.sample(range(1, 100), n_proj)
+        # print("\nsize =", size)
+        size, seed = self._get_proj_params()
 
         projections, inverse_projections = compute_projections(inputs, seeds, n_proj, size, "channels")
         perturbations, augmented_inputs = compute_perturbations(inputs, inverse_projections)
@@ -266,6 +275,8 @@ class RandomRegularizer(sklKerasClassifier):
         y_train_batches = np.split(y_train, batches)
 
         start_time = time.time()
+        # todo: set loss wrapper seeds before looping over batches and pass them to the wrapper
+
         for batch in range(batches):
             print("\n=== training batch", batch+1,"/",batches,"===")
             idxs = np.random.choice(len(x_train_batches[0]), self.batch_size, replace=False)
@@ -300,7 +311,7 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
-    def evaluate(self, classifier, x, y):
+    def evaluate(self, x, y):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
         :param classifier: trained classifier
@@ -316,7 +327,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         # return self.adversarial_classifier.evaluate(classifier, x, y)
         # evaluate the performance on the adversarial test set
-        y_pred = classifier.predict(x)
+        y_pred = self.predict(x)
         y_true = np.argmax(y, axis=1)
         nb_correct_adv_pred = np.sum(y_pred == y_true)
 
@@ -331,67 +342,67 @@ class RandomRegularizer(sklKerasClassifier):
         print(classification_report(np.argmax(y, axis=1), y_pred, labels=range(self.num_classes)))
 
     # todo: deprecated
-    def evaluate_test(self, x_test, y_test):
-        """
-        Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
-        :param classifier: trained classifier
-        :param x_test: test data
-        :param y_test: test labels
-        :return: x_test predictions
-        """
-
-        # setting classes_ attribute for loaded models
-        if len(y_test.shape) == 2 and y_test.shape[1] > 1:
-            self.classes_ = np.arange(y_test.shape[1])
-        elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
-            self.classes_ = np.unique(y_test)
-
-        print("\n===== Test set evaluation =====")
-        print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
-
-        y_test_pred = self.predict(x_test)
-        y_test_true = np.argmax(y_test, axis=1)
-        correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
-
-        print("Correctly classified: {}".format(correct_preds))
-        print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
-
-        acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
-        print("Test accuracy: %.2f%%" % (acc * 100))
-
-        # classification report over single classes
-        print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
-
-        return y_test_pred
-
-    # todo: deprecated
-    def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
-        print("\n===== Adversarial evaluation =====")
-
-        if len(y_test.shape) == 2 and y_test.shape[1] > 1:
-            self.classes_ = np.arange(y_test.shape[1])
-        elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
-            self.classes_ = np.unique(y_test)
-
-        # generate adversaries on the test set
-        x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
-                                           adversaries_path=adversaries_path, test=test)
-
-        # evaluate the performance on the adversarial test set
-        y_test_adv = self.predict(x_test_adv)
-        y_test_true = np.argmax(y_test, axis=1)
-        nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
-
-        print("\nAdversarial test data.")
-        print("Correctly classified: {}".format(nb_correct_adv_pred))
-        print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
-
-        acc = nb_correct_adv_pred / y_test.shape[0]
-        print("Adversarial accuracy: %.2f%%" % (acc * 100))
-
-        # classification report
-        print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
-        return x_test_adv, y_test_adv
+    # def evaluate_test(self, x_test, y_test):
+    #     """
+    #     Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
+    #     :param classifier: trained classifier
+    #     :param x_test: test data
+    #     :param y_test: test labels
+    #     :return: x_test predictions
+    #     """
+    #
+    #     # setting classes_ attribute for loaded models
+    #     if len(y_test.shape) == 2 and y_test.shape[1] > 1:
+    #         self.classes_ = np.arange(y_test.shape[1])
+    #     elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
+    #         self.classes_ = np.unique(y_test)
+    #
+    #     print("\n===== Test set evaluation =====")
+    #     print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
+    #
+    #     y_test_pred = self.predict(x_test)
+    #     y_test_true = np.argmax(y_test, axis=1)
+    #     correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
+    #
+    #     print("Correctly classified: {}".format(correct_preds))
+    #     print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
+    #
+    #     acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
+    #     print("Test accuracy: %.2f%%" % (acc * 100))
+    #
+    #     # classification report over single classes
+    #     print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
+    #
+    #     return y_test_pred
+    #
+    # # todo: deprecated
+    # def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
+    #     print("\n===== Adversarial evaluation =====")
+    #
+    #     if len(y_test.shape) == 2 and y_test.shape[1] > 1:
+    #         self.classes_ = np.arange(y_test.shape[1])
+    #     elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
+    #         self.classes_ = np.unique(y_test)
+    #
+    #     # generate adversaries on the test set
+    #     x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
+    #                                        adversaries_path=adversaries_path, test=test)
+    #
+    #     # evaluate the performance on the adversarial test set
+    #     y_test_adv = self.predict(x_test_adv)
+    #     y_test_true = np.argmax(y_test, axis=1)
+    #     nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
+    #
+    #     print("\nAdversarial test data.")
+    #     print("Correctly classified: {}".format(nb_correct_adv_pred))
+    #     print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
+    #
+    #     acc = nb_correct_adv_pred / y_test.shape[0]
+    #     print("Adversarial accuracy: %.2f%%" % (acc * 100))
+    #
+    #     # classification report
+    #     print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
+    #     return x_test_adv, y_test_adv
 
     def load_adversaries(self, dataset_name, attack, eps, test):
         return self.adversarial_classifier.load_adversaries(dataset_name, attack, eps, test)
@@ -422,10 +433,7 @@ class RandomRegularizer(sklKerasClassifier):
             elif method == 'virtual':
                 attacker = VirtualAdversarialMethod(classifier)
                 x_adv = attacker.generate(x)
-            elif method == 'carlini_l2':
-                attacker = CarliniL2Method(classifier, targeted=False)
-                x_adv = attacker.generate(x=x, y=y)
-            elif method == 'carlini_linf':
+            elif method == 'carlini':
                 attacker = CarliniLInfMethod(classifier, targeted=False)
                 x_adv = attacker.generate(x=x, y=y)
             elif method == 'pgd':
@@ -485,15 +493,15 @@ def main(dataset_name, test, lam, projection_mode, eps):
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                    dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-                                   test=test,eps=eps)
+                                   test=test)
 
     # === train === #
-    # classifier = randreg.train(x_train, y_train)
+    classifier = randreg.train(x_train, y_train)
     # randreg.save_classifier(classifier)
-    classifier = randreg.load_classifier(relative_path=TRAINED_MODELS)
+    # randreg = randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    randreg.evaluate(classifier=classifier, x=x_test, y=y_test)
+    randreg.evaluate(x=x_test, y=y_test)
 
     ######### todo: bug on adversarial evaluation. It only works on loaded models..
     # del randreg, classifier
@@ -503,19 +511,10 @@ def main(dataset_name, test, lam, projection_mode, eps):
     # classifier = randreg.load_classifier(current_day_folder=True)
     #########
 
-    # === baseline adversaries === #
-    for method in ['fgsm','pgd','deepfool','carlini_linf']:
+    # === evaluate on adversaries === #
+    for method in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
-        randreg.evaluate(classifier, x_test_adv, y_test)
-
-    # todo: refactor
-    # print("\nRandreg adversaries")
-    # for attack in ['fgsm','pgd','deepfool','carlini_linf']:
-    #     filename = dataset_name + "_x_test_" + attack + "_randreg.pkl"
-    #     x_test_adv = classifier.evaluate_adversaries(x_test, y_test, method=attack, dataset_name=dataset_name,
-    #                                                  #adversaries_path=DATA_PATH+filename,
-    #                                                  test=test)
-    #     # save_to_pickle(data=x_test_adv, filename=filename)
+        randreg.evaluate(x_test_adv, y_test)
 
 
 if __name__ == "__main__":

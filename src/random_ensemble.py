@@ -11,7 +11,7 @@ import sys
 from projection_functions import *
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = True
+ADD_BASELINE_PROB = False
 MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
@@ -226,31 +226,41 @@ class RandomEnsemble(BaselineConvnet):
             print("\nTest evaluation on projection ", self.random_seeds[i])
             baseline.evaluate(classifier=proj_classifier, x=x_test_proj[i], y=y_test)
 
-    def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
-        """ Extends evaluate_test() with projections reports"""
-        y_test_pred = super(RandomEnsemble, self).evaluate(classifier, x_test, y_test)
+    def evaluate(self, classifier, x, y, report_projections=REPORT_PROJECTIONS):
+        """ Extends evaluate() with projections reports"""
+        y_pred = super(RandomEnsemble, self).evaluate(classifier, x, y)
         if report_projections:
+            self.x_proj, _ = self.compute_projections(x)
+            self.report_projections(classifier=classifier, x_test_proj=self.x_proj, y_test=y)
 
-            self.x_test_proj, _ = self.compute_projections(x_test)
-            self.report_projections(classifier=classifier, x_test_proj=self.x_test_proj, y_test=y_test)
+        return y_pred
 
-        return y_test_pred
-
-    def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
-                             report_projections=REPORT_PROJECTIONS):
-        """ Extends evaluate_adversaries() with projections reports"""
-        x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate(classifier=classifier, x=x_test, y=y_test)
-        if report_projections:
-            x_test_adv_proj, _ = self.compute_projections(x_test_adv)
-            self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
+    # def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
+    #     """ Extends evaluate_test() with projections reports"""
+    #     y_test_pred = super(RandomEnsemble, self).evaluate(classifier, x_test, y_test)
+    #     if report_projections:
+    #
+    #         self.x_test_proj, _ = self.compute_projections(x_test)
+    #         self.report_projections(classifier=classifier, x_test_proj=self.x_test_proj, y_test=y_test)
+    #
+    #     return y_test_pred
+    #
+    # def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
+    #                          report_projections=REPORT_PROJECTIONS):
+    #     """ Extends evaluate_adversaries() with projections reports"""
+    #     x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate(classifier=classifier, x=x_test, y=y_test)
+    #     if report_projections:
+    #         x_test_adv_proj, _ = self.compute_projections(x_test_adv)
+    #         self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
 
     def generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
+        # todo: refactor
         """ Adversaries are generated on the baseline classifier """
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
         if self.baseline_classifier is None and adversaries_path is None:
-            self.baseline_classifier = baseline.load_classifier(relative_path=TRAINED_MODELS)
+            self.baseline_classifier = baseline.load_classifier(relative_path="../trained_models/baseline/")
         x_adv = baseline.generate_adversaries(classifier=self.baseline_classifier, x=x, y=y, method=method,
                                               dataset_name=dataset_name, test=test, eps=eps)
         return x_adv
@@ -274,7 +284,9 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of trained classifiers
         """
         start_time = time.time()
-        # # epochs = self._set_training_params(test=False)[1] # load full epochs model
+        # _, epochs = self._set_training_params(dataset_name=self.dataset_name,test=False).values() # load full epochs model
+
+        # old
         # folder = relative_path + str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + \
         #          "_epochs=" + str(self.epochs) + "_" + str(self.projection_mode)+ "/"
         # trained_models = [load_model(folder +
@@ -310,7 +322,9 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     :param test: if True only takes 100 samples
     :param n_proj: number of projections. Trained models used values: 6, 9, 12, 15.
     :param size_proj: size of each projection. You can currently load models with values: 8, 12, 16, 20.
-    :param attack: choose between "fgsm", "pgd", "deepfool","carlini_linf", "virtual", "newtonfool"
+    :param projection_mode: method for computing projections on RGB images
+    :param attack: attack name
+    :param eps: max norm of a perturbation
     """
 
     # === load data === #
@@ -321,13 +335,14 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
     # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
-    # model.save_model(classifier=classifier, model_name=MODEL_NAME)
+    # model.save_classifier(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    classifier = model.load_classifier(dataset_name)
+    classifier = model.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    # model.evaluate(classifier=classifier, x=x_test, y=y_test)
+    model.evaluate(classifier=classifier, x=x_test, y=y_test)
+    exit()
 
     x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
     print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
