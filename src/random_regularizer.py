@@ -5,6 +5,7 @@ from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
 from art.classifiers import KerasClassifier as artKerasClassifier
 import keras.losses
+from random import seed
 from random_ensemble import *
 from projection_functions import *
 from adversarial_classifier import AdversarialClassifier as myAdvClassifier
@@ -14,7 +15,7 @@ TRAINED_MODELS = "../trained_models/random_regularizer/" # RESULTS + time.strfti
 
 L_RATE = 5
 MIN_SIZE = 2
-MAX_SIZE = 4
+MAX_SIZE = 8
 MIN_PROJ = 1
 MAX_PROJ = 3
 TEST_SIZE = 2
@@ -29,7 +30,8 @@ class RandomRegularizer(sklKerasClassifier):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
-        self.sess=sess
+        os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
+        self.sess = sess
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.dataset_name = dataset_name
@@ -59,9 +61,10 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             return {'batch_size':500,'epochs':12}
 
-    def _get_proj_params(self):
+    def _get_proj_params(self, init_seed=1):
+        random.seed(init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.sample(range(1, 100), 100)
+        seed = random.randint(1, 100)
         return {"size":size,"seed":seed}
 
     def _get_logits(self, inputs):
@@ -111,7 +114,7 @@ class RandomRegularizer(sklKerasClassifier):
     def _set_random_params(self):
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seeds = random.sample(range(1, 100), n_proj)
-        # print("\nsize =", size, ", seed =", seed)
+        print("\nsize =", size, ", seed =", seed)
         return {"size":size, "seeds":seeds}
 
     def loss_wrapper(self, inputs, outputs):
@@ -153,12 +156,6 @@ class RandomRegularizer(sklKerasClassifier):
                 for var, grad in zip(var_list, grads)]
 
     def _get_n_channels(self, inputs, channel_mode=CHANNEL_MODE):
-        # if channel_mode == "channels":
-        #     return inputs.get_shape().as_list()[3]
-        # elif channel_mode == "one_channel":
-        #     return 1
-        # else:
-        #     raise ValueError("Projection mode not supported. Choose between:", CHANNEL_MODE)
         return inputs.get_shape().as_list()[3]
 
     def _no_projections_regularizer(self, inputs, outputs):
@@ -181,9 +178,6 @@ class RandomRegularizer(sklKerasClassifier):
         return regularization / self.batch_size
 
     def _loss_on_projections_regularizer(self, inputs, outputs):
-        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        # seed = random.randint(1, 100)
-        # print("\nsize =", size, ", seed =", seed)
 
         channels = self._get_n_channels(inputs)
 
@@ -218,10 +212,7 @@ class RandomRegularizer(sklKerasClassifier):
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
 
-        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        # seed = random.randint(1, 100)
-        # print("\nsize =", size, ", seed =", seed)
-        size, seed = self._get_proj_params()
+        size, seed = self._get_proj_params().values()
         channels = self._get_n_channels(inputs)
 
         axis = 1 if self.data_format == "channels_first" else -1
@@ -234,7 +225,7 @@ class RandomRegularizer(sklKerasClassifier):
             loss_gradient += self._compute_gradients(loss, [inputs])[0] / channels
         projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
         regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
-        regularization = tf.reduce_sum( tf.math.square(tf.norm(regularization, ord=2, axis=0)))
+        regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
         return regularization / (self.batch_size * self.n_proj)
 
     def _loss_on_perturbations_regularizer(self, inputs, outputs):
@@ -244,10 +235,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         axis = 1 if self.data_format == "channels_first" else -1
         n_proj = random.randint(MIN_PROJ, MAX_PROJ)
-        # size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        # seeds = random.sample(range(1, 100), n_proj)
-        # print("\nsize =", size)
-        size, seed = self._get_proj_params()
+        size, seed = self._get_proj_params().values()
 
         projections, inverse_projections = compute_projections(inputs, seeds, n_proj, size, "channels")
         perturbations, augmented_inputs = compute_perturbations(inputs, inverse_projections)
@@ -311,7 +299,7 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
-    def evaluate(self, x, y):
+    def evaluate(self, classifier, x, y):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
         :param classifier: trained classifier
@@ -327,7 +315,7 @@ class RandomRegularizer(sklKerasClassifier):
 
         # return self.adversarial_classifier.evaluate(classifier, x, y)
         # evaluate the performance on the adversarial test set
-        y_pred = self.predict(x)
+        y_pred = classifier.predict(x)
         y_true = np.argmax(y, axis=1)
         nb_correct_adv_pred = np.sum(y_pred == y_true)
 
@@ -484,9 +472,9 @@ class RandomRegularizer(sklKerasClassifier):
 def main(dataset_name, test, lam, projection_mode, eps):
 
     # === Tensorflow session and initialization === #
+    # todo: tf session should be initialized in the constructor. same holds for dirs
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-    os.makedirs(os.path.dirname(RESULTS+time.strftime('%Y-%m-%d')+"/"), exist_ok=True)
 
     # === model initialization === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
@@ -501,20 +489,12 @@ def main(dataset_name, test, lam, projection_mode, eps):
     # randreg = randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    randreg.evaluate(x=x_test, y=y_test)
-
-    ######### todo: bug on adversarial evaluation. It only works on loaded models..
-    # del randreg, classifier
-    # randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-    #                                dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
-    #                                test=test,eps=eps)
-    # classifier = randreg.load_classifier(current_day_folder=True)
-    #########
+    randreg.evaluate(classifier=classifier, x=x_test, y=y_test)
 
     # === evaluate on adversaries === #
     for method in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
-        randreg.evaluate(x_test_adv, y_test)
+        randreg.evaluate(classifier, x_test_adv, y_test)
 
 
 if __name__ == "__main__":
