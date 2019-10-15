@@ -120,7 +120,7 @@ class Test(unittest.TestCase):
             model.evaluate(classifier=classifier, x=x_test, y=y_test)
 
     def test_ensemble_regularizer(self):
-        model = Ensemble_Regularizer(n_models=3, input_shape=self.input_shape, num_classes=self.num_classes,
+        model = Ensemble_Regularizer(ensemble_size=3, input_shape=self.input_shape, num_classes=self.num_classes,
                                      data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                      projection_mode="loss_on_projections", test=True)
         classifier = model.train(self.x_train, self.y_train)
