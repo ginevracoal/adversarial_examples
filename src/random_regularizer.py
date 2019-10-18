@@ -26,12 +26,14 @@ CHANNEL_MODE = "channels" # "channels, grayscale"
 
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, sess, lam, projection_mode, test=False):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test,
+                 init_seed=1):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
-        self.sess = sess
+        self.sess = self._tf_session()
+        self.init_seed = init_seed
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.dataset_name = dataset_name
@@ -48,7 +50,15 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nprojection mode =", self.projection_mode, "channel mode =", CHANNEL_MODE,", lambda =", self.lam)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
+        self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
+                          "_" + str(self.projection_mode) + ".h5"
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
+
+    def _tf_session(self):
+        """ Initialize tf session """
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+        return sess
 
     def _set_training_params(self, test):
         """
@@ -61,8 +71,8 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             return {'batch_size':500,'epochs':12}
 
-    def _get_proj_params(self, init_seed=1):
-        random.seed(init_seed)
+    def _get_proj_params(self):
+        random.seed(self.init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)
         return {"size":size,"seed":seed}
@@ -180,6 +190,7 @@ class RandomRegularizer(sklKerasClassifier):
     def _loss_on_projections_regularizer(self, inputs, outputs):
 
         channels = self._get_n_channels(inputs)
+        size, seed = self._get_proj_params().values()
 
         axis = 1 if self.data_format == "channels_first" else -1
         regularization = 0
@@ -258,6 +269,7 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
+        # print(len(x_train), self.batch_size)
         batches = int(len(x_train)/self.batch_size)
         x_train_batches = np.split(x_train, batches)
         y_train_batches = np.split(y_train, batches)
@@ -299,10 +311,9 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
-    def evaluate(self, classifier, x, y):
+    def evaluate(self, x, y): # classifier
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
-        :param classifier: trained classifier
         :param x: test data
         :param y: test labels
         :return: predictions
@@ -313,84 +324,20 @@ class RandomRegularizer(sklKerasClassifier):
         elif (len(y.shape) == 2 and y.shape[1] == 1) or len(y.shape) == 1:
             self.classes_ = np.unique(y)
 
-        # return self.adversarial_classifier.evaluate(classifier, x, y)
-        # evaluate the performance on the adversarial test set
-        y_pred = classifier.predict(x)
+        # y_pred = classifier.predict(x)
+        y_pred = self.predict(x)
         y_true = np.argmax(y, axis=1)
         nb_correct_adv_pred = np.sum(y_pred == y_true)
 
-        print("\nAdversarial test data.")
+        print("\nTest data.")
         print("Correctly classified: {}".format(nb_correct_adv_pred))
         print("Incorrectly classified: {}".format(len(x) - nb_correct_adv_pred))
 
         acc = nb_correct_adv_pred / y.shape[0]
-        print("Adversarial accuracy: %.2f%%" % (acc * 100))
+        print("Accuracy: %.2f%%" % (acc * 100))
 
         # classification report
         print(classification_report(np.argmax(y, axis=1), y_pred, labels=range(self.num_classes)))
-
-    # todo: deprecated
-    # def evaluate_test(self, x_test, y_test):
-    #     """
-    #     Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
-    #     :param classifier: trained classifier
-    #     :param x_test: test data
-    #     :param y_test: test labels
-    #     :return: x_test predictions
-    #     """
-    #
-    #     # setting classes_ attribute for loaded models
-    #     if len(y_test.shape) == 2 and y_test.shape[1] > 1:
-    #         self.classes_ = np.arange(y_test.shape[1])
-    #     elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
-    #         self.classes_ = np.unique(y_test)
-    #
-    #     print("\n===== Test set evaluation =====")
-    #     print("\nTesting infos:\nx_test.shape = ", x_test.shape, "\ny_test.shape = ", y_test.shape, "\n")
-    #
-    #     y_test_pred = self.predict(x_test)
-    #     y_test_true = np.argmax(y_test, axis=1)
-    #     correct_preds = np.sum(y_test_pred == np.argmax(y_test, axis=1))
-    #
-    #     print("Correctly classified: {}".format(correct_preds))
-    #     print("Incorrectly classified: {}".format(len(x_test) - correct_preds))
-    #
-    #     acc = np.sum(y_test_pred == y_test_true) / y_test.shape[0]
-    #     print("Test accuracy: %.2f%%" % (acc * 100))
-    #
-    #     # classification report over single classes
-    #     print(classification_report(np.argmax(y_test, axis=1), y_test_pred, labels=range(self.num_classes)))
-    #
-    #     return y_test_pred
-    #
-    # # todo: deprecated
-    # def evaluate_adversaries(self, x_test, y_test, method, dataset_name, adversaries_path=None, test=False):
-    #     print("\n===== Adversarial evaluation =====")
-    #
-    #     if len(y_test.shape) == 2 and y_test.shape[1] > 1:
-    #         self.classes_ = np.arange(y_test.shape[1])
-    #     elif (len(y_test.shape) == 2 and y_test.shape[1] == 1) or len(y_test.shape) == 1:
-    #         self.classes_ = np.unique(y_test)
-    #
-    #     # generate adversaries on the test set
-    #     x_test_adv = self._get_adversaries(self, x_test, y_test, method=method, dataset_name=dataset_name,
-    #                                        adversaries_path=adversaries_path, test=test)
-    #
-    #     # evaluate the performance on the adversarial test set
-    #     y_test_adv = self.predict(x_test_adv)
-    #     y_test_true = np.argmax(y_test, axis=1)
-    #     nb_correct_adv_pred = np.sum(y_test_adv == y_test_true)
-    #
-    #     print("\nAdversarial test data.")
-    #     print("Correctly classified: {}".format(nb_correct_adv_pred))
-    #     print("Incorrectly classified: {}".format(len(x_test_adv) - nb_correct_adv_pred))
-    #
-    #     acc = nb_correct_adv_pred / y_test.shape[0]
-    #     print("Adversarial accuracy: %.2f%%" % (acc * 100))
-    #
-    #     # classification report
-    #     print(classification_report(np.argmax(y_test, axis=1), y_test_adv, labels=range(self.num_classes)))
-    #     return x_test_adv, y_test_adv
 
     def load_adversaries(self, dataset_name, attack, eps, test):
         return self.adversarial_classifier.load_adversaries(dataset_name, attack, eps, test)
@@ -433,7 +380,7 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
             if dataset_name == "mnist":
-                # todo: buggy mnist test data
+                # todo: buggy old mnist test data
                 # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
                 # the first element in the list.
                 x_adv = load_from_pickle(path=adversaries_path, test=test)[0]
@@ -443,58 +390,44 @@ class RandomRegularizer(sklKerasClassifier):
 
         return x_adv
 
-    def save_classifier(self, classifier):
+    def save_classifier(self, relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/"):
         """
         Saves the trained model and adds the current datetime to the filepath.
-
-        :param classifier: trained classifier
+        :relative_path: path of folder containing the trained model
         """
-        modelname = str(dataset_name) + "_randreg_lam=" + str(classifier.lam) + \
-                    "_batch=" + str(classifier.batch_size) + "_epochs=" + str(classifier.epochs) + \
-                    "_" + str(classifier.projection_mode) + ".h5"
-        model_path = RESULTS + time.strftime('%Y-%m-%d') + "/" + modelname
-        classifier.model.save_weights(model_path)
+        self.model.save_weights(relative_path+self.model_name)
 
     def load_classifier(self, relative_path):
         """
-        Loads a pretrained classifier. It load either the baseline model or the adversarially trained robust version.
-        :param dataset_name: dataset name
-        :param attack: attack method for loading adversarially trained robust models
-        :param eps: threshold for the norm of a perturbation
+        Loads a pre-trained classifier.
+        :relative_path: path of folder containing the trained model
         returns: trained classifier
         """
-        modelname = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
-                    "_" + str(self.projection_mode) + ".h5"
-        model_path = relative_path + modelname
-        self.model.load_weights(model_path)
+        self.model.load_weights(relative_path + self.model_name)
         return self
+
 
 def main(dataset_name, test, lam, projection_mode, eps):
 
-    # === Tensorflow session and initialization === #
-    # todo: tf session should be initialized in the constructor. same holds for dirs
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-
-    # === model initialization === #
+    # === initialize === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, sess=sess, lam=lam, projection_mode=projection_mode,
+                                   dataset_name=dataset_name, lam=lam, projection_mode=projection_mode,
                                    test=test)
 
     # === train === #
-    classifier = randreg.train(x_train, y_train)
-    # randreg.save_classifier(classifier)
-    # randreg = randreg.load_classifier(relative_path=TRAINED_MODELS)
+    randreg.train(x_train, y_train)
+    # randreg.save_classifier()
+    # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    randreg.evaluate(classifier=classifier, x=x_test, y=y_test)
+    randreg.evaluate(x=x_test, y=y_test)
 
-    # === evaluate on adversaries === #
     for method in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
-        randreg.evaluate(classifier, x_test_adv, y_test)
+        randreg.evaluate(x_test_adv, y_test)
 
 
 if __name__ == "__main__":
