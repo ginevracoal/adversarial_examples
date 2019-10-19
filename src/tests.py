@@ -109,18 +109,27 @@ class Test(unittest.TestCase):
         model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
                                       epochs=model.epochs, idx=1, save=False)
 
+
     def test_cifar_randreg(self):
         dataset_name = "cifar"
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                                test=True)
-        for projection_mode in ["no_projections","loss_on_projections","projected_loss"]:
-            model = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                      dataset_name=dataset_name, lam=0.6, projection_mode=projection_mode, test=True)
-            model.train(x_train, y_train)
-            model.evaluate(x=x_test, y=y_test)
+        model = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                  dataset_name=dataset_name, lam=0.6, projection_mode="no_projections", test=True)
+        model.train(x_train, y_train)
+        model.evaluate(x=x_test, y=y_test)
+
+    def test_projection_modes(self):
+        dataset_name = "mnist"
+        for projection_mode in ["no_projections", "loss_on_projections", "projected_loss"]:
+            model = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
+                                      data_format=self.data_format, dataset_name=dataset_name, lam=0.6,
+                                      projection_mode=projection_mode, test=True)
+            model.train(self.x_train, self.y_train)
+            model.evaluate(x=self.x_test, y=self.y_test)
 
     def test_ensemble_regularizer(self):
-        model = EnsembleRegularizer(ensemble_size=2, input_shape=self.input_shape, num_classes=self.num_classes,
+        model = EnsembleRegularizer(ensemble_size=1, input_shape=self.input_shape, num_classes=self.num_classes,
                                      data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                      projection_mode="loss_on_projections", test=True)
         model.train(self.x_train, self.y_train)
@@ -131,6 +140,7 @@ class Test(unittest.TestCase):
                                     projection_mode="loss_on_projections", test=True)
         model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
         model.evaluate(x=self.x_test, y=self.y_test)
+
 
 if __name__ == '__main__':
     unittest.main()
