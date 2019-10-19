@@ -7,7 +7,7 @@ from projection_functions import *
 import random
 from random_regularizer import RandomRegularizer
 from parallel_randens_training import ParallelRandomEnsemble
-from ensemble_regularizer import Ensemble_Regularizer
+from ensemble_regularizer import EnsembleRegularizer
 
 BATCH_SIZE = 20
 EPOCHS = 1
@@ -116,18 +116,21 @@ class Test(unittest.TestCase):
         for projection_mode in ["no_projections","loss_on_projections","projected_loss"]:
             model = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                       dataset_name=dataset_name, lam=0.6, projection_mode=projection_mode, test=True)
-            classifier = model.train(x_train, y_train)
-            model.evaluate(classifier=classifier, x=x_test, y=y_test)
+            model.train(x_train, y_train)
+            model.evaluate(x=x_test, y=y_test)
 
     def test_ensemble_regularizer(self):
-        model = Ensemble_Regularizer(ensemble_size=3, input_shape=self.input_shape, num_classes=self.num_classes,
+        model = EnsembleRegularizer(ensemble_size=2, input_shape=self.input_shape, num_classes=self.num_classes,
                                      data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                      projection_mode="loss_on_projections", test=True)
-        classifier = model.train(self.x_train, self.y_train)
-        model.save_classifier(classifier)
+        model.train(self.x_train, self.y_train)
+        model.save_classifier()
         del model
-        classifier = model.load_classifier(relative_path=TRAINED_MODELS)
-        classifier.evaluate(x=self.x_test, y=self.y_test)
+        model = EnsembleRegularizer(ensemble_size=3, input_shape=self.input_shape, num_classes=self.num_classes,
+                                    data_format=self.data_format, dataset_name="mnist", lam=0.3,
+                                    projection_mode="loss_on_projections", test=True)
+        model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+        model.evaluate(x=self.x_test, y=self.y_test)
 
 if __name__ == '__main__':
     unittest.main()

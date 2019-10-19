@@ -23,11 +23,10 @@ TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "channels" # "channels, grayscale"
 
-
+# todo: I want this class to extend AdversarialClassifier
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test,
-                 init_seed=1):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, init_seed=1):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -42,6 +41,7 @@ class RandomRegularizer(sklKerasClassifier):
         self.projection_mode = projection_mode
         self.test = test
         self._set_model()
+        self.classes_ = self._set_classes()
         self.n_proj = None
         self.inputs = Input(shape=self.input_shape)
         self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -51,7 +51,7 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
-                          "_" + str(self.projection_mode) + ".h5"
+                          "_" + str(self.projection_mode) + "_" + str(self.init_seed) + ".h5"
         super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
 
     def _tf_session(self):
@@ -126,6 +126,16 @@ class RandomRegularizer(sklKerasClassifier):
         seeds = random.sample(range(1, 100), n_proj)
         print("\nsize =", size, ", seed =", seed)
         return {"size":size, "seeds":seeds}
+
+    def _set_classes(self, y=None):
+        """ Setting classes_ attribute for sklearn KerasClassifier class """
+
+        # todo: deprecated
+        # if len(y.shape) == 2 and y.shape[1] > 1:
+        #     return np.arange(y.shape[1])
+        # elif (len(y.shape) == 2 and y.shape[1] == 1) or len(y.shape) == 1:
+        #     return np.unique(y)
+        return np.array(np.arange(10))
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -311,20 +321,14 @@ class RandomRegularizer(sklKerasClassifier):
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
 
-    def evaluate(self, x, y): # classifier
+    def evaluate(self, x, y):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
         :param x: test data
         :param y: test labels
         :return: predictions
         """
-        # setting classes_ attribute for loaded models
-        if len(y.shape) == 2 and y.shape[1] > 1:
-            self.classes_ = np.arange(y.shape[1])
-        elif (len(y.shape) == 2 and y.shape[1] == 1) or len(y.shape) == 1:
-            self.classes_ = np.unique(y)
 
-        # y_pred = classifier.predict(x)
         y_pred = self.predict(x)
         y_true = np.argmax(y, axis=1)
         nb_correct_adv_pred = np.sum(y_pred == y_true)
@@ -335,14 +339,11 @@ class RandomRegularizer(sklKerasClassifier):
 
         acc = nb_correct_adv_pred / y.shape[0]
         print("Accuracy: %.2f%%" % (acc * 100))
-
-        # classification report
         print(classification_report(np.argmax(y, axis=1), y_pred, labels=range(self.num_classes)))
 
     def load_adversaries(self, dataset_name, attack, eps, test):
         return self.adversarial_classifier.load_adversaries(dataset_name, attack, eps, test)
 
-    # todo: implement generate adversaries using method from adversarial classifier
     def _get_adversaries(self, trained_classifier, x, y, test, method, dataset_name, adversaries_path):
         """
         Generates adversaries on the input data x using a given method or loads saved data if available.
