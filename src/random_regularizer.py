@@ -11,7 +11,8 @@ from projection_functions import *
 from adversarial_classifier import AdversarialClassifier as myAdvClassifier
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/" # RESULTS + time.strftime('%Y-%m-%d') + "/"
+TRAINED_MODELS = "../trained_models/random_regularizer/"  # RESULTS + time.strftime('%Y-%m-%d') + "/"
+DEVICE_NAME = "cpu"  # cpu, gpu
 
 L_RATE = 5
 MIN_SIZE = 2
@@ -21,7 +22,8 @@ MAX_PROJ = 3
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
-CHANNEL_MODE = "channels" # "channels, grayscale"
+CHANNEL_MODE = "channels"  # "channels, grayscale"
+
 
 # todo: I want this class to extend AdversarialClassifier
 class RandomRegularizer(sklKerasClassifier):
@@ -56,8 +58,14 @@ class RandomRegularizer(sklKerasClassifier):
 
     def _tf_session(self):
         """ Initialize tf session """
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        # tf.test.is_gpu_available()
+
+        # config = tf.ConfigProto()
+        # config.gpu_options.allow_growth = True
+        # sess = tf.Session(config=config)
+
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
+        # sess.run(tf.global_variables_initializer())
         return sess
 
     def _set_training_params(self, test):
@@ -74,7 +82,7 @@ class RandomRegularizer(sklKerasClassifier):
     def _get_proj_params(self):
         random.seed(self.init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.randint(1, 100)
+        seed = random.randint(1, 100) #random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
 
     def _get_logits(self, inputs):
@@ -120,12 +128,6 @@ class RandomRegularizer(sklKerasClassifier):
         inputs = Input(shape=self.input_shape)
         outputs = self._get_logits(inputs=inputs)
         self.model = Model(inputs=inputs, outputs=outputs)
-
-    def _set_random_params(self):
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seeds = random.sample(range(1, 100), n_proj)
-        print("\nsize =", size, ", seed =", seed)
-        return {"size":size, "seeds":seeds}
 
     def _set_classes(self, y=None):
         """ Setting classes_ attribute for sklearn KerasClassifier class """
@@ -256,7 +258,8 @@ class RandomRegularizer(sklKerasClassifier):
 
         axis = 1 if self.data_format == "channels_first" else -1
         n_proj = random.randint(MIN_PROJ, MAX_PROJ)
-        size, seed = self._get_proj_params().values()
+        size, _ = self._get_proj_params().values()
+        seeds = random.sample(range(1, 100), n_proj)
 
         projections, inverse_projections = compute_projections(inputs, seeds, n_proj, size, "channels")
         perturbations, augmented_inputs = compute_perturbations(inputs, inverse_projections)
@@ -285,7 +288,6 @@ class RandomRegularizer(sklKerasClassifier):
         y_train_batches = np.split(y_train, batches)
 
         start_time = time.time()
-        # todo: set loss wrapper seeds before looping over batches and pass them to the wrapper
 
         for batch in range(batches):
             print("\n=== training batch", batch+1,"/",batches,"===")
@@ -298,25 +300,32 @@ class RandomRegularizer(sklKerasClassifier):
 
             mini_batch = 20
 
-            if self.projection_mode == "loss_on_perturbations":
-                loss = self.loss_wrapper(inputs, outputs)
-                self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
-                               callbacks=[early_stopping])
-            elif self.projection_mode == "no_projections":
-                loss = self.loss_wrapper(inputs, outputs)
-                self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-                self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
-                               callbacks=[early_stopping])
+            if DEVICE_NAME == "gpu":
+                device_name = "/gpu:0"
+                # device_name = "/job:localhost/replica:0/task:0/device:XLA_GPU:0')"
             else:
-                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
-                print("\nn_proj =",self.n_proj)
-                for proj in range(self.n_proj):
-                    print("\nprojection",proj+1,"/",self.n_proj)
-                    loss = self.loss_wrapper(inputs,outputs)
+                device_name = "/cpu:0"
+
+            with tf.device(device_name):
+                if self.projection_mode == "loss_on_perturbations":
+                    loss = self.loss_wrapper(inputs, outputs)
                     self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
                     self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
                                    callbacks=[early_stopping])
+                elif self.projection_mode == "no_projections":
+                    loss = self.loss_wrapper(inputs, outputs)
+                    self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
+                    self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
+                                   callbacks=[early_stopping])
+                else:
+                    self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
+                    print("\nn_proj =",self.n_proj)
+                    for proj in range(self.n_proj):
+                        print("\nprojection",proj+1,"/",self.n_proj)
+                        loss = self.loss_wrapper(inputs,outputs)
+                        self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
+                        self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
+                                       callbacks=[early_stopping])
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
@@ -414,18 +423,17 @@ def main(dataset_name, test, lam, projection_mode, eps):
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                   dataset_name=dataset_name, lam=lam, projection_mode=projection_mode,
-                                   test=test)
+                                dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test)
 
     # === train === #
     randreg.train(x_train, y_train)
     # randreg.save_classifier()
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
-    randreg.load_classifier(relative_path=TRAINED_MODELS)
+    # randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
-
+    exit()
     for method in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
         randreg.evaluate(x_test_adv, y_test)
