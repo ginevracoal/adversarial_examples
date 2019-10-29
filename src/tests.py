@@ -15,6 +15,7 @@ N_PROJECTIONS = 1
 SIZE_PROJECTION = 6
 EPS = 0.3
 TRAINED_MODELS = "../trained_models/"
+DEVICE = "cpu"
 
 
 class Test(unittest.TestCase):
@@ -116,7 +117,7 @@ class Test(unittest.TestCase):
                                                                                                test=True)
         model = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                   dataset_name=dataset_name, lam=0.6, projection_mode="no_projections", test=True)
-        model.train(x_train, y_train)
+        model.train(x_train, y_train, device=DEVICE)
         model.evaluate(x=x_test, y=y_test)
 
     def test_projection_modes(self):
@@ -125,17 +126,18 @@ class Test(unittest.TestCase):
             model = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                       data_format=self.data_format, dataset_name=dataset_name, lam=0.6,
                                       projection_mode=projection_mode, test=True)
-            model.train(self.x_train, self.y_train)
+            model.train(self.x_train, self.y_train, DEVICE)
             model.evaluate(x=self.x_test, y=self.y_test)
 
     def test_ensemble_regularizer(self):
-        model = EnsembleRegularizer(ensemble_size=1, input_shape=self.input_shape, num_classes=self.num_classes,
+        ensemble_size=2
+        model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
                                      data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                      projection_mode="loss_on_projections", test=True)
-        model.train(self.x_train, self.y_train)
+        model.train(self.x_train, self.y_train, DEVICE)
         model.save_classifier()
         del model
-        model = EnsembleRegularizer(ensemble_size=3, input_shape=self.input_shape, num_classes=self.num_classes,
+        model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
                                     data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                     projection_mode="loss_on_projections", test=True)
         model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")

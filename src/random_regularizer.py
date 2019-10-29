@@ -12,13 +12,13 @@ from adversarial_classifier import AdversarialClassifier as myAdvClassifier
 
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
 TRAINED_MODELS = "../trained_models/random_regularizer/"  # RESULTS + time.strftime('%Y-%m-%d') + "/"
-DEVICE_NAME = "cpu"  # cpu, gpu
+DEVICE = "cpu"  # cpu, gpu
 
 L_RATE = 5
 MIN_SIZE = 2
 MAX_SIZE = 8
 MIN_PROJ = 1
-MAX_PROJ = 3
+MAX_PROJ = 1
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
@@ -278,7 +278,7 @@ class RandomRegularizer(sklKerasClassifier):
         regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
         return regularization / self.batch_size
 
-    def train(self, x_train, y_train):
+    def train(self, x_train, y_train, device):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
@@ -300,11 +300,13 @@ class RandomRegularizer(sklKerasClassifier):
 
             mini_batch = 20
 
-            if DEVICE_NAME == "gpu":
+            if device == "gpu":
                 device_name = "/gpu:0"
                 # device_name = "/job:localhost/replica:0/task:0/device:XLA_GPU:0')"
-            else:
+            elif device == "cpu":
                 device_name = "/cpu:0"
+            else:
+                raise AssertionError("Wrong device name.")
 
             with tf.device(device_name):
                 if self.projection_mode == "loss_on_perturbations":
@@ -390,7 +392,7 @@ class RandomRegularizer(sklKerasClassifier):
         else:
             print("\nLoading adversaries generated with", method, "method on", dataset_name)
             if dataset_name == "mnist":
-                # todo: buggy old mnist test data
+                # todo: replace buggy old mnist adversarial test data
                 # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
                 # the first element in the list.
                 x_adv = load_from_pickle(path=adversaries_path, test=test)[0]
@@ -417,7 +419,15 @@ class RandomRegularizer(sklKerasClassifier):
         return self
 
 
-def main(dataset_name, test, lam, projection_mode, eps):
+def main(dataset_name, test, lam, projection_mode, eps, device):
+    """
+    :param dataset_name: choose between "mnist" and "cifar"
+    :param test: if True only takes the first 100 samples
+    :param lam: lambda regularization weight parameter
+    :param projection_mode: method for computing projections on RGB images
+    :param eps: upper ths for adversaries distance
+    :param device: code execution device (cpu/gpu)
+    """
 
     # === initialize === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
@@ -426,7 +436,7 @@ def main(dataset_name, test, lam, projection_mode, eps):
                                 dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test)
 
     # === train === #
-    randreg.train(x_train, y_train)
+    randreg.train(x_train, y_train, device)
     # randreg.save_classifier()
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     # randreg.load_classifier(relative_path=TRAINED_MODELS)
@@ -446,6 +456,7 @@ if __name__ == "__main__":
         lam = float(sys.argv[3])
         projection_mode = sys.argv[4]
         eps = float(sys.argv[5])
+        device = sys.argv[6]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -453,6 +464,7 @@ if __name__ == "__main__":
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         eps = float(input("\nSet a ths for perturbation norm: "))
+        device = input("\nChoose a device (cpu/gpu): ")
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps, device=device)
 

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from random_regularizer import *
+from tensorflow.python.client import device_lib
 
 
 class EnsembleRegularizer(RandomRegularizer):
@@ -9,16 +10,19 @@ class EnsembleRegularizer(RandomRegularizer):
     """
 
     def __init__(self, ensemble_size, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test):
+        # print(device_lib.list_local_devices())
+        # exit()
         self.ensemble_size = ensemble_size
         self.ensemble_classifiers = None
         super(EnsembleRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, lam,
                                                   projection_mode, test)
 
-    def train(self, x_train, y_train):
+    def train(self, x_train, y_train, device):
         """
         Trains different random_regularizer models over random projections of the training data.
         :param x_train: training data
         :param y_train: training labels
+        :param device: code execution device (cpu/gpu)
         :return: list of `ensemble_size` trained models
         """
 
@@ -28,7 +32,7 @@ class EnsembleRegularizer(RandomRegularizer):
             randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
                                         projection_mode=self.projection_mode, test=self.test, init_seed=i)
-            classifiers.append(randreg.train(x_train, y_train))
+            classifiers.append(randreg.train(x_train, y_train, device))
             del randreg
         print("\nTraining time for Ensemble Regularizer with ensemble_size = ", str(self.ensemble_size),
               " : --- %s seconds ---" % (time.time() - start_time))
@@ -76,13 +80,14 @@ class EnsembleRegularizer(RandomRegularizer):
         self.ensemble_classifiers = classifiers
 
 
-def main(dataset_name, test, ensemble_size, projection_mode, lam):
+def main(dataset_name, test, ensemble_size, projection_mode, lam, device):
     """
     :param dataset_name: choose between "mnist" and "cifar"
     :param test: if True only takes the first 100 samples
     :param ensemble_size: number of models for the ensemble
     :param projection_mode: method for computing projections on RGB images
     :param lam: lambda regularization weight parameter
+    :param device: code execution device (cpu/gpu)
     """
 
     # === initialize === #
@@ -92,10 +97,10 @@ def main(dataset_name, test, ensemble_size, projection_mode, lam):
                                 projection_mode=projection_mode, data_format=data_format, dataset_name=dataset_name,
                                 lam=lam, test=test)
     # === train === #
-    # model.train(x_train, y_train)
+    model.train(x_train, y_train, device)
     # model.save_classifier()
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    # model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
@@ -114,6 +119,7 @@ if __name__ == "__main__":
         ensemble_size = int(sys.argv[3])
         projection_mode = sys.argv[4]
         lam = float(sys.argv[5])
+        device = sys.argv[6]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -121,8 +127,9 @@ if __name__ == "__main__":
         ensemble_size = input("\nChoose the ensemble size (integer value): ")
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
+        device = input("\nChoose a device (cpu/gpu): ")
 
-    main(dataset_name, test, ensemble_size, projection_mode, lam)
+    main(dataset_name, test, ensemble_size, projection_mode, lam, device)
 
 
 
