@@ -49,14 +49,18 @@
 #TEST="False"
 #LAMBDA=0.8
 #PROJ_MODE="loss_on_projections"
+#DEVICE="gpu"
+#PARALLEL=True
 
 # === ensemble_regularizer === #
 SCRIPT="ensemble_regularizer"
-DATASET_NAME="cifar"
+DATASET_NAME="mnist"
 TEST="False"
-ENSEMBLE_SIZE=3
+ENSEMBLE_SIZE=5
 PROJ_MODE="loss_on_projections"
-LAMBDA=0.6
+LAMBDA=0.5
+DEVICE="gpu"
+PARALLEL=True
 
 ##############
 # run script #
@@ -101,6 +105,6 @@ elif [ $SCRIPT = "randreg" ]; then
   python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "ensemble_regularizer" ]; then
-  python3 "ensemble_regularizer.py" $DATASET_NAME $TEST $ENSEMBLE_SIZE $PROJ_MODE $LAMBDA >> $OUT
+  python3 "ensemble_regularizer.py" $DATASET_NAME $TEST $ENSEMBLE_SIZE $PROJ_MODE $LAMBDA $DEVICE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi

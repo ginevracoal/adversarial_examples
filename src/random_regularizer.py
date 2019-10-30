@@ -32,6 +32,10 @@ class RandomRegularizer(sklKerasClassifier):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
+        tf.test.is_built_with_cuda()
+        tf.test.is_gpu_available()
+        # exit()
+
         os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
         self.sess = self._tf_session()
         self.init_seed = init_seed
@@ -49,7 +53,7 @@ class RandomRegularizer(sklKerasClassifier):
         self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
                                                       data_format=self.data_format, dataset_name=dataset_name, test=test)
         self.batch_size, self.epochs = self._set_training_params(test=test).values()
-        print("\nprojection mode =", self.projection_mode, "channel mode =", CHANNEL_MODE,", lambda =", self.lam)
+        print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
@@ -278,7 +282,7 @@ class RandomRegularizer(sklKerasClassifier):
         regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
         return regularization / self.batch_size
 
-    def train(self, x_train, y_train, device):
+    def train(self, x_train, y_train, device="cpu", parallel=False):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
@@ -309,25 +313,14 @@ class RandomRegularizer(sklKerasClassifier):
                 raise AssertionError("Wrong device name.")
 
             with tf.device(device_name):
-                if self.projection_mode == "loss_on_perturbations":
-                    loss = self.loss_wrapper(inputs, outputs)
+                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
+                print("\nn_proj =",self.n_proj)
+                for proj in range(self.n_proj):
+                    print("\nprojection",proj+1,"/",self.n_proj)
+                    loss = self.loss_wrapper(inputs,outputs)
                     self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
                     self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
                                    callbacks=[early_stopping])
-                elif self.projection_mode == "no_projections":
-                    loss = self.loss_wrapper(inputs, outputs)
-                    self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-                    self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
-                                   callbacks=[early_stopping])
-                else:
-                    self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
-                    print("\nn_proj =",self.n_proj)
-                    for proj in range(self.n_proj):
-                        print("\nprojection",proj+1,"/",self.n_proj)
-                        loss = self.loss_wrapper(inputs,outputs)
-                        self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                        self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
-                                       callbacks=[early_stopping])
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         return self
@@ -419,7 +412,7 @@ class RandomRegularizer(sklKerasClassifier):
         return self
 
 
-def main(dataset_name, test, lam, projection_mode, eps, device):
+def main(dataset_name, test, lam, projection_mode, eps, device, parallel):
     """
     :param dataset_name: choose between "mnist" and "cifar"
     :param test: if True only takes the first 100 samples
@@ -436,7 +429,7 @@ def main(dataset_name, test, lam, projection_mode, eps, device):
                                 dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test)
 
     # === train === #
-    randreg.train(x_train, y_train, device)
+    randreg.train(x_train, y_train, device, parallel)
     # randreg.save_classifier()
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     # randreg.load_classifier(relative_path=TRAINED_MODELS)
@@ -457,6 +450,7 @@ if __name__ == "__main__":
         projection_mode = sys.argv[4]
         eps = float(sys.argv[5])
         device = sys.argv[6]
+        parallel = sys.argv[7]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -465,6 +459,8 @@ if __name__ == "__main__":
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         eps = float(input("\nSet a ths for perturbation norm: "))
         device = input("\nChoose a device (cpu/gpu): ")
+        parallel = input("\nDo you want to perform parallel ensemble training? (True/False): ")
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps, device=device)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps, device=device,
+         parallel=parallel)
 

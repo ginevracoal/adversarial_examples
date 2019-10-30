@@ -16,6 +16,7 @@ MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 
+
 class RandomEnsemble(BaselineConvnet):
     """
     Classifies `n_proj` random projections of the training data in a lower dimensional space (whose dimension is
@@ -187,7 +188,7 @@ class RandomEnsemble(BaselineConvnet):
 
     def predict(self, classifiers, data, add_baseline_prob=ADD_BASELINE_PROB, *args, **kwargs):
         """
-        Compute the average prediction over the trained models.
+        Compute the ensemble prediction.
 
         :param classifiers: list of trained classifiers over different projections
         :param data: input data
@@ -266,6 +267,11 @@ class RandomEnsemble(BaselineConvnet):
         return x_adv
 
     def save_classifier(self, classifier, model_name=MODEL_NAME):
+        """
+        Saves all projections classifiers separately.
+        :param classifier: list of projection classifiers
+        :param model_name: name of the model
+        """
         # todo: salvare il modello soltanto nel caso n_proj=15. Per le valutazioni su n_proj inferiori basta il loading corretto.
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
@@ -327,7 +333,7 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     :param eps: max norm of a perturbation
     """
 
-    # === load data === #
+    # === initialize === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
@@ -338,21 +344,20 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     # model.save_classifier(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
-    classifier = model.load_classifier(relative_path=TRAINED_MODELS)
+    # classifier = model.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    model.evaluate(classifier=classifier, x=x_test, y=y_test)
-    exit()
+    # model.evaluate(classifier=classifier, x=x_test, y=y_test)
 
-    x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
-    print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
-    model.evaluate(classifier=classifier, x=x_test_adv, y=y_test)
+    # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
+    # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
+    # model.evaluate(classifier=classifier, x=x_test_adv, y=y_test)
 
     # === generate perturbations === #
     # compute_variances(x_test, y_test)
-    # projections, inverse_projections = model.compute_projections(input_data=x_test)
-    # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
-    #
+    projections, inverse_projections = model.compute_projections(input_data=x_test)
+    perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
+
     # # print(np.mean([compute_angle(x_test[i],augmented_inputs[i]) for i in range(len(x_test))]))
     # # exit()
     # eig_vals, eig_vecs = compute_linear_discriminants(x_test, y_test)
@@ -370,8 +375,8 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
     # baseline.evaluate(baseline_classifier, augmented_inputs, y_test)
 
     # === plot perturbations === #
-    # plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]])
-    # plot_projections(image_data_list=[x_test,perturbations,augmented_inputs])
+    # plot_images(image_data_list=[x_test, projections[0], inverse_projections[0]])
+    plot_images(image_data_list=[x_test,perturbations,augmented_inputs])
 
 if __name__ == "__main__":
     try:
