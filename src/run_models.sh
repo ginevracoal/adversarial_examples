@@ -44,23 +44,23 @@
 #EPS=0.3
 
 # === randreg === #
-#SCRIPT="randreg"
-#DATASET_NAME="cifar"
-#TEST="False"
-#LAMBDA=0.8
-#PROJ_MODE="loss_on_projections"
-#DEVICE="gpu"
-#PARALLEL=True
-
-# === ensemble_regularizer === #
-SCRIPT="ensemble_regularizer"
+SCRIPT="randreg"
 DATASET_NAME="mnist"
 TEST="False"
-ENSEMBLE_SIZE=5
-PROJ_MODE="loss_on_projections"
 LAMBDA=0.5
-DEVICE="gpu"
-PARALLEL=True
+PROJ_MODE="loss_on_projections"
+EPS=0.3
+DEVICE="cpu"
+SEED=0
+
+# === ensemble_regularizer === #
+#SCRIPT="ensemble_regularizer"
+#DATASET_NAME="mnist"
+#TEST="False"
+#ENSEMBLE_SIZE=5
+#PROJ_MODE="loss_on_projections"
+#LAMBDA=0.5
+#DEVICE="cpu"
 
 ##############
 # run script #
@@ -102,7 +102,7 @@ elif [ $SCRIPT = "parallel_randens" ]; then
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
   grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
-  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE >> $OUT
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $EPS $DEVICE $SEED >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "ensemble_regularizer" ]; then
   python3 "ensemble_regularizer.py" $DATASET_NAME $TEST $ENSEMBLE_SIZE $PROJ_MODE $LAMBDA $DEVICE >> $OUT

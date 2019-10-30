@@ -2,6 +2,8 @@
 
 from random_regularizer import *
 from tensorflow.python.client import device_lib
+# import multiprocessing
+# from joblib import Parallel, delayed
 
 
 class EnsembleRegularizer(RandomRegularizer):
@@ -9,15 +11,14 @@ class EnsembleRegularizer(RandomRegularizer):
     Performs an ensemble classification using different random_regularizer models.
     """
 
-    def __init__(self, ensemble_size, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test):
-        # print(device_lib.list_local_devices())
-        # exit()
+    def __init__(self, ensemble_size, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test,
+                 init_seed=1):
         self.ensemble_size = ensemble_size
         self.ensemble_classifiers = None
         super(EnsembleRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, lam,
-                                                  projection_mode, test)
+                                                  projection_mode, test, init_seed)
 
-    def train(self, x_train, y_train, device):
+    def train(self, x_train, y_train, device="cpu"):
         """
         Trains different random_regularizer models over random projections of the training data.
         :param x_train: training data
@@ -26,14 +27,26 @@ class EnsembleRegularizer(RandomRegularizer):
         :return: list of `ensemble_size` trained models
         """
 
-        classifiers = []
         start_time = time.time()
+
+        # if parallel:
+        #     num_cores = multiprocessing.cpu_count()
+        #     parallel_train = lambda model: model.train(x_train, y_train, device)
+        #     models = []
+        #     for i in range(self.ensemble_size):
+        #         randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
+        #                                     data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
+        #                                     projection_mode=self.projection_mode, test=self.test, init_seed=i)
+        #         models.append(randreg)
+        #     classifiers = Parallel(n_jobs=num_cores)(delayed(parallel_train)(m) for m in models)
+        classifiers = []
         for i in range(self.ensemble_size):
             randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
                                         projection_mode=self.projection_mode, test=self.test, init_seed=i)
             classifiers.append(randreg.train(x_train, y_train, device))
             del randreg
+
         print("\nTraining time for Ensemble Regularizer with ensemble_size = ", str(self.ensemble_size),
               " : --- %s seconds ---" % (time.time() - start_time))
 
@@ -97,10 +110,10 @@ def main(dataset_name, test, ensemble_size, projection_mode, lam, device):
                                 projection_mode=projection_mode, data_format=data_format, dataset_name=dataset_name,
                                 lam=lam, test=test)
     # === train === #
-    model.train(x_train, y_train, device)
+    # model.train(x_train, y_train, device)
     # model.save_classifier()
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    # model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)

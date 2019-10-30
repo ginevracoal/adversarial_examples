@@ -28,7 +28,7 @@ CHANNEL_MODE = "channels"  # "channels, grayscale"
 # todo: I want this class to extend AdversarialClassifier
 class RandomRegularizer(sklKerasClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, init_seed=1):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, init_seed=0):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -53,7 +53,8 @@ class RandomRegularizer(sklKerasClassifier):
         self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
                                                       data_format=self.data_format, dataset_name=dataset_name, test=test)
         self.batch_size, self.epochs = self._set_training_params(test=test).values()
-        print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam)
+        print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
+              ", init_seed = ", self.init_seed)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
         self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
@@ -86,7 +87,7 @@ class RandomRegularizer(sklKerasClassifier):
     def _get_proj_params(self):
         random.seed(self.init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
-        seed = random.randint(1, 100) #random.sample(range(1, 100), n_proj) # list of seeds
+        seed = random.randint(1, 100)  # random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
 
     def _get_logits(self, inputs):
@@ -282,7 +283,7 @@ class RandomRegularizer(sklKerasClassifier):
         regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
         return regularization / self.batch_size
 
-    def train(self, x_train, y_train, device="cpu", parallel=False):
+    def train(self, x_train, y_train, device="cpu"):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
@@ -300,7 +301,7 @@ class RandomRegularizer(sklKerasClassifier):
             y_train_sample = y_train_batches[batch][idxs]
             inputs = tf.convert_to_tensor(x_train_sample)
             outputs = tf.convert_to_tensor(y_train_sample)
-            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+            early_stopping = keras.callbacks.EarlyStopping(monitor='acc', verbose=1)
 
             mini_batch = 20
 
@@ -412,7 +413,7 @@ class RandomRegularizer(sklKerasClassifier):
         return self
 
 
-def main(dataset_name, test, lam, projection_mode, eps, device, parallel):
+def main(dataset_name, test, lam, projection_mode, eps, device, seed):
     """
     :param dataset_name: choose between "mnist" and "cifar"
     :param test: if True only takes the first 100 samples
@@ -420,23 +421,25 @@ def main(dataset_name, test, lam, projection_mode, eps, device, parallel):
     :param projection_mode: method for computing projections on RGB images
     :param eps: upper ths for adversaries distance
     :param device: code execution device (cpu/gpu)
+    :param seed: random seed for the projections
     """
 
     # === initialize === #
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                                dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test)
+                                dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test,
+                                init_seed=seed)
 
     # === train === #
-    randreg.train(x_train, y_train, device, parallel)
-    # randreg.save_classifier()
+    randreg.train(x_train, y_train, device)
+    randreg.save_classifier()
+    exit()
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     # randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
-    exit()
     for method in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
         randreg.evaluate(x_test_adv, y_test)
@@ -450,7 +453,7 @@ if __name__ == "__main__":
         projection_mode = sys.argv[4]
         eps = float(sys.argv[5])
         device = sys.argv[6]
-        parallel = sys.argv[7]
+        seed = int(sys.argv[7])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -459,8 +462,8 @@ if __name__ == "__main__":
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         eps = float(input("\nSet a ths for perturbation norm: "))
         device = input("\nChoose a device (cpu/gpu): ")
-        parallel = input("\nDo you want to perform parallel ensemble training? (True/False): ")
+        seed = input("\nSet a random seed (int>=0).")
 
     main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps, device=device,
-         parallel=parallel)
+         seed=seed)
 
