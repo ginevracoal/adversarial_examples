@@ -4,11 +4,12 @@ from keras.models import load_model
 from art.classifiers import KerasClassifier
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, CarliniL2Method,\
-    ProjectedGradientDescent, NewtonFool, CarliniLInfMethod, BoundaryAttack, SpatialTransformation, ZooAttack
+    ProjectedGradientDescent, NewtonFool, CarliniLInfMethod#, BoundaryAttack, SpatialTransformation, ZooAttack
 from sklearn.metrics import classification_report
 from utils import *
 import time
 from art.utils import to_categorical
+import tensorflow as tf
 
 ############
 # defaults #
@@ -22,7 +23,9 @@ MAX = 255
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini"
 
-BASECLASS = "art" # "skl" # todo: implement skl version
+BASECLASS = "skl" # skl, art
+# todo: implement skl version and then remove the art one
+DEVICE = "cpu"
 
 
 class AdversarialClassifier(object):
@@ -58,9 +61,9 @@ class AdversarialClassifier(object):
         defines the layers structure for the classifier
         :return: model
         """
-        raise NotImplementedError
+        return None #raise NotImplementedError
 
-    def train(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train):
         """
         Trains the model using art.KerasClassifier wrapper, which then allows to easily train adversaries
         using the same package.
@@ -70,7 +73,7 @@ class AdversarialClassifier(object):
         :param epochs:
         :return: trained classifier
         """
-        print("\nTraining infos:\nbatch_size = ", batch_size, "\nepochs =", epochs,
+        print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs =", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         if BASECLASS == "art":
@@ -78,16 +81,26 @@ class AdversarialClassifier(object):
             self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
                    metrics=['accuracy'])
             start_time = time.time()
-            classifier.fit(x_train, y_train, batch_size=batch_size, nb_epochs=epochs)
+            classifier.fit(x_train, y_train, batch_size=self.batch_size, nb_epochs=self.epochs)
 
         elif BASECLASS == "skl":
 
-            mini_batch = 20
-            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-                               metrics=['accuracy'])
-            start_time = time.time()
-            classifier = self.model.fit(x_train, y_train, epochs=epochs, batch_size=mini_batch, callbacks=[early_stopping])
+            if DEVICE == "gpu":
+                device_name = "/gpu:0"
+                # device_name = "/job:localhost/replica:0/task:0/device:XLA_GPU:0')"
+            elif DEVICE == "cpu":
+                device_name = "/cpu:0"
+            else:
+                raise AssertionError("Wrong device name.")
+
+            with tf.device(device_name):
+                mini_batch = 20
+                early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+                self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                                   metrics=['accuracy'])
+                start_time = time.time()
+                classifier = self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch,
+                                            callbacks=[early_stopping])
 
         else:
             raise AssertionError("\nChoose a baseclass: 'art','skl'.")
@@ -109,8 +122,11 @@ class AdversarialClassifier(object):
 
         :param classifier: trained classifier
         :param x: input data
+        :param y: input labels
+        :param test: perform a test on 100 elems
         :param method: art.attack method
-        :param adversaries_path: path of saved pickle data
+        :param dataset_name: dataset name
+        :param eps: upper ths for adversarial perturbations norm
         :return: adversarially perturbed data
         """
 
@@ -134,17 +150,17 @@ class AdversarialClassifier(object):
         elif method == 'newtonfool':
             attacker = NewtonFool(classifier)
             x_adv = attacker.generate(x=x)
-        elif method == 'boundary':
-            attacker = BoundaryAttack(classifier, targeted=True, max_iter=500, delta=0.05, epsilon=0.5)
-            y=np.random.permutation(y)
-            x_adv = attacker.generate(x=x, y=y)
-        elif method == 'spatial':
-            attacker = SpatialTransformation(classifier, max_translation=3.0,num_translations=5, max_rotation=8.0,
-                                             num_rotations=3)
-            x_adv = attacker.generate(x=x, y=y)
-        elif method == 'zoo':
-            attacker = ZooAttack(classifier)
-            x_adv = attacker.generate(x=x, y=y)
+        # elif method == 'boundary':
+        #     attacker = BoundaryAttack(classifier, targeted=True, max_iter=500, delta=0.05, epsilon=0.5)
+        #     y=np.random.permutation(y)
+        #     x_adv = attacker.generate(x=x, y=y)
+        # elif method == 'spatial':
+        #     attacker = SpatialTransformation(classifier, max_translation=3.0,num_translations=5, max_rotation=8.0,
+        #                                      num_rotations=3)
+        #     x_adv = attacker.generate(x=x, y=y)
+        # elif method == 'zoo':
+        #     attacker = ZooAttack(classifier)
+        #     x_adv = attacker.generate(x=x, y=y)
 
         print("Distance from perturbations: ", compute_distances(x, x_adv, ord=self._get_norm(method)))
         if test:
@@ -205,8 +221,14 @@ class AdversarialClassifier(object):
         :param classifier: trained classifier
         :param model_name: name of the model
         """
+        os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
+
         if self.trained:
-            classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+            if BASECLASS == "art":
+                classifier.save(filename=model_name+".h5", path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+            elif BASECLASS == "skl":
+                classifier.model.save_weights(RESULTS + time.strftime('%Y-%m-%d') + "/" + model_name)
+            raise AssertionError("\nChoose a baseclass: 'art','skl'.")
 
     def load_classifier(self, path):
         """
@@ -216,13 +238,19 @@ class AdversarialClassifier(object):
         """
         print("\nLoading model:", str(path))
         # load a trained model
-        trained_model = load_model(path)
-        classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
+        if BASECLASS == "art":
+            trained_model = load_model(path)
+            classifier = KerasClassifier((MIN, MAX), trained_model, use_logits=False)
+        elif BASECLASS == "skl":
+            classifier = self.model.load_weights(path)
+        else:
+            raise AssertionError("\nChoose a baseclass: 'art','skl'.")
         return classifier
 
-    def adversarial_train(self, classifier, dataset_name, x_train, y_train, method, eps, batch_size, epochs, test=False):
+    def adversarial_train(self, classifier, dataset_name, x_train, y_train, method, eps=0.5, test=False):
         """
-        Performs adversarial training on the given classifier using an attack method.
+        Performs adversarial training on the given classifier using an attack method. By default adversaries are
+        generated at training time and epsilon is set to 0.5
         :param classifier: trained classifier
         :param method: attack method
         :return: robust classifier
@@ -239,7 +267,7 @@ class AdversarialClassifier(object):
         y_train_ext = np.append(y_train, y_train, axis=0)
 
         # Retrain the CNN on the extended dataset
-        robust_classifier = self.train(x_train_ext, y_train_ext, batch_size=batch_size, epochs=epochs)
+        robust_classifier = self.train(x_train_ext, y_train_ext)
         print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
 
         return robust_classifier

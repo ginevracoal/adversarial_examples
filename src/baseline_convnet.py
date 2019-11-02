@@ -26,7 +26,14 @@ class BaselineConvnet(AdversarialClassifier):
         """
         self.test = test
         self.dataset_name = dataset_name
+        # self.sess = self._set_session()
         super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
+
+    # def _set_session(self):
+    #     K.clear_session()
+    #     sess = tf.Session(graph=tf.Graph())
+    #     sess.run(tf.global_variables_initializer())
+    #     return sess
 
     def _set_model(self):
 
@@ -191,14 +198,14 @@ def main(dataset_name, test, attack, eps):
     #
     # x_test_adv = model.generate_adversaries(classifier=classifier, x=x_test, y=y_test, test=test, method=attack,
     #                                         dataset_name=dataset_name, eps=eps)
-    # plot_projections([x_test,x_test_adv])
+    # plot_images([x_test,x_test_adv])
 
     # model.save_adversaries(data=x_test_adv, dataset_name=dataset_name, attack=attack)
     # model.evaluate(classifier=classifier, x=x_test_adv, y=y_test)
 
     x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack,eps=eps,test=test)
     print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
-    # plot_projections([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
+    # plot_images([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
     for method in ['fgsm', 'pgd', 'deepfool','carlini']:
         x_test_adv = model.load_adversaries(attack=method, dataset_name=dataset_name, eps=0.5, test=test)

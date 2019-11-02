@@ -9,6 +9,7 @@ from adversarial_classifier import *
 from baseline_convnet import BaselineConvnet
 import sys
 from projection_functions import *
+import random
 
 REPORT_PROJECTIONS = False
 ADD_BASELINE_PROB = False
@@ -45,8 +46,9 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
-        self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
-                                      54, 42, 150, 184, 52, 17, 127, 13])
+        self.random_seeds = list(range(n_proj))  # random.sample(list(range(1, 1000)), n_proj)
+        # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
+        #                               54, 42, 150, 184, 52, 17, 127, 13])
         self.trained = False
         self.training_time = 0
         self.ensemble_method = "sum"  # supported methods: mode, sum
@@ -72,7 +74,7 @@ class RandomEnsemble(BaselineConvnet):
         # inverse_projections = inverse_projections.eval(session=sess)
         return projections, inverse_projections
 
-    def train(self, x_train, y_train, batch_size, epochs):
+    def train(self, x_train, y_train):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
         `(size_proj, size_proj, 1)`.
@@ -98,7 +100,7 @@ class RandomEnsemble(BaselineConvnet):
             baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             # train n_proj classifiers on different training data
-            classifiers.append(baseline.train(x_train_projected[i], y_train, batch_size=batch_size, epochs=epochs))
+            classifiers.append(baseline.train(x_train_projected[i], y_train))
             del baseline
 
         print("\nTraining time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
@@ -236,24 +238,6 @@ class RandomEnsemble(BaselineConvnet):
 
         return y_pred
 
-    # def evaluate_test(self, classifier, x_test, y_test, report_projections=REPORT_PROJECTIONS):
-    #     """ Extends evaluate_test() with projections reports"""
-    #     y_test_pred = super(RandomEnsemble, self).evaluate(classifier, x_test, y_test)
-    #     if report_projections:
-    #
-    #         self.x_test_proj, _ = self.compute_projections(x_test)
-    #         self.report_projections(classifier=classifier, x_test_proj=self.x_test_proj, y_test=y_test)
-    #
-    #     return y_test_pred
-    #
-    # def evaluate_adversaries(self, classifier, x_test, y_test, method, dataset_name, adversaries_path=None, test=False,
-    #                          report_projections=REPORT_PROJECTIONS):
-    #     """ Extends evaluate_adversaries() with projections reports"""
-    #     x_test_adv, y_test_adv = super(RandomEnsemble, self).evaluate(classifier=classifier, x=x_test, y=y_test)
-    #     if report_projections:
-    #         x_test_adv_proj, _ = self.compute_projections(x_test_adv)
-    #         self.report_projections(classifier=classifier, x_test_proj=x_test_adv_proj, y_test=y_test)
-
     def generate_adversaries(self, classifier, x, y, method, dataset_name, adversaries_path=None, test=False, *args, **kwargs):
         # todo: refactor
         """ Adversaries are generated on the baseline classifier """
@@ -272,7 +256,8 @@ class RandomEnsemble(BaselineConvnet):
         :param classifier: list of projection classifiers
         :param model_name: name of the model
         """
-        # todo: salvare il modello soltanto nel caso n_proj=15. Per le valutazioni su n_proj inferiori basta il loading corretto.
+        os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
+
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 filename = model_name + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[i])+".h5"
@@ -290,22 +275,10 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of trained classifiers
         """
         start_time = time.time()
-        # _, epochs = self._set_training_params(dataset_name=self.dataset_name,test=False).values() # load full epochs model
 
-        # old
-        # folder = relative_path + str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + \
-        #          "_epochs=" + str(self.epochs) + "_" + str(self.projection_mode)+ "/"
-        # trained_models = [load_model(folder +
-        #                              MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(seed) + ".h5")
-        #                   for seed in self.random_seeds[:self.n_proj]]
-        # print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
-        #
-        #
-        # classifiers = [KerasClassifier((MIN, MAX), model, use_logits=False) for model in trained_models]
-
-        # new
         paths = [relative_path + str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + \
-                 "_epochs=" + str(self.epochs) + "_" + str(self.projection_mode)+ "/" + MODEL_NAME + "_size=" +
+                 # "_epochs=" + str(self.epochs) +
+                 "_" + str(self.projection_mode)+ "/" + MODEL_NAME + "_size=" +
                  str(self.size_proj) + "_" + str(seed) + ".h5" for seed in self.random_seeds[:self.n_proj]]
 
         classifiers = [super(BaselineConvnet, self).load_classifier(path) for path in paths]
@@ -340,14 +313,15 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    classifier = model.train(x_train, y_train)
     # model.save_classifier(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
     # classifier = model.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
-    # model.evaluate(classifier=classifier, x=x_test, y=y_test)
+    model.evaluate(classifier=classifier, x=x_test, y=y_test)
+    exit()
 
     # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
     # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
@@ -355,8 +329,8 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
 
     # === generate perturbations === #
     # compute_variances(x_test, y_test)
-    projections, inverse_projections = model.compute_projections(input_data=x_test)
-    perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
+    # projections, inverse_projections = model.compute_projections(input_data=x_test)
+    # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
 
     # # print(np.mean([compute_angle(x_test[i],augmented_inputs[i]) for i in range(len(x_test))]))
     # # exit()
@@ -376,7 +350,7 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
 
     # === plot perturbations === #
     # plot_images(image_data_list=[x_test, projections[0], inverse_projections[0]])
-    plot_images(image_data_list=[x_test,perturbations,augmented_inputs])
+    # plot_images(image_data_list=[x_test,perturbations,augmented_inputs])
 
 if __name__ == "__main__":
     try:
