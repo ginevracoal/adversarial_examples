@@ -16,6 +16,7 @@ SIZE_PROJECTION = 6
 EPS = 0.3
 TRAINED_MODELS = "../trained_models/"
 DEVICE = "cpu"
+RESULTS = "../results/"+time.strftime('%Y-%m-%d')+"/"
 
 
 class Test(unittest.TestCase):
@@ -35,50 +36,42 @@ class Test(unittest.TestCase):
                                 data_format=self.data_format, dataset_name=self.dataset, test=True)
 
         # model training
-        classifier = model.train(self.x_train, self.y_train, batch_size=model.batch_size, epochs=model.epochs)
-        model.evaluate(classifier, self.x_test, self.y_test)
-        x_test_adv = model.generate_adversaries(classifier, self.x_test, self.y_test, dataset_name=self.dataset,
-                                                method="fgsm", eps=EPS, test=True)
-        save_to_pickle(data=x_test_adv, filename=self.dataset+"_x_test_fgsm.pkl")
-        model.evaluate(classifier, x_test_adv, self.y_test)
+        model.train(self.x_train, self.y_train, device=DEVICE)
+        model.evaluate(self.x_test, self.y_test)
+        x_test_adv = model.generate_adversaries(self.x_test, self.y_test, attack="fgsm", eps=EPS)
+        model.save_adversaries(data=x_test_adv,attack="fgsm",eps=EPS)
+        model.evaluate(x_test_adv, self.y_test)
 
         # save and load classifier
-        model.save_classifier(classifier=classifier)
-        loaded_classifier = model.load_classifier(relative_path=RESULTS+time.strftime('%Y-%m-%d')+"/")
-        # loaded_classifier = super(BaselineConvnet, model).load_classifier(
-        #     path=RESULTS+time.strftime('%Y-%m-%d') + "/baseline_convnet.h5")
-
-        model.evaluate(loaded_classifier, self.x_test, self.y_test)
-        x_test_adv = model.load_adversaries(dataset_name=self.dataset,attack="fgsm",eps=EPS,test=True)
-        model.evaluate(loaded_classifier, x_test_adv, self.y_test)
+        model.save_classifier(relative_path=RESULTS)
+        model.load_classifier(relative_path=RESULTS)
+        model.evaluate(self.x_test, self.y_test)
+        x_test_adv = model.load_adversaries(attack="fgsm",eps=EPS)
+        model.evaluate(x_test_adv, self.y_test)
 
         # complete model loading
-        # classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/mnist_baseline.h5")
-        classifier = model.load_classifier(relative_path=TRAINED_MODELS+"baseline/")
+        model.load_classifier(relative_path=TRAINED_MODELS+"baseline/")
 
         # adversarial training
-        model.adversarial_train(classifier, dataset_name=model.dataset_name, x_train=self.x_train, y_train=self.y_train,
-                                batch_size=BATCH_SIZE, epochs=EPOCHS, method='fgsm', eps=EPS, test=True)
+        model.adversarial_train(x_train=self.x_train, y_train=self.y_train, device="cpu", attack='fgsm', eps=EPS)
 
     def test_random_ensemble(self):
         for projection_mode in ["flat","channels","grayscale"]:
             model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
                                    n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
                                    projection_mode=projection_mode, test=True)
-
             # train
-            classifiers = model.train(self.x_train, self.y_train, batch_size=model.batch_size, epochs=model.epochs)
+            model.train(self.x_train, self.y_train, device="cpu")
 
         # evaluate
-        x_test_pred = model.evaluate(classifiers, self.x_test, self.y_test)
-        x_test_adv = self.baseline.load_adversaries(dataset_name=self.dataset,attack="fgsm",eps=EPS,test=True)
-        model.evaluate(classifiers, x_test_adv, self.y_test)
+        x_test_pred = model.evaluate(self.x_test, self.y_test)
+        x_test_adv = self.baseline.load_adversaries(attack="fgsm",eps=EPS)
+        model.evaluate(x_test_adv, self.y_test)
 
         # save and load
-        model.save_classifier(classifier=classifiers, model_name="random_ensemble")
-        relpath = RESULTS+time.strftime('%Y-%m-%d')+"/"
-        loaded_classifiers = model.load_classifier(relative_path=relpath)
-        x_test_pred_loaded = model.evaluate(loaded_classifiers, self.x_test, self.y_test)
+        model.save_classifier(relative_path=RESULTS)
+        model.load_classifier(relative_path=RESULTS)
+        x_test_pred_loaded = model.evaluate(self.x_test, self.y_test)
 
         # check equal test predictions
         np.array_equal(x_test_pred, x_test_pred_loaded)
@@ -87,19 +80,18 @@ class Test(unittest.TestCase):
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True)
         model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                 dataset_name="cifar", test=True)
-        model.train(x_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS)
+        model.train(x_train, y_train, device="cpu")
 
     def test_compute_plot_projections(self):
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="cifar",
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name="mnist",
                                                                                                test=True)
         for projection_mode in ["flat","channels","grayscale"]:
-            random_seeds = random.sample(range(1, 100), N_PROJECTIONS)
+            random_seeds = range(N_PROJECTIONS)  # random.sample(range(1, 100), N_PROJECTIONS)
             projections, inverse_projections = compute_projections(input_data=x_test, n_proj=N_PROJECTIONS,
                                                                    size_proj=SIZE_PROJECTION,
                                                                    random_seeds=random_seeds,
                                                                    projection_mode=projection_mode)
-
-        plot_projections(image_data_list=[x_test, projections[0], inverse_projections[0]], cmap="gray", test=True)
+        plot_images(image_data_list=[x_test, projections[0], inverse_projections[0]], cmap="gray", test=True)
 
     def test_parallel_randens(self):
         dataset_name=self.dataset
@@ -109,7 +101,6 @@ class Test(unittest.TestCase):
                                        data_format=data_format, dataset_name=dataset_name, projection_mode="flat")
         model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
                                       epochs=model.epochs, idx=1, save=False)
-
 
     def test_cifar_randreg(self):
         dataset_name = "cifar"
@@ -135,7 +126,7 @@ class Test(unittest.TestCase):
                                      data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                      projection_mode="loss_on_projections", test=True)
         model.train(self.x_train, self.y_train, DEVICE)
-        model.save_classifier()
+        model.save_classifier(relative_path=RESULTS)
         del model
         model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
                                     data_format=self.data_format, dataset_name="mnist", lam=0.3,

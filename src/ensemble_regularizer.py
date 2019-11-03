@@ -71,14 +71,14 @@ class EnsembleRegularizer(RandomRegularizer):
         ensemble_predictions = np.sum(predictions_list, axis=0)
         return ensemble_predictions
 
-    def save_classifier(self, relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/"):
+    def save_classifier(self, relative_path):
         """
         Saves all the ensemble classifiers separately using their index in filenames.
         :relative_path: path of folder containing the trained model
         """
         if self.ensemble_classifiers:
             for classifier in self.ensemble_classifiers:
-                classifier.save_classifier()
+                classifier.save_classifier(relative_path=relative_path)
         else:
             raise AttributeError("\nModel has not been trained yet.")
 

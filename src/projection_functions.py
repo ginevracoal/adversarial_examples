@@ -3,11 +3,6 @@ import tensorflow as tf
 from sklearn.random_projection import GaussianRandomProjection
 from utils import rgb2gray
 
-MIN = 0
-MAX = 255
-TEST_SIZE = 100
-RESULTS = "../results/"
-
 
 def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_mode):
     """
@@ -22,7 +17,7 @@ def compute_projections(input_data, random_seeds, n_proj, size_proj, projection_
     """
 
     print("Input shape: ", input_data.shape)
-    print("\nComputing ",n_proj,"random projections in ",projection_mode,"mode: ")
+    print("\nComputing ",n_proj,"random projections in ",projection_mode,"mode.")
 
     projections = []
     inverse_projections = []
@@ -85,8 +80,6 @@ def tf_flat_projection(input_data, random_seed, size_proj):
                        matrix, type=tf.tensor, shape=(batch_size, size, size, channels)
 
     """
-    # centroid vector for affine subspace translation
-    translation = tf.math.reduce_mean(tf.math.reduce_mean(input_tensor=input_data, axis=0),axis=2)
 
     input_data = tf.cast(input_data, tf.float32)
     batch_size, rows, cols, channels = input_data.get_shape().as_list()
@@ -98,9 +91,14 @@ def tf_flat_projection(input_data, random_seed, size_proj):
     proj_matrix = np.float32(projector._make_random_matrix(n_components, n_features))
     pinv = np.linalg.pinv(proj_matrix)
 
+    # centroid vector for affine subspace translation
+    translation = tf.math.reduce_mean(input_tensor=input_data, axis=0)
+    # translation = tf.math.reduce_mean(tf.math.reduce_mean(input_tensor=input_data, axis=0), axis=2)
+    # todo: check that this makes sense
+
     # set Null translation vector
-    if translation is None:
-        translation = np.zeros(shape=[1,rows,cols,channels],dtype=np.float32)
+    # if translation is None:
+    #     translation = np.zeros(shape=[1,rows,cols,channels],dtype=np.float32)
 
     # compute projections
     flat_images = tf.reshape(input_data, shape=[batch_size, n_features])

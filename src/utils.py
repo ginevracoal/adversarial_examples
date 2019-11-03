@@ -8,12 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-from sklearn.preprocessing import StandardScaler
-
-MIN = 0
-MAX = 255
 TEST_SIZE = 100
-RESULTS = "../results/"
 
 ######################
 # data preprocessing #
@@ -140,10 +135,10 @@ def load_dataset(dataset_name, test):
 ################
 
 
-def save_to_pickle(data, filename):
+def save_to_pickle(data, relative_path, filename):
     """ saves data to pickle """
-    os.makedirs(os.path.dirname(RESULTS+time.strftime('%Y-%m-%d')+"/"+filename), exist_ok=True)
-    with open(RESULTS+time.strftime('%Y-%m-%d')+"/"+filename, 'wb') as f:
+    os.makedirs(os.path.dirname(relative_path+time.strftime('%Y-%m-%d')+"/"+filename), exist_ok=True)
+    with open(relative_path+time.strftime('%Y-%m-%d')+"/"+filename, 'wb') as f:
         pkl.dump(data, f)
 
 
@@ -200,6 +195,7 @@ def plot_images(image_data_list, cmap=None, test=False):
         input("Press ENTER to exit")
         exit()
 
+
 def rgb2gray(rgb):
     """ convert rgb image to greyscale image """
     if rgb.shape[2] == 1:
@@ -210,12 +206,14 @@ def rgb2gray(rgb):
 
 ############
 
+
 def compute_angle(v1, v2):
     """ Compute the angle between two numpy arrays, eventually flattening them if multidimensional. """
     if len(v1) != len(v2): raise ValueError("\nYou cannot compute the angle between vectors with different dimensions.")
     v1 = v1.flatten()
     v2 = v2.flatten()
     return math.acos(np.dot(v1, v2) / (np.linalg.norm(v1)*np.linalg.norm(v2)) )
+
 
 def compute_covariance_matrices(x,y):
     """

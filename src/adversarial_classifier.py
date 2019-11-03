@@ -18,7 +18,7 @@ from tensorflow.python.client import device_lib
 
 TRAINED_MODELS = "../trained_models/"
 DATA_PATH = "../data/"
-RESULTS = "../results/"
+RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini"
 MINIBATCH = 20
@@ -41,7 +41,6 @@ class AdversarialClassifier(sklKerasClassifier):
         self.classes_ = self._set_classes()
         self.model_name = None
         self.trained = False
-        os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
 
     # todo: docstrings
     @staticmethod
@@ -106,6 +105,9 @@ class AdversarialClassifier(sklKerasClassifier):
             self.trained = True
             return self
 
+    def predict(self, x, **kwargs):
+        return np.argmax(self.model.predict(x), axis=1)
+
     def evaluate(self, x, y):
         """
         Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
@@ -115,7 +117,7 @@ class AdversarialClassifier(sklKerasClassifier):
         """
         if self.trained:
             y_true = np.argmax(y, axis=1)
-            y_pred = self.predict(x)  # or np.argmax(self.model.predict(x), axis=1)
+            y_pred = self.predict(x)
             nb_correct_adv_pred = np.sum(y_pred == y_true)
 
             print("\nTest data.")
@@ -191,8 +193,7 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             return x_adv
 
-    @staticmethod
-    def save_adversaries(data, dataset_name, attack, eps):
+    def save_adversaries(self, data, attack, eps):
         """
         #todo docstring
         Save adversarially augmented test set.
@@ -203,27 +204,28 @@ class AdversarialClassifier(sklKerasClassifier):
         :return:
         """
         if attack == "deepfool":
-            save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + ".pkl")
+            save_to_pickle(data=data, relative_path=RESULTS, filename=self.dataset_name + "_x_test_" + attack + ".pkl")
         else:
-            save_to_pickle(data=data, filename=dataset_name + "_x_test_" + attack + "_" + str(eps) + ".pkl")
+            save_to_pickle(data=data, relative_path=RESULTS,
+                           filename=self.dataset_name + "_x_test_" + attack + "_" + str(eps) + ".pkl")
 
-    @staticmethod
-    def load_adversaries(dataset_name, attack, eps, test):
-        print("\nLoading adversaries generated with", attack, "method on", dataset_name)
+    def load_adversaries(self, attack, eps):
+        print("\nLoading adversaries generated with", attack, "method on", self.dataset_name)
         if attack == "deepfool":
-            x_test_adv = load_from_pickle(path=DATA_PATH + dataset_name + "_x_test_" + attack + ".pkl", test=test)
+            x_test_adv = load_from_pickle(path=DATA_PATH + self.dataset_name + "_x_test_" + attack + ".pkl",
+                                          test=self.test)
         else:
-            x_test_adv = load_from_pickle(path=DATA_PATH + dataset_name + "_x_test_" + attack + "_" +
-                                               str(eps) + ".pkl", test=test)
-
+            x_test_adv = load_from_pickle(path=DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" +
+                                          str(eps) + ".pkl", test=self.test)
         return x_test_adv
 
-    def save_classifier(self, relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/"):
+    def save_classifier(self, relative_path):
         """
         Saves the trained model and adds the current datetime to the filepath.
         :relative_path: path of folder containing the trained model
         """
-        self.model.save_weights(relative_path+self.model_name)
+        os.makedirs(os.path.dirname(relative_path), exist_ok=True)
+        self.model.save_weights(relative_path + self.model_name + ".h5")
 
     def load_classifier(self, relative_path):
         """
@@ -231,6 +233,7 @@ class AdversarialClassifier(sklKerasClassifier):
         :relative_path: path of folder containing the trained model
         returns: trained classifier
         """
+        print("loading model: ", relative_path + self.model_name + ".h5")
         self.model.load_weights(relative_path + self.model_name + ".h5")
         self.trained = True
         return self

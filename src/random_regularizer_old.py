@@ -1,57 +1,152 @@
 # -*- coding: utf-8 -*-
 
+import random
 from tensorflow import keras
+from keras.models import Model
+from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D, BatchNormalization
+from art.classifiers import KerasClassifier as artKerasClassifier
 import keras.losses
+from random import seed
 from random_ensemble import *
 from projection_functions import *
+from adversarial_classifier import AdversarialClassifier as myAdvClassifier
+from tensorflow.python.client import device_lib
+
 import tensorflow as tf
-import random
 # import tensorflow.compat.v1 as tf
 # tf.disable_v2_behavior()
 
-############
-# defaults #
-############
+DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
+TRAINED_MODELS = "../trained_models/random_regularizer/"  # RESULTS + time.strftime('%Y-%m-%d') + "/"
+DEVICE = "gpu"  # cpu, gpu
 
+L_RATE = 5
 MIN_SIZE = 10
 MAX_SIZE = 20
 MIN_PROJ = 2
 MAX_PROJ = 4
-
-L_RATE = 5
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "channels"  # "channels, grayscale"
-DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/"  # RESULTS + time.strftime('%Y-%m-%d') + "/"
 
 
-class RandomRegularizer(BaselineConvnet):
+# todo: I want this class to extend AdversarialClassifier
+class RandomRegularizer(sklKerasClassifier):
 
     def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, init_seed=0):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
-        super(RandomRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.init_seed = init_seed
-        self.lam = lam
-        self.n_proj = None
-        self.projection_mode = projection_mode
-        self.inputs = Input(shape=self.input_shape)
-        self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
-                          "_" + str(self.projection_mode) + "_" + str(self.init_seed) + ".h5"
 
+        os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
+        self.sess = self._tf_session()
+        self.init_seed = init_seed
+        self.input_shape = input_shape
+        self.num_classes = num_classes
+        self.dataset_name = dataset_name
+        self.data_format = data_format
+        self.lam = lam
+        self.projection_mode = projection_mode
+        self.test = test
+        self._set_model()
+        self.classes_ = self._set_classes()
+        self.n_proj = None
+        self.inputs = Input(shape=self.input_shape)
+        self.adversarial_classifier = myAdvClassifier(input_shape=self.input_shape, num_classes=self.num_classes,
+                                                      data_format=self.data_format, dataset_name=dataset_name, test=test)
+        self.batch_size, self.epochs = self._set_training_params(test=test).values()
         print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
               ", init_seed = ", self.init_seed)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
         print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
+        self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + "_epochs=" + str(self.epochs) + \
+                          "_" + str(self.projection_mode) + "_" + str(self.init_seed) + ".h5"
+        super(RandomRegularizer, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
+
+    def _tf_session(self):
+        """ Initialize tf session """
+        print("check cuda: ", tf.test.is_built_with_cuda())
+        print("check gpu: ", tf.test.is_gpu_available())
+        print(device_lib.list_local_devices())
+        # config = tf.ConfigProto()
+        # config.gpu_options.allow_growth = True
+        # sess = tf.Session(config=config)
+
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
+        # sess.run(tf.global_variables_initializer())
+        return sess
+
+    def _set_training_params(self, test):
+        """
+        Defines training parameters
+        :param test: if True only takes the first 100 samples
+        :return: batch_size, epochs
+        """
+        if test:
+            return {'batch_size':100,'epochs':1}
+        else:
+            return {'batch_size':500,'epochs':100}
 
     def _get_proj_params(self):
         random.seed(self.init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)  # random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
+
+    def _get_logits(self, inputs):
+        inputs = tf.cast(inputs, tf.float32)
+        if self.dataset_name == "mnist":
+            x = Conv2D(32, kernel_size=(3, 3), activation='relu', data_format=self.data_format)(inputs)
+            x = Conv2D(64, (3, 3), activation='relu')(x)
+            x = MaxPooling2D(pool_size=(2, 2))(x)
+            x = Dropout(0.25)(x)
+            x = Flatten()(x)
+            x = Dense(128, activation='relu')(x)
+            x = Dropout(0.5)(x)
+            logits = Dense(self.num_classes, activation='softmax')(x)
+            return logits
+
+        elif self.dataset_name == "cifar":
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(inputs)
+            x = BatchNormalization()(x)
+            x = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.2)(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.3)(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+            x = BatchNormalization()(x)
+            x = MaxPooling2D((2, 2))(x)
+            x = Dropout(0.4)(x)
+            x = Flatten()(x)
+            x = Dense(128, activation='relu', kernel_initializer='he_uniform')(x)
+            x = BatchNormalization()(x)
+            x = Dropout(0.5)(x)
+            logits = Dense(10, activation='softmax')(x)
+            return logits
+
+    def _set_model(self):
+        inputs = Input(shape=self.input_shape)
+        outputs = self._get_logits(inputs=inputs)
+        self.model = Model(inputs=inputs, outputs=outputs)
+
+    def _set_classes(self, y=None):
+        """ Setting classes_ attribute for sklearn KerasClassifier class """
+
+        # todo: deprecated
+        # if len(y.shape) == 2 and y.shape[1] > 1:
+        #     return np.arange(y.shape[1])
+        # elif (len(y.shape) == 2 and y.shape[1] == 1) or len(y.shape) == 1:
+        #     return np.unique(y)
+        return np.array(np.arange(10))
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -91,7 +186,7 @@ class RandomRegularizer(BaselineConvnet):
         return [grad if grad is not None else tf.zeros_like(var)
                 for var, grad in zip(var_list, grads)]
 
-    def _get_n_channels(self, inputs):
+    def _get_n_channels(self, inputs, channel_mode=CHANNEL_MODE):
         return inputs.get_shape().as_list()[3]
 
     def _no_projections_regularizer(self, inputs, outputs):
@@ -212,8 +307,16 @@ class RandomRegularizer(BaselineConvnet):
             outputs = tf.convert_to_tensor(y_train_sample)
             early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
 
-            mini_batch = MINIBATCH
-            device_name = self._set_device_name(device)
+            mini_batch = 20
+
+            if device == "gpu":
+                device_name = "/device:GPU:0"
+                # device_name = "/job:localhost/replica:0/task:0/device:XLA_GPU:0')"
+            elif device == "cpu":
+                device_name = "/CPU:0"
+            else:
+                raise AssertionError("Wrong device name.")
+
             with tf.device(device_name):
                 self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
                 print("\nn_proj =",self.n_proj)
@@ -225,7 +328,92 @@ class RandomRegularizer(BaselineConvnet):
                                    callbacks=[early_stopping])
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
-        self.trained = True
+        return self
+
+    def evaluate(self, x, y):
+        """
+        Evaluates the trained classifier on the given test set and computes the accuracy on the predictions.
+        :param x: test data
+        :param y: test labels
+        :return: predictions
+        """
+
+        y_pred = self.predict(x)
+        y_true = np.argmax(y, axis=1)
+        nb_correct_adv_pred = np.sum(y_pred == y_true)
+
+        print("\nTest data.")
+        print("Correctly classified: {}".format(nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x) - nb_correct_adv_pred))
+
+        acc = nb_correct_adv_pred / y.shape[0]
+        print("Accuracy: %.2f%%" % (acc * 100))
+        print(classification_report(np.argmax(y, axis=1), y_pred, labels=range(self.num_classes)))
+
+    def load_adversaries(self, dataset_name, attack, eps, test):
+        return self.adversarial_classifier.load_adversaries(dataset_name, attack, eps, test)
+
+    def _get_adversaries(self, trained_classifier, x, y, test, method, dataset_name, adversaries_path):
+        """
+        Generates adversaries on the input data x using a given method or loads saved data if available.
+
+        :param classifier: trained classifier
+        :param x: input data
+        :param method: art.attack method
+        :param adversaries_path: path of saved pickle data
+        :return: adversarially perturbed data
+        """
+        if adversaries_path is None:
+            classifier = artKerasClassifier((MIN, MAX), trained_classifier.model, use_logits=False)
+            classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
+            classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
+            print("\nGenerating adversaries with", method, "method on", dataset_name)
+            x_adv = None
+            if method == 'fgsm':
+                attacker = FastGradientMethod(classifier, eps=0.5)
+                x_adv = attacker.generate(x=x)
+            elif method == 'deepfool':
+                attacker = DeepFool(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'virtual':
+                attacker = VirtualAdversarialMethod(classifier)
+                x_adv = attacker.generate(x)
+            elif method == 'carlini':
+                attacker = CarliniLInfMethod(classifier, targeted=False)
+                x_adv = attacker.generate(x=x, y=y)
+            elif method == 'pgd':
+                attacker = ProjectedGradientDescent(classifier)
+                x_adv = attacker.generate(x=x)
+            elif method == 'newtonfool':
+                attacker = NewtonFool(classifier)
+                x_adv = attacker.generate(x=x)
+        else:
+            print("\nLoading adversaries generated with", method, "method on", dataset_name)
+            if dataset_name == "mnist":
+                # todo: replace buggy old mnist adversarial test data
+                # mnist x_test data was saved incorrectly together with prediction labels y_test, so I'm only taking
+                # the first element in the list.
+                x_adv = load_from_pickle(path=adversaries_path, test=test)[0]
+            else:
+                x_adv = load_from_pickle(path=adversaries_path, test=test)
+
+
+        return x_adv
+
+    def save_classifier(self, relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/"):
+        """
+        Saves the trained model and adds the current datetime to the filepath.
+        :relative_path: path of folder containing the trained model
+        """
+        self.model.save_weights(relative_path+self.model_name)
+
+    def load_classifier(self, relative_path):
+        """
+        Loads a pre-trained classifier.
+        :relative_path: path of folder containing the trained model
+        returns: trained classifier
+        """
+        self.model.load_weights(relative_path + self.model_name)
         return self
 
 
@@ -249,7 +437,8 @@ def main(dataset_name, test, lam, projection_mode, eps, device, seed):
 
     # === train === #
     randreg.train(x_train, y_train, device)
-    # randreg.save_classifier()
+    randreg.save_classifier()
+    exit()
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     # randreg.load_classifier(relative_path=TRAINED_MODELS)
 

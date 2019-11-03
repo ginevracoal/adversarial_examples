@@ -13,6 +13,7 @@ from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNor
 ############
 
 MODEL_NAME = "baseline"
+TRAINED_MODELS = "../trained_models/baseline/"
 
 
 class BaselineConvnet(AdversarialClassifier):
@@ -22,7 +23,7 @@ class BaselineConvnet(AdversarialClassifier):
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.model_name = self.dataset_name + "_" + MODEL_NAME
+        self.model_name = self.dataset_name + "_baseline"
 
     @staticmethod
     def _set_training_params(test):
@@ -111,18 +112,17 @@ class BaselineConvnet(AdversarialClassifier):
         """
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
-        robust_classifier.model_name = str(self.dataset_name) + "_" + str(attack) + "_robust_" + MODEL_NAME
+        robust_classifier.model_name = str(attack) + "_robust_" + self.model_name
 
         # todo: update filenames as additional infos + self.model_name
-        # todo: eps in robust models filenames
-
         if attack == "deepfool":
-            robust_classifier.model_name = str(self.dataset_name) + "_" + str(attack) + "_robust_" + self.model_name
+            robust_classifier.model_name = str(attack) + "_robust_" + self.model_name
             return robust_classifier.load_classifier(relative_path=relative_path)
         else:
             if eps is None:
                 raise ValueError("\nProvide a ths distance for the attacks.")
             else:
+                # todo: add eps in robust models filenames
                 robust_classifier.model_name = str(self.dataset_name) + "_" + str(attack) + "_robust_" + MODEL_NAME
                 return robust_classifier.load_classifier(relative_path=relative_path)
 
@@ -141,12 +141,14 @@ def main(dataset_name, test, attack, eps, device):
                             dataset_name=dataset_name, test=test)
 
     # === training === #
-    # classifier = model.train(x_train, y_train, batch_size=model.batch_size, epochs=model.epochs)
+    # model.train(x_train, y_train, device)
     # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    model.load_classifier(relative_path=TRAINED_MODELS+MODEL_NAME+"/")
-    # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS+MODEL_NAME+"/", attack=attack, eps=eps)
+    # model.load_classifier(relative_path=RESULTS)
+    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path="../trained_models/baseline/")
+    # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
 
     # === adversarial training === #
     # robust_classifier = model.adversarial_train(x_train, y_train, device=device, attack="fgsm")
@@ -157,15 +159,15 @@ def main(dataset_name, test, attack, eps, device):
     # robust_classifier.evaluate(x_test, y_test)
 
     # x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, eps=eps)
-    # model.save_adversaries(data=x_test_adv, dataset_name=dataset_name, attack=attack, eps=eps)
+    # model.save_adversaries(data=x_test_adv, attack=attack, eps=eps)
     # model.evaluate(x=x_test_adv, y=y_test)
 
-    x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack,eps=eps,test=test)
-    print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
+    # x_test_adv = model.load_adversaries(attack=attack,eps=eps)
+    # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
     # plot_images([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
     for method in ['fgsm', 'pgd', 'deepfool','carlini']:
-        x_test_adv = model.load_adversaries(attack=method, dataset_name=dataset_name, eps=0.5, test=test)
+        x_test_adv = model.load_adversaries(attack=method, eps=0.5)
         model.evaluate(x_test_adv, y_test)
         # model.evaluate(robust_classifier, x_test_adv, y_test)
 
