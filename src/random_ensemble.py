@@ -5,15 +5,17 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
-from adversarial_classifier import *
-from baseline_convnet import BaselineConvnet
 import sys
+from baseline_convnet import *
 from projection_functions import *
-import random
+
+############
+# defaults #
+############
 
 REPORT_PROJECTIONS = False
 ADD_BASELINE_PROB = False
-MODEL_NAME = "random_ensemble"
+# MODEL_NAME = "random_ensemble"
 TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 
@@ -50,6 +52,7 @@ class RandomEnsemble(BaselineConvnet):
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
         self.trained = False
+        self.classifiers = None
         self.training_time = 0
         self.ensemble_method = "sum"  # supported methods: mode, sum
         self.x_test_proj = None
@@ -68,46 +71,42 @@ class RandomEnsemble(BaselineConvnet):
         else:
             self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
 
-        # sess = tf.Session()
-        # sess.as_default()
-        # projections = projections.eval(session=sess)
-        # inverse_projections = inverse_projections.eval(session=sess)
         return projections, inverse_projections
 
-    def train(self, x_train, y_train):
+    def train(self, x_train, y_train, device):
         """
         Trains the baseline model over `n_proj` random projections of the training data whose input shape is
         `(size_proj, size_proj, 1)`.
 
-        :param x_train:
-        :param y_train:
-        :param batch_size:
-        :param epochs:
+        :param x_train: training data
+        :param y_train: training labels
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
 
-        start_time = time.time()
-        input_data = x_train.astype(float)
-        x_train_projected, _ = self.compute_projections(input_data=input_data)
+        device_name = self._set_device_name(device)
+        with tf.device(device_name):
+            start_time = time.time()
+            input_data = x_train.astype(float)
+            x_train_projected, _ = self.compute_projections(input_data=input_data)
 
-        # # eventually adjust input dimension to a single channel projection
-        # if x_train_projected.shape[4] == 1:
-        #     self.input_shape = (self.input_shape[0],self.input_shape[1],1)
+            # # eventually adjust input dimension to a single channel projection
+            # if x_train_projected.shape[4] == 1:
+            #     self.input_shape = (self.input_shape[0],self.input_shape[1],1)
 
-        classifiers = []
-        for i in range(self.n_proj):
-            # use the same model architecture (not weights) for all trainings
-            baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                       data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
-            # train n_proj classifiers on different training data
-            classifiers.append(baseline.train(x_train_projected[i], y_train))
-            del baseline
+            classifiers = []
+            for i in range(self.n_proj):
+                # use the same model architecture (not weights) for all trainings
+                baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                           data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
+                # train n_proj classifiers on different training data
+                classifiers.append(baseline.train(x_train_projected[i], y_train, device))
+                del baseline
 
-        print("\nTraining time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
-              "): --- %s seconds ---" % (time.time() - start_time))
+            print("\nTraining time for model ( n_proj =", str(self.n_proj), ", size_proj =", str(self.size_proj),
+                  "): --- %s seconds ---" % (time.time() - start_time))
 
-        self.trained = True
-        return classifiers
+            self.trained = True
+            return classifiers
 
     @staticmethod
     def _sum_ensemble_classifier(classifiers, projected_data):
@@ -188,8 +187,11 @@ class RandomEnsemble(BaselineConvnet):
 
         return predictions
 
-    def predict(self, classifiers, data, add_baseline_prob=ADD_BASELINE_PROB, *args, **kwargs):
+    def predict(self, x, add_baseline_prob=ADD_BASELINE_PROB, **kwargs):
+
+    # def predict(self, classifiers, data, add_baseline_prob=ADD_BASELINE_PROB, *args, **kwargs):
         """
+        # todo docstring
         Compute the ensemble prediction.
 
         :param classifiers: list of trained classifiers over different projections
@@ -197,7 +199,7 @@ class RandomEnsemble(BaselineConvnet):
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
         :return: final predictions for the input data
         """
-        projected_data, _ = self.compute_projections(data)
+        projected_data, _ = self.compute_projections(x)
 
         predictions = None
         if self.ensemble_method == 'sum':
@@ -258,19 +260,23 @@ class RandomEnsemble(BaselineConvnet):
         """
         os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/"), exist_ok=True)
 
+        self.trained = True
         if self.trained:
             for i, proj_classifier in enumerate(classifier):
                 filename = model_name + "_size=" + str(self.size_proj) + "_" + str(self.random_seeds[i])+".h5"
                 folder = str(self.dataset_name) + "_" + model_name + "_size=" + str(self.size_proj) + "_epochs=" + \
                          str(self.epochs) + "_" + str(self.projection_mode) + "/"
-                proj_classifier.save(filename=filename,
-                                     path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder )
+                if BASECLASS == "art":
+                    proj_classifier.save(filename=filename,
+                                         path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder )
+                elif BASECLASS == "skl":
+                    proj_classifier.model.save_weights(RESULTS + time.strftime('%Y-%m-%d') + "/" + folder + filename)
         else:
             raise ValueError("Model has not been fitted!")
 
     def load_classifier(self, relative_path):
         """
-        Loads a pretrained classifier and sets the projector with the training seed.
+        Loads a pre-trained classifier and sets the projector with the training seed.
         :param relative_path: relative path of the folder containing the list of trained classifiers
         :return: list of trained classifiers
         """
@@ -313,11 +319,12 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps):
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    classifier = model.train(x_train, y_train)
+    # classifier = model.train(x_train, y_train)
     # model.save_classifier(classifier=classifier, model_name=MODEL_NAME)
 
     # === load classifier === #
     # classifier = model.load_classifier(relative_path=TRAINED_MODELS)
+    classifier = model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     # === evaluate === #
     model.evaluate(classifier=classifier, x=x_test, y=y_test)

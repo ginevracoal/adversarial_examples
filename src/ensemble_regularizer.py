@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 
 from random_regularizer import *
-from tensorflow.python.client import device_lib
 # import multiprocessing
 # from joblib import Parallel, delayed
+
+############
+# defaults #
+############
+
+EPS = 0.3
 
 
 class EnsembleRegularizer(RandomRegularizer):
@@ -12,13 +17,13 @@ class EnsembleRegularizer(RandomRegularizer):
     """
 
     def __init__(self, ensemble_size, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test,
-                 init_seed=1):
+                 init_seed=0):
         self.ensemble_size = ensemble_size
         self.ensemble_classifiers = None
         super(EnsembleRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, lam,
                                                   projection_mode, test, init_seed)
 
-    def train(self, x_train, y_train, device="cpu"):
+    def train(self, x_train, y_train, device):
         """
         Trains different random_regularizer models over random projections of the training data.
         :param x_train: training data
@@ -29,16 +34,6 @@ class EnsembleRegularizer(RandomRegularizer):
 
         start_time = time.time()
 
-        # if parallel:
-        #     num_cores = multiprocessing.cpu_count()
-        #     parallel_train = lambda model: model.train(x_train, y_train, device)
-        #     models = []
-        #     for i in range(self.ensemble_size):
-        #         randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
-        #                                     data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
-        #                                     projection_mode=self.projection_mode, test=self.test, init_seed=i)
-        #         models.append(randreg)
-        #     classifiers = Parallel(n_jobs=num_cores)(delayed(parallel_train)(m) for m in models)
         classifiers = []
         for i in range(self.ensemble_size):
             randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -51,6 +46,18 @@ class EnsembleRegularizer(RandomRegularizer):
               " : --- %s seconds ---" % (time.time() - start_time))
 
         self.ensemble_classifiers = classifiers
+
+    def parallel_train(self, x_train, y_train, device):
+        #     num_cores = multiprocessing.cpu_count()
+        #     parallel_train = lambda model: model.train(x_train, y_train, device)
+        #     models = []
+        #     for i in range(self.ensemble_size):
+        #         randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
+        #                                     data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
+        #                                     projection_mode=self.projection_mode, test=self.test, init_seed=i)
+        #         models.append(randreg)
+        #     classifiers = Parallel(n_jobs=num_cores)(delayed(parallel_train)(m) for m in models)
+        raise NotImplementedError
 
     def predict(self, x, **kwargs):
         """
@@ -110,16 +117,17 @@ def main(dataset_name, test, ensemble_size, projection_mode, lam, device):
                                 projection_mode=projection_mode, data_format=data_format, dataset_name=dataset_name,
                                 lam=lam, test=test)
     # === train === #
-    # model.train(x_train, y_train, device)
+    model.train(x_train, y_train, device)
     # model.save_classifier()
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    # model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
+    exit()
 
     # set max norm for adversarial perturbations
-    eps = 0.3
+    eps = EPS
     for attack in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
         model.evaluate(x=x_test_adv, y=y_test)
@@ -137,7 +145,7 @@ if __name__ == "__main__":
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        ensemble_size = input("\nChoose the ensemble size (integer value): ")
+        ensemble_size = input("\nChoose the ensemble size (type=int): ")
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         device = input("\nChoose a device (cpu/gpu): ")

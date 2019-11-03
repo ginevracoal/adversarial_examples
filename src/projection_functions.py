@@ -86,7 +86,7 @@ def tf_flat_projection(input_data, random_seed, size_proj):
 
     """
     # centroid vector for affine subspace translation
-    translation = input_data.mean(axis=0).mean(axis=2)
+    translation = tf.math.reduce_mean(tf.math.reduce_mean(input_tensor=input_data, axis=0),axis=2)
 
     input_data = tf.cast(input_data, tf.float32)
     batch_size, rows, cols, channels = input_data.get_shape().as_list()
@@ -104,7 +104,7 @@ def tf_flat_projection(input_data, random_seed, size_proj):
 
     # compute projections
     flat_images = tf.reshape(input_data, shape=[batch_size, n_features])
-    flat_translation = tf.reshape(translation, shape=[1,n_features])
+    flat_translation = tf.dtypes.cast(tf.reshape(translation, shape=[1,n_features]), dtype=np.float32)
     projected_flat_translation = tf.matmul(a=flat_translation, b=proj_matrix, transpose_b=True)
     projection = tf.matmul(a=flat_images-flat_translation, b=proj_matrix, transpose_b=True) + projected_flat_translation
 

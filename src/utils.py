@@ -175,7 +175,7 @@ def load_from_pickle(path, test):
 ##############
 
 
-def plot_projections(image_data_list, cmap=None, test=False):
+def plot_images(image_data_list, cmap=None, test=False):
     """
     Plots the first `n_images` images of each element in image_data_list, on different rows.
 

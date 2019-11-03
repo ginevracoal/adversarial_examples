@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import time
 import os
 import sys
@@ -44,9 +46,10 @@ class ParallelRandomEnsemble(RandomEnsemble):
                                    dataset_name=self.dataset_name, data_format=self.data_format, test=False)
 
         classifier = baseline.train(x_train_projected, y_train)
-        print("\nProjecting + training time: --- %s seconds ---" % (time.time() - start_time))
+        print("\nProjection + training time: --- %s seconds ---" % (time.time() - start_time))
 
         self.save_classifier(classifier)
+
         return classifier
 
     def save_classifier(self, classifier, model_name=MODEL_NAME):
@@ -54,10 +57,14 @@ class ParallelRandomEnsemble(RandomEnsemble):
         filename = MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(self.proj_idx) + ".h5"
         folder = str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + "_" + str(self.projection_mode) + "/"
         os.makedirs(os.path.dirname(RESULTS + time.strftime('%Y-%m-%d') + "/" + folder), exist_ok=True)
+        
+        # super(BaselineConvnet, self).save_classifier(classifier=classifier, model_name=folder+filename)
+
         if BASECLASS == "art":
-            classifier.save(filename=filename, path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder)
+            classifier.save_classifier(filename=filename, path=RESULTS + time.strftime('%Y-%m-%d') + "/" + folder)
         elif BASECLASS == "skl":
             classifier.model.save_weights(RESULTS + time.strftime('%Y-%m-%d') + "/" + folder + filename)
+
         saving_time = time.time() - start
         self.training_time -= saving_time
 
@@ -83,12 +90,12 @@ def main(dataset_name, test, n_proj, size_proj, proj_mode):
                            data_format=data_format, dataset_name=dataset_name, projection_mode=proj_mode, test=test)
 
     # ======== buggy =========
-    classifier = model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    classifiers = model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     exit()
-    model.evaluate(classifier, x_test, y_test)
+    model.evaluate(classifiers, x_test, y_test)
     for attack in ['fgsm','pgd','deepfool','carlini']:
         x_test_adv = model.load_adversaries(dataset_name=dataset_name, attack=attack, eps=0.5, test=test)
-        model.evaluate(classifier, x_test_adv, y_test)
+        model.evaluate(classifiers, x_test_adv, y_test)
 
 
 if __name__ == "__main__":
