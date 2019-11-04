@@ -46,6 +46,8 @@ class EnsembleRegularizer(RandomRegularizer):
               " : --- %s seconds ---" % (time.time() - start_time))
 
         self.ensemble_classifiers = classifiers
+        self.trained = True
+        return classifiers
 
     def parallel_train(self, x_train, y_train, device):
         #     num_cores = multiprocessing.cpu_count()
@@ -76,6 +78,7 @@ class EnsembleRegularizer(RandomRegularizer):
         Saves all the ensemble classifiers separately using their index in filenames.
         :relative_path: path of folder containing the trained model
         """
+        # todo: set a proper saving folder (like in random ensemble) using _projclassifier_path method
         if self.ensemble_classifiers:
             for classifier in self.ensemble_classifiers:
                 classifier.save_classifier(relative_path=relative_path)
@@ -98,6 +101,8 @@ class EnsembleRegularizer(RandomRegularizer):
             del randreg
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
         self.ensemble_classifiers = classifiers
+        self.trained = True
+        return classifiers
 
 
 def main(dataset_name, test, ensemble_size, projection_mode, lam, device):

@@ -24,7 +24,7 @@ TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "channels"  # "channels, grayscale"
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/"  # RESULTS + time.strftime('%Y-%m-%d') + "/"
+TRAINED_MODELS = "../trained_models/random_regularizer/"
 
 
 class RandomRegularizer(BaselineConvnet):
@@ -40,7 +40,7 @@ class RandomRegularizer(BaselineConvnet):
         self.projection_mode = projection_mode
         self.inputs = Input(shape=self.input_shape)
         self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
-                          "_" + str(self.projection_mode) + "_" + str(self.init_seed) + ".h5"
+                          "_" + str(self.projection_mode) + "_" + str(self.init_seed)
 
         print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
               ", init_seed = ", self.init_seed)
@@ -256,7 +256,7 @@ def main(dataset_name, test, lam, projection_mode, eps, device, seed):
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
     for method in ['fgsm','pgd','deepfool','carlini']:
-        x_test_adv = randreg.load_adversaries(dataset_name, method, eps, test)
+        x_test_adv = randreg.load_adversaries(method, eps)
         randreg.evaluate(x_test_adv, y_test)
 
 

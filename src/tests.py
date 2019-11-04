@@ -6,7 +6,7 @@ import time
 from projection_functions import *
 import random
 from random_regularizer import RandomRegularizer
-from parallel_randens_training import ParallelRandomEnsemble
+from parallel_random_ensemble import ParallelRandomEnsemble
 from ensemble_regularizer import EnsembleRegularizer
 
 BATCH_SIZE = 20
@@ -70,6 +70,10 @@ class Test(unittest.TestCase):
 
         # save and load
         model.save_classifier(relative_path=RESULTS)
+        del model
+        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
+                               n_proj=N_PROJECTIONS, size_proj=SIZE_PROJECTION, data_format=self.data_format,
+                               projection_mode=projection_mode, test=True)
         model.load_classifier(relative_path=RESULTS)
         x_test_pred_loaded = model.evaluate(self.x_test, self.y_test)
 
@@ -92,15 +96,6 @@ class Test(unittest.TestCase):
                                                                    random_seeds=random_seeds,
                                                                    projection_mode=projection_mode)
         plot_images(image_data_list=[x_test, projections[0], inverse_projections[0]], cmap="gray", test=True)
-
-    def test_parallel_randens(self):
-        dataset_name=self.dataset
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test=True)
-
-        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=SIZE_PROJECTION,
-                                       data_format=data_format, dataset_name=dataset_name, projection_mode="flat")
-        model.train_single_projection(x_train=x_train, y_train=y_train, batch_size=model.batch_size,
-                                      epochs=model.epochs, idx=1, save=False)
 
     def test_cifar_randreg(self):
         dataset_name = "cifar"
@@ -131,8 +126,18 @@ class Test(unittest.TestCase):
         model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
                                     data_format=self.data_format, dataset_name="mnist", lam=0.3,
                                     projection_mode="loss_on_projections", test=True)
-        model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+        model.load_classifier(relative_path=RESULTS)
         model.evaluate(x=self.x_test, y=self.y_test)
+
+    def test_parallel_randens(self):
+        dataset_name=self.dataset
+        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test=True)
+
+        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=SIZE_PROJECTION,
+                                       data_format=data_format, dataset_name=dataset_name, projection_mode="flat",
+                                       n_proj=N_PROJECTIONS, test=True)
+        model.parallel_train(device="cpu")
+        # model.parallel_train(device="gpu")
 
 
 if __name__ == '__main__':

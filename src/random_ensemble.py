@@ -230,7 +230,8 @@ class RandomEnsemble(BaselineConvnet):
 
     def evaluate(self, x, y, report_projections=REPORT_PROJECTIONS):
         """ Extends evaluate() with projections reports"""
-        y_pred = super(RandomEnsemble, self).evaluate(x, y)
+        y_pred = super(RandomEnsemble, self).evaluate(x, y, ensemble_model=True)
+        # y_pred = self.classifiers.evaluate(x, y)
         if report_projections:
             x_proj, _ = self.compute_projections(x)
             self.report_projections(classifiers=self.classifiers, x_test_proj=x_proj, y_test=y)
@@ -287,9 +288,6 @@ class RandomEnsemble(BaselineConvnet):
         return classifiers
 
     def load_robust_classifier(self, relative_path, attack, eps=0.5):
-        raise NotImplementedError
-
-    def parallel_train(self, x_train, y_train, device):
         raise NotImplementedError
 
 

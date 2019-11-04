@@ -126,6 +126,11 @@ class BaselineConvnet(AdversarialClassifier):
                 robust_classifier.model_name = str(self.dataset_name) + "_" + str(attack) + "_robust_" + MODEL_NAME
                 return robust_classifier.load_classifier(relative_path=relative_path)
 
+    def evaluate(self, x, y, ensemble_model=False):
+        if ensemble_model:
+            self.trained = True
+        return super(BaselineConvnet, self).evaluate(x, y)
+
 
 def main(dataset_name, test, attack, eps, device):
     """
