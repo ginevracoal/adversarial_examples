@@ -14,7 +14,6 @@ from projection_functions import *
 
 REPORT_PROJECTIONS = False
 ADD_BASELINE_PROB = True
-TRAINED_MODELS = "../trained_models/random_ensemble/"
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 MODEL_NAME = "randens"
 
@@ -42,15 +41,15 @@ class RandomEnsemble(BaselineConvnet):
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
 
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.original_input_shape = input_shape
-        self.input_shape = (size_proj, size_proj, input_shape[2])
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
         self.random_seeds = list(range(n_proj))  # random.sample(list(range(1, 1000)), n_proj)
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
+        self.input_shape = (size_proj, size_proj, input_shape[2])
         self.trained = False
         self.classifiers = None
         self.training_time = 0
@@ -99,6 +98,7 @@ class RandomEnsemble(BaselineConvnet):
                 baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                            data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
                 # train n_proj classifiers on different training data
+                baseline.filename = self._set_baseline_filename(seed=i)
                 classifiers.append(baseline.train(x_train_projected[i], y_train, device))
                 del baseline
 
@@ -209,7 +209,7 @@ class RandomEnsemble(BaselineConvnet):
         if add_baseline_prob:
             baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
-            baseline.load_classifier(relative_path="../trained_models/baseline/")
+            baseline.load_classifier(relative_path=TRAINED_MODELS)
             baseline_predictions = baseline.predict(x)
             # sum the probabilities across all predictors
             final_predictions = np.add(predictions, baseline_predictions)
@@ -238,39 +238,46 @@ class RandomEnsemble(BaselineConvnet):
 
         return y_pred
 
-    def generate_adversaries(self, x, y, attack, eps=0.5):
+    def generate_adversaries(self, x, y, attack, eps=EPS):
         # todo: refactor
         """ Adversaries are generated on the baseline classifier """
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                    data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
-        baseline.load_classifier(relative_path="../trained_models/baseline/")
-        x_adv = baseline.generate_adversaries(x, y, attack=attack, eps=0.5)
+        baseline.load_classifier(relative_path=TRAINED_MODELS + MODEL_NAME + "/")
+        x_adv = baseline.generate_adversaries(x, y, attack=attack, eps=eps)
         return x_adv
 
-    def _projclassifier_path(self, seed):
-        return {'folder':str(self.dataset_name) + "_" + MODEL_NAME + "_size=" + str(self.size_proj) + "_" +
+    def _set_model_path(self):
+        return {'folder': MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) + "_" +
                          str(self.projection_mode) + "/",
-                'model_name':str(self.dataset_name) + "_" + "baseline" + "_size=" + str(self.size_proj) + "_" +
-                             str(self.projection_mode) + "_" + str(seed)}
+                'filename': None}
 
-    def save_classifier(self, relative_path):
+    def _set_baseline_filename(self, seed):
+        """ Sets baseline filenames inside randens folder based on the projection seed. """
+        return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_" + str(self.projection_mode) + \
+               "_" + str(seed)
+
+    def save_classifier(self, relative_path, folder=None, filename=None):
         """
         Saves all projections classifiers separately.
+        :param relative_path: relative path of the folder containing the list of trained classifiers.
+                              It can be either TRAINED_MODELS or RESULTS
+        :param filename: filename
         """
-
         if self.trained:
             for i, proj_classifier in enumerate(self.classifiers):
-                proj_classifier.model_name = self._projclassifier_path(seed=self.random_seeds[i])['model_name']
-                proj_classifier.save_classifier(relative_path=relative_path+
-                                                self._projclassifier_path(seed=self.random_seeds[i])['folder'])
+                proj_classifier.save_classifier(relative_path=relative_path, folder=self.folder,
+                                                filename=self._set_baseline_filename(seed=i))
         else:
             raise ValueError("Train the model first.")
 
-    def load_classifier(self, relative_path):
+    def load_classifier(self, relative_path, folder=None, filename=None):
         """
         Loads a pre-trained classifier and sets the projector with the training seed.
-        :param relative_path: relative path of the folder containing the list of trained classifiers
+        :param relative_path: relative path of the folder containing the list of trained classifiers.
+                              It can be either TRAINED_MODELS or RESULTS
+        :param filename: filename
         :return: list of trained classifiers
         """
         start_time = time.time()
@@ -279,15 +286,15 @@ class RandomEnsemble(BaselineConvnet):
         for i in range(self.n_proj):
             proj_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                               data_format=self.data_format, dataset_name=self.dataset_name)
-            proj_classifier.model_name = self._projclassifier_path(seed=self.random_seeds[i])['model_name']
-            classifiers.append(proj_classifier.load_classifier(relative_path=relative_path+
-                                                self._projclassifier_path(seed=self.random_seeds[i])['folder']))
+            proj_classifier.filename = self._set_baseline_filename(seed=i)
+            proj_classifier.folder = self.folder
+            classifiers.append(proj_classifier.load_classifier(relative_path=relative_path))
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
         self.classifiers = classifiers
         return classifiers
 
-    def load_robust_classifier(self, relative_path, attack, eps=0.5):
+    def load_robust_classifier(self, relative_path, attack, eps=EPS):
         raise NotImplementedError
 
 
@@ -314,8 +321,8 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    # model.train(x_train, y_train, device=device)
-    # model.save_classifier(relative_path=RESULTS)
+    model.train(x_train, y_train, device=device)
+    model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
     # model.load_classifier(relative_path=TRAINED_MODELS)
@@ -323,6 +330,9 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
+    for method in ['fgsm', 'pgd', 'deepfool','carlini']:
+        x_test_adv = model.load_adversaries(attack=method, eps=eps)
+        model.evaluate(x_test_adv, y_test)
 
     # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
     # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))

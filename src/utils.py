@@ -137,8 +137,8 @@ def load_dataset(dataset_name, test):
 
 def save_to_pickle(data, relative_path, filename):
     """ saves data to pickle """
-    os.makedirs(os.path.dirname(relative_path+time.strftime('%Y-%m-%d')+"/"+filename), exist_ok=True)
-    with open(relative_path+time.strftime('%Y-%m-%d')+"/"+filename, 'wb') as f:
+    os.makedirs(os.path.dirname(relative_path+filename), exist_ok=True)
+    with open(relative_path+filename, 'wb') as f:
         pkl.dump(data, f)
 
 

@@ -22,6 +22,7 @@ RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini"
 MINIBATCH = 20
+EPS = 0.3
 
 
 class AdversarialClassifier(sklKerasClassifier):
@@ -39,10 +40,14 @@ class AdversarialClassifier(sklKerasClassifier):
         self.batch_size, self.epochs = self._set_training_params(test=test).values()
         super(AdversarialClassifier, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
         self.classes_ = self._set_classes()
-        self.model_name = None
+        self.folder = self._set_model_path()['folder']
+        self.filename = self._set_model_path()['filename']
         self.trained = False
 
     # todo: docstrings
+    def _set_model_path(self, *args, **kwargs):
+        raise NotImplementedError
+
     @staticmethod
     def _set_training_params(test):
         raise NotImplementedError
@@ -51,18 +56,27 @@ class AdversarialClassifier(sklKerasClassifier):
         raise NotImplementedError
 
     @staticmethod
-    def _set_session():
+    def _set_session(device):
         """ Initialize tf session """
-        print("check cuda: ", tf.test.is_built_with_cuda())
-        print("check gpu: ", tf.test.is_gpu_available())
         print(device_lib.list_local_devices())
-        # config = tf.ConfigProto()
-        # config.gpu_options.allow_growth = True
-        # sess = tf.Session(config=config)
 
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
-        # sess.run(tf.global_variables_initializer())
-        return sess
+        if device == "gpu":
+            print("check cuda: ", tf.test.is_built_with_cuda())
+            print("check gpu: ", tf.test.is_gpu_available())
+            # config = tf.ConfigProto()
+            # config.gpu_options.allow_growth = True
+            # sess = tf.Session(config=config)
+            from keras.backend.tensorflow_backend import set_session
+            config = tf.ConfigProto()
+            config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+            config.log_device_placement = True  # to log device placement (on which device the operation ran)
+            sess = tf.Session(config=config)
+            set_session(sess)  # set this TensorFlow session as the default session for Keras
+            return sess
+        elif device == "cpu":
+            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
+            # sess.run(tf.global_variables_initializer())
+            return sess
 
     def _set_model(self):
         """
@@ -138,7 +152,7 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             return np.inf
 
-    def generate_adversaries(self, x, y, attack, eps=0.5):
+    def generate_adversaries(self, x, y, attack, eps=EPS):
         """
         Generates adversaries on the input data x using a given attack method.
 
@@ -219,22 +233,30 @@ class AdversarialClassifier(sklKerasClassifier):
                                           str(eps) + ".pkl", test=self.test)
         return x_test_adv
 
-    def save_classifier(self, relative_path):
+    def save_classifier(self, relative_path, folder=None, filename=None):
         """
         Saves the trained model and adds the current datetime to the filepath.
         :relative_path: path of folder containing the trained model
         """
-        os.makedirs(os.path.dirname(relative_path), exist_ok=True)
-        self.model.save_weights(relative_path + self.model_name + ".h5")
+        if folder is None:
+            folder = self.folder
+        if filename is None:
+            filename = self.filename
+        os.makedirs(os.path.dirname(relative_path + folder), exist_ok=True)
+        self.model.save_weights(relative_path + folder + filename + ".h5")
 
-    def load_classifier(self, relative_path):
+    def load_classifier(self, relative_path, folder=None, filename=None):
         """
         Loads a pre-trained classifier.
         :relative_path: path of folder containing the trained model
         returns: trained classifier
         """
-        print("loading model: ", relative_path + self.model_name + ".h5")
-        self.model.load_weights(relative_path + self.model_name + ".h5")
+        if folder is None:
+            folder = self.folder
+        if filename is None:
+            filename = self.filename
+        print("loading model: ", relative_path + folder + filename + ".h5")
+        self.model.load_weights(relative_path + folder + filename + ".h5")
         self.trained = True
         return self
 

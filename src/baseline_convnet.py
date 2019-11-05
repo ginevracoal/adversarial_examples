@@ -13,7 +13,6 @@ from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNor
 ############
 
 MODEL_NAME = "baseline"
-TRAINED_MODELS = "../trained_models/baseline/"
 
 
 class BaselineConvnet(AdversarialClassifier):
@@ -23,7 +22,11 @@ class BaselineConvnet(AdversarialClassifier):
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
         super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.model_name = self.dataset_name + "_baseline"
+
+    def _set_model_path(self):
+        return {'folder': MODEL_NAME+"/",
+                'filename': self.dataset_name + "_" + MODEL_NAME   # + "_epochs=" + str(self.epochs)
+                }
 
     @staticmethod
     def _set_training_params(test):
@@ -76,7 +79,7 @@ class BaselineConvnet(AdversarialClassifier):
             logits = Dense(10, activation='softmax')(x)
             return logits
 
-    def adversarial_train(self, x_train, y_train, device, attack, eps=0.5):
+    def adversarial_train(self, x_train, y_train, device, attack, eps=EPS):
         """
         Performs adversarial training on the given classifier using an attack method. By default adversaries are
         generated at training time and epsilon is set to 0.5.
@@ -88,7 +91,7 @@ class BaselineConvnet(AdversarialClassifier):
         start_time = time.time()
         print("\n===== Adversarial training =====")
         # generate adversarial examples on train and test sets
-        x_train_adv = self.generate_adversaries(x_train, y_train, attack)
+        x_train_adv = self.generate_adversaries(x_train, y_train, attack, eps)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
@@ -102,7 +105,8 @@ class BaselineConvnet(AdversarialClassifier):
 
         return robust_classifier
 
-    def load_robust_classifier(self, relative_path, attack, eps=0.5):
+    # todo test this method
+    def load_robust_classifier(self, relative_path, attack, eps=EPS):
         """
         Loads an adversarially trained robust classifier.
         :param relative_path: relative path
@@ -112,19 +116,18 @@ class BaselineConvnet(AdversarialClassifier):
         """
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
-        robust_classifier.model_name = str(attack) + "_robust_" + self.model_name
+        robust_classifier.filename = self.filename + str(attack) + "_robust"
+        return robust_classifier.load_classifier(relative_path=relative_path + MODEL_NAME + "/")
 
-        # todo: update filenames as additional infos + self.model_name
-        if attack == "deepfool":
-            robust_classifier.model_name = str(attack) + "_robust_" + self.model_name
-            return robust_classifier.load_classifier(relative_path=relative_path)
-        else:
-            if eps is None:
-                raise ValueError("\nProvide a ths distance for the attacks.")
-            else:
-                # todo: add eps in robust models filenames
-                robust_classifier.model_name = str(self.dataset_name) + "_" + str(attack) + "_robust_" + MODEL_NAME
-                return robust_classifier.load_classifier(relative_path=relative_path)
+        # if attack == "deepfool":
+        #     robust_classifier.filename = str(self.filename) + "_" + str(attack) + "_robust"
+        #     return robust_classifier.load_classifier(relative_path=relative_path+MODEL_NAME+"/", filename=self.filename)
+        # else:
+        #     if eps is None:
+        #         raise ValueError("\nProvide a ths distance for the attacks.")
+        #     else:
+        #         robust_classifier.filename = str(self.filename) + "_" + str(attack) + "_" + eps + "_robust"
+        #         return robust_classifier.load_classifier(relative_path=relative_path+MODEL_NAME+"/", filename=self.filename)
 
     def evaluate(self, x, y, ensemble_model=False):
         if ensemble_model:
@@ -141,18 +144,18 @@ def main(dataset_name, test, attack, eps, device):
     """
 
     # === initialize === #
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
+                                                                                           test=test)
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                             dataset_name=dataset_name, test=test)
 
     # === training === #
-    # model.train(x_train, y_train, device)
+    model.train(x_train, y_train, device)
     # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
     # model.load_classifier(relative_path=RESULTS)
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path="../trained_models/baseline/")
     # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
 
     # === adversarial training === #
@@ -172,7 +175,7 @@ def main(dataset_name, test, attack, eps, device):
     # plot_images([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
 
     for method in ['fgsm', 'pgd', 'deepfool','carlini']:
-        x_test_adv = model.load_adversaries(attack=method, eps=0.5)
+        x_test_adv = model.load_adversaries(attack=method, eps=eps)
         model.evaluate(x_test_adv, y_test)
         # model.evaluate(robust_classifier, x_test_adv, y_test)
 
