@@ -49,9 +49,6 @@ class Test(unittest.TestCase):
         x_test_adv = model.load_adversaries(attack="fgsm",eps=EPS)
         model.evaluate(x_test_adv, self.y_test)
 
-        # complete model loading
-        model.load_classifier(relative_path=TRAINED_MODELS+"baseline/")
-
         # adversarial training
         model.adversarial_train(x_train=self.x_train, y_train=self.y_train, device="cpu", attack='fgsm', eps=EPS)
 
@@ -135,9 +132,13 @@ class Test(unittest.TestCase):
 
         model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=SIZE_PROJECTION,
                                        data_format=data_format, dataset_name=dataset_name, projection_mode="flat",
-                                       n_proj=N_PROJECTIONS, test=True)
+                                       proj_idx=0, test=True)
         model.parallel_train(device="cpu")
-        # model.parallel_train(device="gpu")
+        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
+                               n_proj=1, size_proj=SIZE_PROJECTION, data_format=self.data_format,
+                               projection_mode="flat", test=True)
+        model.load_classifier(relative_path=RESULTS)
+        model.evaluate(self.x_test, self.y_test)
 
 
 if __name__ == '__main__':
