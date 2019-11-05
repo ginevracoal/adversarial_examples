@@ -26,32 +26,32 @@
 # === randens === #
 #SCRIPT="randens"
 #DATASET_NAME="mnist"
-#TEST="False"
-#N_PROJ_LIST=[6,9,12,15]
-#SIZE_PROJ_LIST=[8,12,16,20]
+#TEST="True"
+#N_PROJ_LIST=[10] #[6,9,12,15]
+#SIZE_PROJ_LIST=[12] #[8,12,16,20]
 #PROJ_MODE="channels"
 #ATTACK="fgsm"
 #EPS=0.3
+#DEVICE="gpu"
 
-# === parallel_randens === #
-#SCRIPT="parallel_randens"
-#DATASET_NAME="cifar"
-#TEST="True"
-## N_PROJ=2
-#PROJ_IDX=2
-#SIZE_PROJ_LIST=[8] #[8,12,16,20]
-#PROJ_MODE="one_channel"
-#EPS=0.3
+# === parallel_random_ensemble === #
+SCRIPT="parallel_randens"
+DATASET_NAME="mnist"
+TEST="True"
+PROJ_IDX=0
+SIZE_PROJ_LIST=[8] #[8,12,16,20]
+PROJ_MODE="channels"
+DEVICE="gpu"
 
 # === randreg === #
-SCRIPT="randreg"
-DATASET_NAME="mnist"
-TEST="False"
-LAMBDA=0.5
-PROJ_MODE="loss_on_projections"
-EPS=0.3
-DEVICE="cpu"
-SEED=0
+#SCRIPT="randreg"
+#DATASET_NAME="mnist"
+#TEST="False"
+#LAMBDA=0.5
+#PROJ_MODE="loss_on_projections"
+#EPS=0.3
+#DEVICE="cpu"
+#SEED=0
 
 # === ensemble_regularizer === #
 #SCRIPT="ensemble_regularizer"
@@ -72,16 +72,21 @@ if [ $HOSTNAME != "zenbook" ] ; then
   ##export CUDA_VISIBLE_DEVICES=-1 # GPU
 fi
 
-source ~/virtualenvs/venv/bin/activate
+## activate environment
+if [ $DEVICE = "cpu" ]; then
+  source ~/virtualenvs/venv/bin/activate
+elif [ $DEVICE = "gpu" ]; then
+  conda activate tensorflow-gpu
+fi
 
+## set filenames
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M:%S)
 RESULTS="../results/$DATE/"
 mkdir -p $RESULTS
-
 FILEPATH="${RESULTS}${TIME}_${DATASET_NAME}_${SCRIPT}"
 if [ "$TEST" = "True" ] ; then
-    FILEPATH="${FILEPATH}_test"
+  FILEPATH="${FILEPATH}_test"
 fi
 OUT="${FILEPATH}_out.txt"
 CLEAN_OUT="${FILEPATH}_clean.txt"
@@ -91,16 +96,17 @@ if [ $SCRIPT = "baseline" ]; then
   python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK $EPS > $OUT
   sed -n '/ETA:/!p' $OUT > $CLEAN_OUT
 elif [ $SCRIPT = "randens" ]; then
-  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK $EPS>> $OUT
+  python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK $EPS $DEVICE>> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
-  python3 "parallel_randens_training.py" $DATASET_NAME $TEST $PROJ_IDX $SIZE_PROJ_LIST $PROJ_MODE $EPS>> $OUT
-#  python3 "parallel_randens_training.py" $DATASET_NAME $TEST 0 $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
-#  for proj_idx in $(seq ${N_PROJ}); do #2); do
-#    python3 "parallel_randens_training.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE >> $OUT
-#  done
-  sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
-  grep -e "Rand" -e "Training time for" $OUT >> $COMPLEXITY
+#  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $PROJ_IDX $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  for proj_idx in $(seq 50); do #2); do
+    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  done
+#  sed -n '/ETA:/!p' $OUT  > $CLEAN_OUT
+  grep -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
+  grep -e "Rand" -e "Training time for" $OUT > $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
   python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $EPS $DEVICE $SEED >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
@@ -108,3 +114,10 @@ elif [ $SCRIPT = "ensemble_regularizer" ]; then
   python3 "ensemble_regularizer.py" $DATASET_NAME $TEST $ENSEMBLE_SIZE $PROJ_MODE $LAMBDA $DEVICE >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
 fi
+
+## deactivate environment
+#if [ $DEVICE = "cpu" ]; then
+#  deactivate venv
+#elif [ $DEVICE = "gpu" ]; then
+#  conda deactivate
+#fi
