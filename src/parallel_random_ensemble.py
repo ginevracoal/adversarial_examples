@@ -38,16 +38,14 @@ class ParallelRandomEnsemble(RandomEnsemble):
             self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
 
         # use the same model architecture (not weights) for all trainings
-        randens = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, n_proj=1,
-                                 size_proj=self.size_proj, projection_mode=self.projection_mode,
-                                 dataset_name=self.dataset_name, data_format=self.data_format, test=False)
-        randens.train(x_train_projected, y_train, device)
+        proj_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
+                                   data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
+        proj_classifier.train(x_train_projected, y_train, device)
         print("\nProjection + training time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
-
-        super(RandomEnsemble, randens).save_classifier(relative_path=RESULTS, folder=self.folder,
-                                                       filename=self._set_baseline_filename(seed=self.proj_idx))
-        return randens
+        proj_classifier.save_classifier(relative_path=RESULTS, folder=self.folder,
+                                        filename=self._set_baseline_filename(seed=self.proj_idx))
+        return proj_classifier
 
     def parallel_train(self, device):
         import multiprocessing
@@ -102,9 +100,9 @@ def main(dataset_name, test, proj_idx, size_proj, proj_mode, device):
     # ======== buggy =========
     # model.parallel_train(device=device)
     # del model
-    # model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj, n_proj=n_proj,
-    #                                data_format=data_format, dataset_name=dataset_name, projection_mode=proj_mode,
-    #                                test=test)
+    # model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj, n_proj=n_proj,
+    #                        data_format=data_format, dataset_name=dataset_name, projection_mode=proj_mode,
+    #                        test=test)
     # model.load_classifier(relative_path=RESULTS)
     # model.evaluate(x_test, y_test)
     # for attack in ['fgsm','pgd','deepfool','carlini']:
