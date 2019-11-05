@@ -8,12 +8,13 @@ separately on each projection, then it returns an ensemble classification on the
 from baseline_convnet import *
 from projection_functions import *
 
+
 ############
 # defaults #
 ############
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = True
+ADD_BASELINE_PROB = False
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 MODEL_NAME = "randens"
 
@@ -46,11 +47,10 @@ class RandomEnsemble(BaselineConvnet):
         self.size_proj = size_proj
         self.projection_mode = projection_mode
         super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.random_seeds = list(range(n_proj))  # random.sample(list(range(1, 1000)), n_proj)
+        self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
         self.input_shape = (size_proj, size_proj, input_shape[2])
-        self.trained = False
         self.classifiers = None
         self.training_time = 0
         self.ensemble_method = "sum"  # supported methods: mode, sum
@@ -93,12 +93,11 @@ class RandomEnsemble(BaselineConvnet):
                 self.input_shape = (self.input_shape[0],self.input_shape[1],1)
 
             classifiers = []
-            for i in range(self.n_proj):
+            for i in self.random_seeds:
                 # use the same model architecture (not weights) for all trainings
                 baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                            data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
                 # train n_proj classifiers on different training data
-                baseline.filename = self._set_baseline_filename(seed=i)
                 classifiers.append(baseline.train(x_train_projected[i], y_train, device))
                 del baseline
 
@@ -185,7 +184,6 @@ class RandomEnsemble(BaselineConvnet):
         predictions = np.sum(argmax_predictions, axis=0)
         # normalize
         predictions = predictions / predictions.sum(axis=1)[:, None]
-
         return predictions
 
     def predict(self, x, add_baseline_prob=ADD_BASELINE_PROB, **kwargs):
@@ -207,6 +205,7 @@ class RandomEnsemble(BaselineConvnet):
             predictions = self._mode_ensemble_classifier(self.classifiers, projected_data)
 
         if add_baseline_prob:
+            print("\nAdding baseline probability vector to the predictions.")
             baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
             baseline.load_classifier(relative_path=TRAINED_MODELS)
@@ -255,9 +254,12 @@ class RandomEnsemble(BaselineConvnet):
 
     def _set_baseline_filename(self, seed):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
-        return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_epochs=" + str(self.epochs) + \
-               "_" + str(self.projection_mode) + \
-               "_" + str(seed)
+        if EARLY_STOPPING:
+            return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
+                   "_" + str(self.projection_mode) + "_" + str(seed)
+        else:
+            return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_epochs=" + str(self.epochs) + \
+                   "_" + str(self.projection_mode) + "_" + str(seed)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
         """
@@ -284,7 +286,7 @@ class RandomEnsemble(BaselineConvnet):
         start_time = time.time()
 
         classifiers = []
-        for i in range(self.n_proj):
+        for i in self.random_seeds:
             proj_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                               data_format=self.data_format, dataset_name=self.dataset_name)
             classifiers.append(proj_classifier.load_classifier(relative_path=relative_path, folder=self.folder,
@@ -321,12 +323,12 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    # model.train(x_train, y_train, device=device)
-    # model.save_classifier(relative_path=RESULTS)
+    model.train(x_train, y_train, device=device)
+    model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path=RESULTS)
+    # model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)

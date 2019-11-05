@@ -11,18 +11,21 @@ import time
 import tensorflow as tf
 from keras.layers import Input
 from tensorflow.python.client import device_lib
+from keras.models import load_model
 
 ############
 # defaults #
 ############
+
+EARLY_STOPPING = False
+MINIBATCH = 20
+EPS = 0.3
 
 TRAINED_MODELS = "../trained_models/"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini"
-MINIBATCH = 20
-EPS = 0.3
 
 
 class AdversarialClassifier(sklKerasClassifier):
@@ -109,11 +112,17 @@ class AdversarialClassifier(sklKerasClassifier):
         device_name = self._set_device_name(device)
         with tf.device(device_name):
             mini_batch = MINIBATCH
-            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-                               metrics=['accuracy'])
-            start_time = time.time()
-            self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, callbacks=[early_stopping])
+            if EARLY_STOPPING:
+                early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+                self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                                   metrics=['accuracy'])
+                start_time = time.time()
+                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, callbacks=[early_stopping])
+            else:
+                self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                                   metrics=['accuracy'])
+                start_time = time.time()
+                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch)
 
             print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
             self.trained = True
@@ -243,7 +252,8 @@ class AdversarialClassifier(sklKerasClassifier):
         if filename is None:
             filename = self.filename
         os.makedirs(os.path.dirname(relative_path + folder), exist_ok=True)
-        self.model.save_weights(relative_path + folder + filename + ".h5")
+        self.model.save(relative_path + folder + filename + ".h5")
+        # self.model.save_weights(relative_path + folder + filename + ".h5")
 
     def load_classifier(self, relative_path, folder=None, filename=None):
         """
@@ -256,7 +266,8 @@ class AdversarialClassifier(sklKerasClassifier):
         if filename is None:
             filename = self.filename
         print("loading model: ", relative_path + folder + filename + ".h5")
-        self.model.load_weights(relative_path + folder + filename + ".h5")
+        # self.model.load_weights(relative_path + folder + filename + ".h5")
+        self.model = load_model(relative_path + folder + filename + ".h5")
         self.trained = True
         return self
 
