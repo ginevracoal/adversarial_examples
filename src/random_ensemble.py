@@ -45,10 +45,10 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.random_seeds = list(range(n_proj))  # random.sample(list(range(1, 1000)), n_proj)
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.trained = False
         self.classifiers = None
@@ -249,13 +249,14 @@ class RandomEnsemble(BaselineConvnet):
         return x_adv
 
     def _set_model_path(self):
-        return {'folder': MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) + "_" +
-                         str(self.projection_mode) + "/",
+        return {'folder': MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) +
+                          "_" + str(self.projection_mode) + "/",
                 'filename': None}
 
     def _set_baseline_filename(self, seed):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
-        return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_" + str(self.projection_mode) + \
+        return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_epochs=" + str(self.epochs) + \
+               "_" + str(self.projection_mode) + \
                "_" + str(seed)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
@@ -286,9 +287,8 @@ class RandomEnsemble(BaselineConvnet):
         for i in range(self.n_proj):
             proj_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                               data_format=self.data_format, dataset_name=self.dataset_name)
-            proj_classifier.filename = self._set_baseline_filename(seed=i)
-            proj_classifier.folder = self.folder
-            classifiers.append(proj_classifier.load_classifier(relative_path=relative_path))
+            classifiers.append(proj_classifier.load_classifier(relative_path=relative_path, folder=self.folder,
+                                                               filename=self._set_baseline_filename(seed=i)))
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
         self.classifiers = classifiers
@@ -321,8 +321,8 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    model.train(x_train, y_train, device=device)
-    model.save_classifier(relative_path=RESULTS)
+    # model.train(x_train, y_train, device=device)
+    # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
     # model.load_classifier(relative_path=TRAINED_MODELS)

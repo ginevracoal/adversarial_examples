@@ -3,7 +3,6 @@
 from random_ensemble import *
 from projection_functions import compute_single_projection
 from utils import load_dataset
-import multiprocessing
 from joblib import Parallel, delayed
 
 MODEL_NAME = "random_ensemble"
@@ -22,19 +21,6 @@ class ParallelRandomEnsemble(RandomEnsemble):
     @staticmethod
     def _set_session(device):
         return None
-
-    def save_classifier(self, relative_path, folder=None, filename=None):
-        """
-        Saves all projections classifiers separately.
-        :param relative_path: relative path of the folder containing the list of trained classifiers.
-                              It can be either TRAIN ED_MODELS or RESULTS
-        :param filename: filename
-        """
-        if self.trained:
-            super(RandomEnsemble, self).save_classifier(relative_path=relative_path, folder=self.folder,
-                                                        filename=self._set_baseline_filename(seed=self.proj_idx))
-        else:
-            raise ValueError("Train the model first.")
 
     def train_single_projection(self, x_train, y_train, device, proj_idx):
         """ Trains a single projection of the ensemble classifier and saves the model in current day results folder."""
@@ -59,10 +45,12 @@ class ParallelRandomEnsemble(RandomEnsemble):
         print("\nProjection + training time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
 
-        self.save_classifier(relative_path=RESULTS)
+        super(RandomEnsemble, randens).save_classifier(relative_path=RESULTS, folder=self.folder,
+                                                       filename=self._set_baseline_filename(seed=self.proj_idx))
         return randens
 
     def parallel_train(self, device):
+        import multiprocessing
         Parallel(n_jobs=20)(  # multiprocessing.cpu_count()
             delayed(_parallel_train)(dataset_name=self.dataset_name, test=self.test, n_proj=self.n_proj,
                                      proj_idx=proj_idx, size_proj=self.size_proj, proj_mode=self.projection_mode,
