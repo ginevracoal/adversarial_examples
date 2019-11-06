@@ -257,7 +257,7 @@ class RandomEnsemble(BaselineConvnet):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
         filename = self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
                    "_" + str(self.projection_mode)
-        if self.epochs == "early_stopping":
+        if self.n_epochs == "early_stopping":
             return filename + "_" + str(seed)
         else:
             return filename + "_epochs=" + str(self.epochs) + "_" + str(seed)

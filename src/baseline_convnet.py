@@ -25,7 +25,7 @@ class BaselineConvnet(AdversarialClassifier):
 
     def _set_model_path(self):
         folder =  MODEL_NAME+"/",
-        if self.epochs == "early_stopping":
+        if self.n_epochs == "early_stopping":
             filename = self.dataset_name + "_" + MODEL_NAME
         else:
             filename = self.dataset_name + "_" + MODEL_NAME + "_epochs=" + str(self.epochs)
@@ -39,7 +39,7 @@ class BaselineConvnet(AdversarialClassifier):
         :return: batch_size, epochs
         """
         batch_size = 100 if test else 500
-        epochs = "test" if test else epochs
+        epochs = 50 if epochs == "early_stopping" else epochs
         return {'batch_size': batch_size, 'epochs': epochs}
 
     def _get_logits(self, inputs):
