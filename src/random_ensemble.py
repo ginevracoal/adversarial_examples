@@ -25,7 +25,8 @@ class RandomEnsemble(BaselineConvnet):
     `size_proj`^2), then classifies the original high dimensional data with an ensemble classifier, summing up the
     probabilities from the single projections.
     """
-    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test):
+    def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test,
+                 epochs="early_stopping"):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
 
@@ -46,7 +47,7 @@ class RandomEnsemble(BaselineConvnet):
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, epochs)
         self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
@@ -254,12 +255,12 @@ class RandomEnsemble(BaselineConvnet):
 
     def _set_baseline_filename(self, seed):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
-        if EARLY_STOPPING:
-            return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
-                   "_" + str(self.projection_mode) + "_" + str(seed)
+        filename = self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
+                   "_" + str(self.projection_mode)
+        if self.epochs == "early_stopping":
+            return filename + "_" + str(seed)
         else:
-            return self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + "_epochs=" + str(self.epochs) + \
-                   "_" + str(self.projection_mode) + "_" + str(seed)
+            return filename + "_epochs=" + str(self.epochs) + "_" + str(seed)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
         """

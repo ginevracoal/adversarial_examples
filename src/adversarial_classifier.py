@@ -17,7 +17,6 @@ from keras.models import load_model
 # defaults #
 ############
 
-EARLY_STOPPING = False
 MINIBATCH = 20
 EPS = 0.3
 
@@ -33,18 +32,17 @@ class AdversarialClassifier(sklKerasClassifier):
     Adversarial Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs="early_stopping"):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
         self.dataset_name = dataset_name
         self.test = test
         self.model = self._set_model()
-        self.batch_size, self.epochs = self._set_training_params(test=test).values()
+        self.batch_size, self.epochs = self._set_training_params(test=test, epochs=epochs).values()
         super(AdversarialClassifier, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
         self.classes_ = self._set_classes()
-        self.folder = self._set_model_path()['folder']
-        self.filename = self._set_model_path()['filename']
+        self.folder, self.filename = self._set_model_path().values()
         self.trained = False
 
     # todo: docstrings
@@ -52,7 +50,7 @@ class AdversarialClassifier(sklKerasClassifier):
         raise NotImplementedError
 
     @staticmethod
-    def _set_training_params(test):
+    def _set_training_params(test, epochs):
         raise NotImplementedError
 
     def _get_logits(self, inputs):
@@ -112,12 +110,12 @@ class AdversarialClassifier(sklKerasClassifier):
         device_name = self._set_device_name(device)
         with tf.device(device_name):
             mini_batch = MINIBATCH
-            if EARLY_STOPPING:
-                early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+            if self.epochs == "early_stopping":
+                es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
                 self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
                                    metrics=['accuracy'])
                 start_time = time.time()
-                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, callbacks=[early_stopping])
+                self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es])
             else:
                 self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
                                    metrics=['accuracy'])

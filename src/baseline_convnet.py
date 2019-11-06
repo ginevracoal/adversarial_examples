@@ -17,28 +17,30 @@ MODEL_NAME = "baseline"
 
 class BaselineConvnet(AdversarialClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs="early_stopping"):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
-        super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
+        super(BaselineConvnet, self).__init__(input_shape, num_classes, data_format, dataset_name, test, epochs)
 
     def _set_model_path(self):
-        return {'folder': MODEL_NAME+"/",
-                'filename': self.dataset_name + "_" + MODEL_NAME   # + "_epochs=" + str(self.epochs)
-                }
+        folder =  MODEL_NAME+"/",
+        if self.epochs == "early_stopping":
+            filename = self.dataset_name + "_" + MODEL_NAME
+        else:
+            filename = self.dataset_name + "_" + MODEL_NAME + "_epochs=" + str(self.epochs)
+        return {'folder': folder, 'filename': filename}
 
     @staticmethod
-    def _set_training_params(test):
+    def _set_training_params(test, epochs):
         """
         Defines training parameters
         :param test: if True only takes the first 100 samples
         :return: batch_size, epochs
         """
-        if test:
-            return {'batch_size': 100, 'epochs': 1}
-        else:
-            return {'batch_size': 500, 'epochs': 100}
+        batch_size = 100 if test else 500
+        epochs = "test" if test else epochs
+        return {'batch_size': batch_size, 'epochs': epochs}
 
     def _get_logits(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
@@ -150,12 +152,12 @@ def main(dataset_name, test, attack, eps, device):
                             dataset_name=dataset_name, test=test)
 
     # === training === #
-    model.train(x_train, y_train, device)
+    # model.train(x_train, y_train, device)
     # model.save_classifier(relative_path=RESULTS)
-
+    # exit()
     # === load classifier === #
     # model.load_classifier(relative_path=RESULTS)
-    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path=TRAINED_MODELS)
     # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
 
     # === adversarial training === #
