@@ -17,7 +17,7 @@ MODEL_NAME = "baseline"
 
 class BaselineConvnet(AdversarialClassifier):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs="early_stopping"):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs=None):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
@@ -25,7 +25,7 @@ class BaselineConvnet(AdversarialClassifier):
 
     def _set_model_path(self):
         folder =  MODEL_NAME+"/",
-        if self.n_epochs == "early_stopping":
+        if self.epochs == None:
             filename = self.dataset_name + "_" + MODEL_NAME
         else:
             filename = self.dataset_name + "_" + MODEL_NAME + "_epochs=" + str(self.epochs)
@@ -39,7 +39,6 @@ class BaselineConvnet(AdversarialClassifier):
         :return: batch_size, epochs
         """
         batch_size = 100 if test else 500
-        epochs = 50 if epochs == "early_stopping" else epochs
         return {'batch_size': batch_size, 'epochs': epochs}
 
     def _get_logits(self, inputs):
