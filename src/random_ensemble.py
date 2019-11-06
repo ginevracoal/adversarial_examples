@@ -186,15 +186,15 @@ class RandomEnsemble(BaselineConvnet):
         predictions = predictions / predictions.sum(axis=1)[:, None]
         return predictions
 
-    def predict(self, x, add_baseline_prob=ADD_BASELINE_PROB, **kwargs):
+    def predict(self, x, **kwargs):
         """
         # todo docstring
-        Compute the ensemble prediction.
+        Compute the ensemble prediction probability vector.
 
         :param classifiers: list of trained classifiers over different projections
         :param data: input data
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
-        :return: final predictions for the input data
+        :return: probability vector final predictions for the input data
         """
         projected_data, _ = self.compute_projections(x)
 
@@ -204,7 +204,7 @@ class RandomEnsemble(BaselineConvnet):
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(self.classifiers, projected_data)
 
-        if add_baseline_prob:
+        if ADD_BASELINE_PROB:
             print("\nAdding baseline probability vector to the predictions.")
             baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
@@ -323,11 +323,11 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test)
     # === train === #
-    model.train(x_train, y_train, device=device)
-    model.save_classifier(relative_path=RESULTS)
+    # model.train(x_train, y_train, device=device)
+    # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path=TRAINED_MODELS)
     # model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #

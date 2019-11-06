@@ -129,7 +129,8 @@ class AdversarialClassifier(sklKerasClassifier):
             return self
 
     def predict(self, x, **kwargs):
-        return np.argmax(self.model.predict(x), axis=1)
+        return self.model.predict(x)
+        # return np.argmax(self.model.predict(x), axis=1)
 
     def evaluate(self, x, y):
         """
@@ -140,7 +141,7 @@ class AdversarialClassifier(sklKerasClassifier):
         """
         if self.trained:
             y_true = np.argmax(y, axis=1)
-            y_pred = self.predict(x)
+            y_pred = np.argmax(self.predict(x), axis=1)
             nb_correct_adv_pred = np.sum(y_pred == y_true)
 
             print("\nTest data.")
