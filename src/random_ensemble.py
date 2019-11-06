@@ -14,7 +14,7 @@ from projection_functions import *
 ############
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = False
+ADD_BASELINE_PROB = True
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 MODEL_NAME = "randens"
 
@@ -26,7 +26,7 @@ class RandomEnsemble(BaselineConvnet):
     probabilities from the single projections.
     """
     def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test,
-                 epochs="early_stopping"):
+                 epochs=None):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
 
@@ -209,8 +209,9 @@ class RandomEnsemble(BaselineConvnet):
             print("\nAdding baseline probability vector to the predictions.")
             baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
-            baseline.load_classifier(relative_path=TRAINED_MODELS)
+            baseline.load_classifier(relative_path=TRAINED_MODELS, folder="baseline/", filename=baseline.filename)
             baseline_predictions = baseline.predict(x)
+
             # sum the probabilities across all predictors
             final_predictions = np.add(predictions, baseline_predictions)
             return final_predictions
@@ -257,7 +258,7 @@ class RandomEnsemble(BaselineConvnet):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
         filename = self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
                    "_" + str(self.projection_mode)
-        if self.n_epochs == "early_stopping":
+        if self.epochs == None:
             return filename + "_" + str(seed)
         else:
             return filename + "_epochs=" + str(self.epochs) + "_" + str(seed)
@@ -322,18 +323,18 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name, test=test)
+                           data_format=data_format, dataset_name=dataset_name, test=test, epochs=100)
     # === train === #
     # model.train(x_train, y_train, device=device)
     # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    model.load_classifier(relative_path=TRAINED_MODELS)
-    # model.load_classifier(relative_path=RESULTS)
+    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
-    model.evaluate(x=x_test, y=y_test)
-    for method in ['fgsm', 'pgd', 'deepfool','carlini']:
+    # model.evaluate(x=x_test, y=y_test)
+    for method in ['fgsm', 'pgd', 'carlini']: #'deepfool',
         x_test_adv = model.load_adversaries(attack=method, eps=eps)
         model.evaluate(x_test_adv, y_test)
 

@@ -13,7 +13,7 @@ DATASETS = "mnist, cifar"
 class ParallelRandomEnsemble(RandomEnsemble):
 
     def __init__(self, input_shape, num_classes, size_proj, proj_idx, data_format, dataset_name, projection_mode, test,
-                 epochs = "early_stopping"):
+                 epochs=None):
         super(ParallelRandomEnsemble, self).__init__(input_shape=input_shape, num_classes=num_classes, n_proj=1,
                                                      size_proj=size_proj, projection_mode=projection_mode,
                                                      data_format=data_format, dataset_name=dataset_name, test=test,

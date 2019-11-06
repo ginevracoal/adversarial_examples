@@ -32,7 +32,7 @@ class AdversarialClassifier(sklKerasClassifier):
     Adversarial Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs="early_stopping"):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs=None):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
@@ -40,7 +40,6 @@ class AdversarialClassifier(sklKerasClassifier):
         self.test = test
         self.model = self._set_model()
         self.batch_size, self.epochs = self._set_training_params(test=test, epochs=epochs).values()
-        self.n_epochs = epochs # can be either a string or a number
         super(AdversarialClassifier, self).__init__(build_fn=self.model, batch_size=self.batch_size, epochs=self.epochs)
         self.classes_ = self._set_classes()
         self.folder, self.filename = self._set_model_path().values()
@@ -111,12 +110,12 @@ class AdversarialClassifier(sklKerasClassifier):
         device_name = self._set_device_name(device)
         with tf.device(device_name):
             mini_batch = MINIBATCH
-            if self.epochs == "early_stopping":
+            if self.epochs == None:
                 es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
                 self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
                                    metrics=['accuracy'])
                 start_time = time.time()
-                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, callbacks=[es])
+                self.model.fit(x_train, y_train, epochs=30, batch_size=mini_batch, callbacks=[es])
             else:
                 self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
                                    metrics=['accuracy'])
@@ -161,7 +160,7 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             return np.inf
 
-    def generate_adversaries(self, x, y, attack, eps=EPS):
+    def generate_adversaries(self, x, y, attack, eps):
         """
         Generates adversaries on the input data x using a given attack method.
 
