@@ -51,8 +51,8 @@ class ParallelRandomEnsemble(RandomEnsemble):
         return proj_classifier
 
     def parallel_train(self, device):
-        # import multiprocessing
-        self.classifiers = Parallel(n_jobs=2)(  # multiprocessing.cpu_count()
+        import multiprocessing
+        self.classifiers = Parallel(n_jobs=multiprocessing.cpu_count())(
             delayed(_parallel_train)(dataset_name=self.dataset_name, test=self.test, proj_idx=proj_idx,
                                      size_proj=self.size_proj, proj_mode=self.projection_mode, device=device)
             for proj_idx in range(self.n_proj))
@@ -60,17 +60,22 @@ class ParallelRandomEnsemble(RandomEnsemble):
 
     def _sum_ensemble_classifier(self, classifiers, projected_data):
         # compute predictions for each projection
-        results = Parallel(n_jobs=2)(  # multiprocessing.cpu_count()
-            delayed(_parallel_predict)(classifier=classifier, projected_data=projected_data[i])
+        import multiprocessing
+        results = Parallel(n_jobs=multiprocessing.cpu_count())(
+            delayed(_parallel_predict)(classifier=classifier, projected_data=projected_data[i], device=device)
             for i, classifier in enumerate(classifiers))
         proj_predictions = np.array(results)
-        # proj_predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
         # sum the probabilities across all predictors
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
 
-    def parallel_evaluate(self, x, y, device):
-        # todo settare la scelta del device
+    def parallel_evaluate(self, x, y):
+        """
+        Performs parallel evaluation of the ensemble model on cpu.
+        :param x: evaluation data
+        :param y: evaluation labels
+        :return: model predictions
+        """
         super(ParallelRandomEnsemble, self).evaluate(x, y)
 
     # def load_classifier(self, relative_path, folder=None, filename=None):
@@ -86,8 +91,6 @@ def _set_session(device):
     # print(device_lib.list_local_devices())
     from keras.backend.tensorflow_backend import set_session
     if device == "gpu":
-        # print("check cuda: ", tf.test.is_built_with_cuda())
-        # print("check gpu: ", tf.test.is_gpu_available())
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
         config.allow_soft_placement = True
@@ -95,6 +98,8 @@ def _set_session(device):
         sess = tf.Session(config=config)
         set_session(sess)  # set this TensorFlow session as the default session for Keras
         sess.run(tf.global_variables_initializer())
+        # print("check cuda: ", tf.test.is_built_with_cuda())
+        # print("check gpu: ", tf.test.is_gpu_available())
         return sess
 
 
@@ -139,7 +144,7 @@ def main(dataset_name, test, proj_idx, n_proj, size_proj, proj_mode, device):
                                    projection_mode=proj_mode, test=test)
     # model.parallel_train(device=device)
     model.load_classifier(relative_path=RESULTS)
-    model.parallel_evaluate(x=x_test, y=y_test, device=device)
+    model.parallel_evaluate(x=x_test, y=y_test)
 
     # deprecated:
     # model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj, n_proj=n_proj,
@@ -172,6 +177,6 @@ if __name__ == "__main__":
         device = input("\nChoose a device (cpu/gpu): ")
 
     for size_proj in size_proj_list:
-        main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, size_proj=size_proj, proj_mode=projection_mode,
-             device=device, n_proj=n_proj)
+        main(dataset_name=dataset_name, test=test, proj_idx=proj_idx, n_proj=n_proj, size_proj=size_proj,
+             proj_mode=projection_mode, device=device)
 

@@ -38,7 +38,7 @@
 SCRIPT="parallel_randens"
 DATASET_NAME="mnist"
 TEST="True"
-PROJ_IDX=0
+N_PROJ=2
 SIZE_PROJ_LIST=[8] #[8,12,16,20]
 PROJ_MODE="channels"
 DEVICE="gpu"
@@ -99,10 +99,9 @@ elif [ $SCRIPT = "randens" ]; then
   python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK $EPS $DEVICE>> $OUT
   sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
-#  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $PROJ_IDX $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
-  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
-  for proj_idx in $(seq 50); do #2); do
-    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $proj_idx $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $N_PROJ $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  for proj_idx in $(seq 0 1 10); do
+    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $proj_idx 1 $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
   done
 #  sed -n '/ETA:/!p' $OUT  > $CLEAN_OUT
   grep -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
