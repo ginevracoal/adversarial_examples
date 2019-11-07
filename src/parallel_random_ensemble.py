@@ -95,22 +95,22 @@ class ParallelRandomEnsemble(RandomEnsemble):
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
 
-    # def evaluate(self, x, y, report_projections=False):
-    #     """
-    #     Performs parallel evaluation of the ensemble model on cpu.
-    #     :param x: evaluation data
-    #     :param y: evaluation labels
-    #     :return: model predictions
-    #     """
-    #     super(ParallelRandomEnsemble, self).evaluate(x, y)
+    def load_classifier(self, relative_path, folder=None, filename=None):
+        start_time = time.time()
+        classifiers = Parallel(n_jobs=self.n_jobs)(
+            delayed(_parallel_load_classifier)(input_shape = self.input_shape, num_classes=self.num_classes,
+                                               data_format=self.data_format, dataset_name=self.dataset_name,
+                                               relative_path=relative_path, folder=self.folder,
+                                               filename=self._set_baseline_filename(seed=i))
+            for i in list(self.random_seeds))
+        print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
-    # def load_classifier(self, relative_path, folder=None, filename=None):
-    #     classifiers = super(ParallelRandomEnsemble, self).load_classifier(relative_path, folder, filename)
-    #     for classifier in classifiers:
-    #         classifier.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-    #                                metrics=['accuracy'])
-    #         # classifier.model._make_predict_function()
-    #     return classifiers
+        # for classifier in classifiers:
+        #     classifier.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+        #                            metrics=['accuracy'])
+        #     # classifier.model._make_predict_function()
+        self.classifiers = classifiers
+        return classifiers
 
 def _set_session(device):
     """ Initialize tf session """
@@ -154,27 +154,36 @@ def _parallel_train(dataset_name, test, proj_idx, size_proj, proj_mode, device):
     del tf
 
 
-def  _parallel_compute_projections(input_data, proj_idx, size_proj, projection_mode):
+def _parallel_compute_projections(input_data, proj_idx, size_proj, projection_mode):
     projection, _ = compute_single_projection(input_data=input_data, seed=proj_idx,
                                                                size_proj=size_proj, projection_mode=projection_mode)
     return projection
+
+
+def _parallel_load_classifier(input_shape, num_classes, data_format, dataset_name, relative_path, folder, filename):
+    classifier = BaselineConvnet(input_shape=input_shape, num_classes=num_classes,
+                                 test=test, data_format=data_format, dataset_name=dataset_name)
+    classifier.load_classifier(relative_path=relative_path, folder=folder, filename=filename)
+    return classifier
 
 
 def main(dataset_name, test, proj_idx, n_proj, size_proj, proj_mode, device):
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
-    # === train and save a single projection === #
-    # model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
-    #                                proj_idx=proj_idx, n_proj=1, data_format=data_format, dataset_name=dataset_name,
-    #                                projection_mode=proj_mode, test=test)
-    # model.train_single_projection(x_train, y_train, proj_idx=proj_idx, device=device)
+    if n_proj == 1:
+        # === train and save a single projection === #
+        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
+                                       proj_idx=proj_idx, n_proj=1, data_format=data_format, dataset_name=dataset_name,
+                                       projection_mode=proj_mode, test=test)
+        model.train_single_projection(x_train, y_train, proj_idx=proj_idx, device=device)
+        exit()
 
-    # === parallel train and save the whole ensemble === #
+    # === parallel train, save and load the whole ensemble === #
     model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                    proj_idx=None, n_proj=n_proj, data_format=data_format, dataset_name=dataset_name,
                                    projection_mode=proj_mode, test=test)
-    # model.train(x_train, y_train, device=device)
+    # model.train(x_train, y_train, device="cpu")
     model.load_classifier(relative_path=RESULTS)
     # model.load_classifier(relative_path=TRAINED_MODELS)
 
@@ -206,7 +215,7 @@ if __name__ == "__main__":
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         proj_idx = input("\nSet a seed for projections (int): ")
-        n_proj = input("\nChoose the number of projections (type=list): ")
+        n_proj = input("\nChoose the number of projections (type=int): ")
         size_proj_list = input("\nChoose size for the projection (list): ")
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         device = input("\nChoose a device (cpu/gpu): ")

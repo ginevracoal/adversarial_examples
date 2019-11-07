@@ -38,7 +38,7 @@
 SCRIPT="parallel_randens"
 DATASET_NAME="mnist"
 TEST="True"
-N_PROJ=2
+N_PROJ=20
 SIZE_PROJ_LIST=[8] #[8,12,16,20]
 PROJ_MODE="channels"
 DEVICE="gpu"
@@ -94,18 +94,19 @@ COMPLEXITY="${FILEPATH}_complexity.txt"
 
 if [ $SCRIPT = "baseline" ]; then
   python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK $EPS > $OUT
-  sed -n '/ETA:/!p' $OUT > $CLEAN_OUT
+  grep -e "Epo" -B 1 $OUT > $CLEAN_OUT
 elif [ $SCRIPT = "randens" ]; then
   python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK $EPS $DEVICE>> $OUT
-  sed -n '/ETA:/!p' $OUT  >> $CLEAN_OUT
+  grep -e "Epo" -B 1 $OUT  >> $CLEAN_OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
-  python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $N_PROJ $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
-  for proj_idx in $(seq 0 1 10); do
-    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $proj_idx 1 $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
-  done
-#  sed -n '/ETA:/!p' $OUT  > $CLEAN_OUT
-  grep -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
-  grep -e "Rand" -e "Training time for" $OUT > $COMPLEXITY
+  ## train
+#  for proj_idx in $(seq 0 1 3); do
+#    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST $proj_idx 1 $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+#  done
+  ## evaluate
+    python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $N_PROJ $SIZE_PROJ_LIST $PROJ_MODE $DEVICE >> $OUT
+  grep -e "Epo" -e "seed" -B 1 $OUT  >> $CLEAN_OUT
+  grep -e "seed" -e "time" -B 2 $OUT > $COMPLEXITY
 elif [ $SCRIPT = "randreg" ]; then
   python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $EPS $DEVICE $SEED >> $OUT
   grep -e "batch" -e "time" -e "accu" -B 8 $OUT  >> $CLEAN_OUT
