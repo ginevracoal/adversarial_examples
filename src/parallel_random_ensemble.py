@@ -4,7 +4,6 @@ from random_ensemble import *
 from projection_functions import compute_single_projection
 from utils import load_dataset
 from joblib import Parallel, delayed
-import multiprocessing
 
 MODEL_NAME = "random_ensemble"
 PROJ_MODE = "channels"
@@ -20,7 +19,6 @@ class ParallelRandomEnsemble(RandomEnsemble):
                                                      data_format=data_format, dataset_name=dataset_name, test=test,
                                                      epochs=epochs)
         self.proj_idx = proj_idx
-        self.n_jobs = 2  # multiprocessing.cpu_count()
 
     @staticmethod
     def _set_session(device):
@@ -47,48 +45,56 @@ class ParallelRandomEnsemble(RandomEnsemble):
         proj_classifier.train(x_train_projected, y_train, device)
         print("\nProjection + training time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
-        # todo: bug in saving when using parallel implementation
         proj_classifier.save_classifier(relative_path=RESULTS, folder=self.folder,
                                         filename=self._set_baseline_filename(seed=self.proj_idx))
         return proj_classifier
 
-    def train(self, x, y, device):
-        self.classifiers = Parallel(n_jobs=self.n_jobs)(
-            delayed(_parallel_train)(dataset_name=self.dataset_name, test=self.test, proj_idx=proj_idx,
-                                     size_proj=self.size_proj, proj_mode=self.projection_mode, device=device)
-            for proj_idx in range(self.n_proj))
+    def train(self, x, y, device, n_jobs=2):
+        # n_jobs = 2 if device == "gpu" else 20 # self.n_proj
+        # n_jobs = self.n_proj
+        classifiers = Parallel(n_jobs=n_jobs)(
+            delayed(_parallel_train)(x_train=x, y_train=y, dataset_name=self.dataset_name, input_shape=self.input_shape,
+                                     num_classes=self.num_classes, data_format=self.data_format, test=self.test,
+                                     proj_idx=proj_idx, device=device, size_proj=self.size_proj,
+                                     proj_mode=self.projection_mode, n_jobs=n_jobs)
+            for proj_idx in range(0,self.n_proj))
         self.trained = True
+        self.classifiers = classifiers
+        return classifiers
 
-    def compute_projections(self, input_data):
-        """
-        Parallel implementation of this method
-        :param input_data:
-        :return:
-        """
-        projections = Parallel(n_jobs=self.n_jobs)(
-            delayed(_parallel_compute_projections)(input_data, proj_idx=proj_idx, size_proj=self.size_proj,
-                                                   projection_mode=self.projection_mode)
-            for proj_idx in self.random_seeds)
-
-        # eventually adjust input dimension to a single channel projection
-        projections = np.array(projections)
-
-        if projections.shape[4] == 1:
-            self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
-        else:
-            self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
-        return projections, None
+    # def compute_projections(self, input_data):
+    #     """
+    #     Parallel implementation of this method
+    #     :param input_data:
+    #     :return:
+    #     """
+    #     n_jobs = self.n_proj # 2 if device == "gpu" else self.n_proj
+    #     projections = Parallel(n_jobs=n_jobs)(
+    #         delayed(_parallel_compute_projections)(input_data, proj_idx=proj_idx, size_proj=self.size_proj,
+    #                                                projection_mode=self.projection_mode, n_jobs=n_jobs)
+    #         for proj_idx in self.random_seeds)
+    #
+    #     # eventually adjust input dimension to a single channel projection
+    #     projections = np.array(projections)
+    #
+    #     if projections.shape[4] == 1:
+    #         self.input_shape = (self.input_shape[0], self.input_shape[1], 1)
+    #     else:
+    #         self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
+    #     return projections, None
 
     def _sum_ensemble_classifier(self, classifiers, projected_data):
         """
         Parallelized version of this method.
         :param classifiers: list of trained classifiers
-        :param projected_data: list of projected data for all of the n_prok random initializations
+        :param projected_data: list of projected data for all of the n_proj random initializations
         :return:
         """
+        n_jobs = 2 if device == "gpu" else self.n_proj
         # compute predictions for each projection
-        results = Parallel(n_jobs=self.n_jobs)(
-            delayed(_parallel_predict)(classifier=classifier, projected_data=projected_data[i], device=device)
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(_parallel_predict)(classifier=classifier, projected_data=projected_data[i], device=device,
+                                       n_jobs=n_jobs)
             for i, classifier in enumerate(classifiers))
         proj_predictions = np.array(results)
         # sum the probabilities across all predictors
@@ -96,15 +102,16 @@ class ParallelRandomEnsemble(RandomEnsemble):
         return predictions
 
     def load_classifier(self, relative_path, folder=None, filename=None):
+        n_jobs = self.n_proj
+        K.clear_session()
         start_time = time.time()
-        classifiers = Parallel(n_jobs=self.n_jobs)(
+        classifiers = Parallel(n_jobs=n_jobs)(
             delayed(_parallel_load_classifier)(input_shape = self.input_shape, num_classes=self.num_classes,
                                                data_format=self.data_format, dataset_name=self.dataset_name,
-                                               relative_path=relative_path, folder=self.folder,
+                                               relative_path=relative_path, folder=self.folder, n_jobs=n_jobs,
                                                filename=self._set_baseline_filename(seed=i))
             for i in list(self.random_seeds))
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
-
         # for classifier in classifiers:
         #     classifier.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
         #                            metrics=['accuracy'])
@@ -112,15 +119,57 @@ class ParallelRandomEnsemble(RandomEnsemble):
         self.classifiers = classifiers
         return classifiers
 
-def _set_session(device):
+    def evaluate(self, x, y,report_projections=False, model_path=RESULTS, device="cpu"):
+        # todo:
+        # chiamo in parallelo un metodo che calcola le previsioni su ogni proiezione, ovvero che dato un seed carica
+        # il modello corrispondente, la proiezione e restituisce la distribuzione di prob. Dopo di che metto tutti i
+        # vettori in una lista e chiamo il _sum_ensemble
+        K.clear_session()
+        n_jobs = 2 if device == "gpu" else self.n_proj
+        proj_predictions = Parallel(n_jobs=n_jobs)(
+            delayed(_parallel_evaluate)(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
+                                        data_format=self.data_format, dataset_name=self.dataset_name,
+                                        relative_path=model_path, folder=self.folder, input_data=x, seed=i,
+                                        filename=self._set_baseline_filename(seed=i), size_proj=self.size_proj,
+                                        projection_mode=self.projection_mode)
+            for i in list(self.random_seeds))
+        predictions = np.sum(np.array(proj_predictions), axis=0)
+        # print(np.array(proj_predictions)[:,0])
+        # print(predictions[0])
+        # exit()
+
+        y_pred = np.argmax(predictions, axis=1)
+        y_true = np.argmax(y, axis=1)
+        nb_correct_adv_pred = np.sum(y_pred == y_true)
+
+        print("\nCorrectly classified: {}".format(nb_correct_adv_pred))
+        print("Incorrectly classified: {}".format(len(x) - nb_correct_adv_pred))
+
+        acc = nb_correct_adv_pred / y.shape[0]
+        print("Accuracy: %.2f%%" % (acc * 100))
+        return acc
+
+def _parallel_evaluate(input_shape, num_classes, test, data_format, dataset_name, relative_path, folder, filename,
+                       size_proj, input_data, seed, projection_mode):
+    classifier = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, test=test, data_format=data_format,
+                                 dataset_name=dataset_name)
+    classifier.load_classifier(relative_path=relative_path, folder=folder, filename=filename)
+    print("Parallel computing projection ", seed)
+    projection, _ = compute_single_projection(input_data=input_data, seed=seed, size_proj=size_proj,
+                                              projection_mode=projection_mode)
+    prediction = classifier.predict(projection)
+    return prediction
+
+def _set_session(device, n_jobs):
     """ Initialize tf session """
     # print(device_lib.list_local_devices())
     from keras.backend.tensorflow_backend import set_session
     if device == "gpu":
         config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-        config.allow_soft_placement = True
-        config.log_device_placement = True  # to log device placement (on which device the operation ran)
+        # config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+        # config.allow_soft_placement = True
+        # config.log_device_placement = True  # to log device placement (on which device the operation ran)
+        config.gpu_options.per_process_gpu_memory_fraction = 1/n_jobs
         sess = tf.Session(config=config)
         set_session(sess)  # set this TensorFlow session as the default session for Keras
         sess.run(tf.global_variables_initializer())
@@ -129,24 +178,25 @@ def _set_session(device):
         return sess
 
 
-def _parallel_predict(classifier, projected_data, device="cpu"):
+def _parallel_predict(classifier, projected_data, n_jobs, device):
     import tensorflow as tf
-    _set_session(device)
+    _set_session(device, n_jobs)
     # use the same computational graph of training for the predictions
     g = tf.get_default_graph()
     with g.as_default():
         predictions = classifier.predict(projected_data)
     del tf
+    del g
     return predictions
 
 
-def _parallel_train(dataset_name, test, proj_idx, size_proj, proj_mode, device):
+def _parallel_train(x_train, y_train, input_shape, num_classes, data_format, dataset_name, test, proj_idx, size_proj,
+                    proj_mode, n_jobs, device):
+    print("\nParallel training projection ", proj_idx)
     import tensorflow as tf
-    _set_session(device)
+    _set_session(device, n_jobs)
     g = tf.Graph()
     with g.as_default():
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
-
         model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                        proj_idx=proj_idx, data_format=data_format, dataset_name=dataset_name,
                                        projection_mode=proj_mode, test=test, n_proj=1)
@@ -154,13 +204,19 @@ def _parallel_train(dataset_name, test, proj_idx, size_proj, proj_mode, device):
     del tf
 
 
-def _parallel_compute_projections(input_data, proj_idx, size_proj, projection_mode):
+def _parallel_compute_projections(input_data, proj_idx, size_proj, projection_mode, n_jobs):
+    _set_session(device, n_jobs)
+    print("\nParallel computing projection ", proj_idx)
     projection, _ = compute_single_projection(input_data=input_data, seed=proj_idx,
                                                                size_proj=size_proj, projection_mode=projection_mode)
     return projection
 
 
-def _parallel_load_classifier(input_shape, num_classes, data_format, dataset_name, relative_path, folder, filename):
+def _parallel_load_classifier(input_shape, num_classes, data_format, dataset_name, relative_path, folder, filename,
+                              n_jobs):
+    _set_session(device, n_jobs)
+    # g = tf.Graph()
+    # with g.as_default():
     classifier = BaselineConvnet(input_shape=input_shape, num_classes=num_classes,
                                  test=test, data_format=data_format, dataset_name=dataset_name)
     classifier.load_classifier(relative_path=relative_path, folder=folder, filename=filename)
@@ -171,33 +227,30 @@ def main(dataset_name, test, proj_idx, n_proj, size_proj, proj_mode, device):
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
-    if n_proj == 1:
-        # === train and save a single projection === #
-        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
-                                       proj_idx=proj_idx, n_proj=1, data_format=data_format, dataset_name=dataset_name,
-                                       projection_mode=proj_mode, test=test)
-        model.train_single_projection(x_train, y_train, proj_idx=proj_idx, device=device)
-        exit()
+    # === serial gpu training === #
+    # model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
+    #                                proj_idx=proj_idx, n_proj=1, data_format=data_format, dataset_name=dataset_name,
+    #                                projection_mode=proj_mode, test=test)
+    # for proj_idx in range(n_proj):
+    #     model.train_single_projection(x_train, y_train, proj_idx=proj_idx, device=device)
+    # exit()
 
     # === parallel train, save and load the whole ensemble === #
     model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                    proj_idx=None, n_proj=n_proj, data_format=data_format, dataset_name=dataset_name,
                                    projection_mode=proj_mode, test=test)
-    # model.train(x_train, y_train, device="cpu")
-    model.load_classifier(relative_path=RESULTS)
-    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.train(x_train, y_train, device=device)
 
-    # === parallel evaluate === #
-    model.evaluate(x=x_test, y=y_test)
-    for method in ['fgsm', 'pgd', 'carlini']:
-        x_test_adv = model.load_adversaries(attack=method, eps=0.3)
-        model.evaluate(x_test_adv, y_test)
-    for method in ['fgsm', 'pgd', 'carlini']:
-        x_test_adv = model.load_adversaries(attack=method, eps=0.5)
-        model.evaluate(x_test_adv, y_test)
+    model_path = RESULTS
+    model.parallel_evaluate(x=x_test, y=y_test, device=device, model_path=model_path)
+    for attack in ["fgsm","pgd","carlini"]:
+        x_test_adv = model.load_adversaries(attack=attack, eps=0.3)
+        model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
+    # x_test_adv = model.load_adversaries(attack="carlini", eps=0.5)
+    # model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
+    x_test_adv = model.load_adversaries(attack="deepfool",eps=None)
+    model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
 
-    x_test_adv = model.load_adversaries(attack="deepfool", eps=None)
-    model.evaluate(x_test_adv, y_test)
 
 
 if __name__ == "__main__":
