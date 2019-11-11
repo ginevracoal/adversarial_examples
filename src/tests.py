@@ -23,7 +23,6 @@ class Test(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(Test, self).__init__(*args, **kwargs)
-        # self.eps=0.3
         self.dataset = "mnist"
         self.x_train, self.y_train, self.x_test, self.y_test, \
         self.input_shape, self.num_classes, self.data_format = load_dataset(dataset_name="mnist", test=True)
@@ -100,7 +99,7 @@ class Test(unittest.TestCase):
                                                                                                test=True)
         model = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                   dataset_name=dataset_name, lam=0.6, projection_mode="no_projections", test=True)
-        model.train(x_train, y_train, device=DEVICE)
+        model.train(x_train, y_train, device="cpu")
         model.evaluate(x=x_test, y=y_test)
 
     def test_projection_modes(self):
@@ -109,37 +108,33 @@ class Test(unittest.TestCase):
             model = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                       data_format=self.data_format, dataset_name=dataset_name, lam=0.6,
                                       projection_mode=projection_mode, test=True)
-            model.train(self.x_train, self.y_train, DEVICE)
+            model.train(self.x_train, self.y_train, device="cpu")
             model.evaluate(x=self.x_test, y=self.y_test)
 
     def test_ensemble_regularizer(self):
         ensemble_size=2
-        model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
-                                     data_format=self.data_format, dataset_name="mnist", lam=0.3,
-                                     projection_mode="loss_on_projections", test=True)
-        model.train(self.x_train, self.y_train, DEVICE)
-        model.save_classifier(relative_path=RESULTS)
-        del model
-        model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape, num_classes=self.num_classes,
-                                    data_format=self.data_format, dataset_name="mnist", lam=0.3,
-                                    projection_mode="loss_on_projections", test=True)
+        # model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape,
+        #                             num_classes=self.num_classes, data_format=self.data_format, dataset_name="mnist",
+        #                             lam=0.3, projection_mode="loss_on_projections", test=True)
+        # model.train(self.x_train, self.y_train, device="cpu")
+        # model.save_classifier(relative_path=RESULTS)
+        # del model
+        model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape,
+                                    num_classes=self.num_classes, data_format=self.data_format, dataset_name="mnist",
+                                    lam=0.3, projection_mode="loss_on_projections", test=True)
         model.load_classifier(relative_path=RESULTS)
         model.evaluate(x=self.x_test, y=self.y_test)
 
     def test_parallel_randens(self):
-        dataset_name=self.dataset
-        x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test=True)
-
-        model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=SIZE_PROJECTION,
-                                       data_format=data_format, dataset_name=dataset_name, projection_mode="flat",
-                                       proj_idx=0, test=True)
-        model.parallel_train(device="cpu")
-        model = RandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes, dataset_name=self.dataset,
-                               n_proj=1, size_proj=SIZE_PROJECTION, data_format=self.data_format,
-                               projection_mode="flat", test=True)
-        model.load_classifier(relative_path=RESULTS)
-        model.evaluate(self.x_test, self.y_test)
-
+        model = ParallelRandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
+                                       size_proj=SIZE_PROJECTION, proj_idx=None, n_proj=2,
+                                       data_format=self.data_format, dataset_name="mnist",
+                                       projection_mode="flat", test=True)
+        # model.train(x=self.x_train, y=self.y_train, device=DEVICE, n_jobs=2)
+        model_path = RESULTS
+        model.evaluate(x=self.x_test, y=self.y_test, device=DEVICE, model_path=model_path)
+        x_test_adv = model.load_adversaries(attack="fgsm", eps=0.3)
+        model.evaluate(x=x_test_adv, y=self.y_test, device=DEVICE, model_path=model_path)
 
 if __name__ == '__main__':
     unittest.main()
