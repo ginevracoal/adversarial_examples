@@ -50,7 +50,7 @@ class ParallelRandomEnsemble(RandomEnsemble):
         return proj_classifier
 
     def train(self, x, y, device, n_jobs=2):
-        # n_jobs = 2 if device == "gpu" else 20 # self.n_proj
+        n_jobs = 2 if test else 20
         # n_jobs = self.n_proj
         classifiers = Parallel(n_jobs=n_jobs)(
             delayed(_parallel_train)(x_train=x, y_train=y, dataset_name=self.dataset_name, input_shape=self.input_shape,
@@ -194,14 +194,16 @@ def _parallel_train(x_train, y_train, input_shape, num_classes, data_format, dat
                     proj_mode, n_jobs, device):
     print("\nParallel training projection ", proj_idx)
     import tensorflow as tf
+    g = tf.get_default_graph()
     _set_session(device, n_jobs)
-    g = tf.Graph()
+    # g = tf.Graph()
     with g.as_default():
         model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                        proj_idx=proj_idx, data_format=data_format, dataset_name=dataset_name,
                                        projection_mode=proj_mode, test=test, n_proj=1)
         model.train_single_projection(x_train=x_train, y_train=y_train, device=device, proj_idx=proj_idx)
     del tf
+    del g
 
 
 def _parallel_compute_projections(input_data, proj_idx, size_proj, projection_mode, n_jobs):
@@ -240,16 +242,16 @@ def main(dataset_name, test, proj_idx, n_proj, size_proj, proj_mode, device):
                                    proj_idx=None, n_proj=n_proj, data_format=data_format, dataset_name=dataset_name,
                                    projection_mode=proj_mode, test=test)
     model.train(x_train, y_train, device=device)
-
+    exit()
     model_path = RESULTS
-    model.parallel_evaluate(x=x_test, y=y_test, device=device, model_path=model_path)
+    model.evaluate(x=x_test, y=y_test, device=device, model_path=model_path)
     for attack in ["fgsm","pgd","carlini"]:
         x_test_adv = model.load_adversaries(attack=attack, eps=0.3)
-        model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
+        model.evaluate(x_test_adv, y_test, device=device, model_path=model_path)
     # x_test_adv = model.load_adversaries(attack="carlini", eps=0.5)
     # model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
     x_test_adv = model.load_adversaries(attack="deepfool",eps=None)
-    model.parallel_evaluate(x_test_adv, y_test, device=device, model_path=model_path)
+    model.evaluate(x_test_adv, y_test, device=device, model_path=model_path)
 
 
 
