@@ -14,7 +14,7 @@ from projection_functions import *
 ############
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = True
+ADD_BASELINE_PROB = False
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 MODEL_NAME = "randens"
 
@@ -26,7 +26,7 @@ class RandomEnsemble(BaselineConvnet):
     probabilities from the single projections.
     """
     def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test,
-                 epochs=None):
+                 epochs=None, centroid_translation=False):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
 
@@ -42,7 +42,7 @@ class RandomEnsemble(BaselineConvnet):
 
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
-
+        self.centroid_translation = centroid_translation
         self.original_input_shape = input_shape
         self.n_proj = n_proj
         self.size_proj = size_proj
@@ -57,13 +57,13 @@ class RandomEnsemble(BaselineConvnet):
         self.ensemble_method = "sum"  # supported methods: mode, sum
         self.x_test_proj = None
         self.baseline_classifier = None
-
         print("\n === RandEns model ( n_proj = ", self.n_proj, ", size_proj = ", self.size_proj, ") ===")
 
-    def compute_projections(self, input_data):
+    def compute_projections(self, input_data, translation):
         """ Extends utils.compute_projections method in order to handle the third input dimension."""
         projections, inverse_projections = compute_projections(input_data, self.random_seeds, self.n_proj,
-                                                               self.size_proj, self.projection_mode)
+                                                               self.size_proj, self.projection_mode,
+                                                               translation=translation)
 
         # eventually adjust input dimension to a single channel projection
         if projections.shape[4] == 1:
@@ -72,6 +72,12 @@ class RandomEnsemble(BaselineConvnet):
             self.input_shape = (self.input_shape[0], self.input_shape[1], 3)
 
         return projections, inverse_projections
+
+    def _set_translation_vector(self, x_train):
+        if self.centroid_translation:
+            return np.mean(np.mean(x_train, axis=0), axis=2)
+        else:
+            return None
 
     def train(self, x_train, y_train, device):
         """
@@ -82,12 +88,14 @@ class RandomEnsemble(BaselineConvnet):
         :param y_train: training labels
         :return: list of n_proj trained models, which are art.KerasClassifier fitted objects
         """
-
+        self.translation_vector = self._set_translation_vector(x_train)
         device_name = self._set_device_name(device)
+
         with tf.device(device_name):
             start_time = time.time()
             input_data = x_train.astype(float)
-            x_train_projected, _ = self.compute_projections(input_data=input_data)
+            x_train_projected, _ = self.compute_projections(input_data=input_data,
+                                                            translation=self.translation_vector)
 
             # eventually adjust input dimension to a single channel projection
             if x_train_projected.shape[4] == 1:
@@ -109,8 +117,7 @@ class RandomEnsemble(BaselineConvnet):
             self.classifiers = classifiers
             return classifiers
 
-    @staticmethod
-    def _sum_ensemble_classifier(classifiers, projected_data):
+    def _sum_ensemble_classifier(self, classifiers, projected_data):
         """
         :param classifiers: list of `n_proj` different GaussianRandomProjection objects
         :param projected_data: array of test data projected on the different `n_proj` training random directions
@@ -138,8 +145,7 @@ class RandomEnsemble(BaselineConvnet):
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
 
-    @staticmethod
-    def _mode_ensemble_classifier(classifiers, projected_data):
+    def _mode_ensemble_classifier(self, classifiers, projected_data):
         """
         :param classifiers: list of `n_proj` different GaussianRandomProjection objects
         :param projected_data: array of test data projected on the different `n_proj` training random directions
@@ -197,8 +203,7 @@ class RandomEnsemble(BaselineConvnet):
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
         :return: probability vector final predictions for the input data
         """
-        projected_data, _ = self.compute_projections(x)
-
+        projected_data, _ = self.compute_projections(x, translation=self.translation_vector)
         predictions = None
         if self.ensemble_method == 'sum':
             predictions = self._sum_ensemble_classifier(self.classifiers, projected_data)
@@ -229,7 +234,7 @@ class RandomEnsemble(BaselineConvnet):
             print("\nTest evaluation on projection ", self.random_seeds[i])
             proj_classifier.evaluate(x=x_test_proj[i], y=y_test)
 
-    def evaluate(self, x, y, report_projections=REPORT_PROJECTIONS):
+    def evaluate(self, x, y, report_projections=False):
         """ Extends evaluate() with projections reports"""
         y_pred = super(RandomEnsemble, self).evaluate(x, y, ensemble_model=True)
         # y_pred = self.classifiers.evaluate(x, y)
@@ -239,7 +244,7 @@ class RandomEnsemble(BaselineConvnet):
 
         return y_pred
 
-    def generate_adversaries(self, x, y, attack, eps=EPS):
+    def generate_adversaries(self, x, y, attack, eps):
         # todo: refactor
         """ Adversaries are generated on the baseline classifier """
 
@@ -250,18 +255,24 @@ class RandomEnsemble(BaselineConvnet):
         return x_adv
 
     def _set_model_path(self):
-        return {'folder': MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) +
-                          "_" + str(self.projection_mode) + "/",
-                'filename': None}
+        folder = MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) +\
+                 "_" + str(self.projection_mode)
+        if self.centroid_translation:
+            folder = folder + "_centroid"
+        return {'folder': folder + "/", 'filename': None}
 
     def _set_baseline_filename(self, seed):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
         filename = self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
                    "_" + str(self.projection_mode)
         if self.epochs == None:
-            return filename + "_" + str(seed)
+            filename = filename + "_" + str(seed)
         else:
-            return filename + "_epochs=" + str(self.epochs) + "_" + str(seed)
+            filename = filename + "_epochs=" + str(self.epochs) + "_" + str(seed)
+
+        if self.centroid_translation:
+            filename = filename + "_centroid"
+        return filename
 
     def save_classifier(self, relative_path, folder=None, filename=None):
         """
@@ -274,6 +285,10 @@ class RandomEnsemble(BaselineConvnet):
             for i, proj_classifier in enumerate(self.classifiers):
                 proj_classifier.save_classifier(relative_path=relative_path, folder=self.folder,
                                                 filename=self._set_baseline_filename(seed=i))
+            if self.centroid_translation:
+                save_to_pickle(data=self.translation_vector,
+                               relative_path="../results/" + str(time.strftime('%Y-%m-%d')) + "/" + self.folder,
+                               filename="training_data_centroid.pkl")
         else:
             raise ValueError("Train the model first.")
 
@@ -293,12 +308,16 @@ class RandomEnsemble(BaselineConvnet):
                                               data_format=self.data_format, dataset_name=self.dataset_name)
             classifiers.append(proj_classifier.load_classifier(relative_path=relative_path, folder=self.folder,
                                                                filename=self._set_baseline_filename(seed=i)))
+        if self.centroid_translation:
+            self.translation_vector = load_from_pickle(path=relative_path + self.folder + "training_data_centroid.pkl",
+                                                       test=False)
+
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
         self.classifiers = classifiers
         return classifiers
 
-    def load_robust_classifier(self, relative_path, attack, eps=EPS):
+    def load_robust_classifier(self, relative_path, attack, eps):
         raise NotImplementedError
 
 
@@ -323,20 +342,25 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name, test=test, epochs=100)
+                           data_format=data_format, dataset_name=dataset_name, test=test, epochs=None)
     # === train === #
-    # model.train(x_train, y_train, device=device)
-    # model.save_classifier(relative_path=RESULTS)
+    model.train(x_train, y_train, device=device)
+    model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path=RESULTS)
+    # model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
-    # model.evaluate(x=x_test, y=y_test)
-    for method in ['fgsm', 'pgd', 'carlini']: #'deepfool',
-        x_test_adv = model.load_adversaries(attack=method, eps=eps)
+    model.evaluate(x=x_test, y=y_test)
+    for method in ['fgsm', 'pgd', 'carlini']:
+        x_test_adv = model.load_adversaries(attack=method, eps=0.3)
         model.evaluate(x_test_adv, y_test)
+    for method in ['fgsm', 'pgd', 'carlini']:
+        x_test_adv = model.load_adversaries(attack=method, eps=0.5)
+        model.evaluate(x_test_adv, y_test)
+    x_test_adv = model.load_adversaries(attack="deepfool", eps=None)
+    model.evaluate(x_test_adv, y_test)
 
     # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
     # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))
@@ -345,6 +369,10 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     # === generate perturbations === #
     # compute_variances(x_test, y_test)
     # projections, inverse_projections = model.compute_projections(input_data=x_test)
+    #
+    # projections, inverse_projections = model.compute_projections(input_data=x_test)
+    # print(projections[0,0,0,0], inverse_projections[0,0,0,0])
+    # # exit()
     # perturbations, augmented_inputs = compute_perturbations(input_data=x_test, inverse_projections=inverse_projections)
 
     # # print(np.mean([compute_angle(x_test[i],augmented_inputs[i]) for i in range(len(x_test))]))
@@ -366,6 +394,11 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     # === plot perturbations === #
     # plot_images(image_data_list=[x_test, projections[0], inverse_projections[0]])
     # plot_images(image_data_list=[x_test,perturbations,augmented_inputs])
+
+    # adversaries=[]
+    # for method in ['fgsm', 'pgd', 'deepfool', 'carlini']:
+    #     adversaries.append(model.load_adversaries(attack=method, eps=0.5))
+    # plot_images(image_data_list=adversaries)
 
 if __name__ == "__main__":
     try:
