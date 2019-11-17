@@ -80,7 +80,7 @@ class BaselineConvnet(AdversarialClassifier):
             logits = Dense(10, activation='softmax')(x)
             return logits
 
-    def adversarial_train(self, x_train, y_train, device, attack, eps):
+    def adversarial_train(self, x_train, y_train, device, attack, eps=None):
         """
         Performs adversarial training on the given classifier using an attack method. By default adversaries are
         generated at training time and epsilon is set to 0.5.
@@ -102,11 +102,23 @@ class BaselineConvnet(AdversarialClassifier):
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
         robust_classifier.train(x_train_ext, y_train_ext, device)
+        self.filename = self._robust_classifier_name(attack=attack, eps=eps)
+
         print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
         return robust_classifier
 
-    # todo test this method
-    def load_robust_classifier(self, relative_path, attack, eps):
+    def _robust_classifier_name(self, attack, eps=None):
+        if eps:
+            filename = self.filename + "_" + str(attack) + "_" + str(eps) + "_robust"
+        else:
+            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
+            if eps:
+                filename = self.filename + "_" + str(attack) + "_" + str(eps) + "_robust"
+            else:
+                filename = self.filename + "_" + str(attack) + "_robust"
+        return filename
+
+    def load_robust_classifier(self, relative_path, attack, eps=None):
         """
         Loads an adversarially trained robust classifier.
         :param relative_path: relative path
@@ -117,15 +129,9 @@ class BaselineConvnet(AdversarialClassifier):
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                             test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
-        if attack == "deepfool":
-            return robust_classifier.load_classifier(relative_path=relative_path,
-                                                     filename=str(self.filename) + "_" + str(attack) + "_robust")
-        else:
-            if eps is None:
-                raise ValueError("\nProvide a ths distance for the attacks.")
-            else:
-                filename = self.filename + "_" + str(attack) + "_" + str(eps) + "_robust"
-                return robust_classifier.load_classifier(relative_path=relative_path, filename=filename)
+
+        return robust_classifier.load_classifier(relative_path=relative_path,
+                                                 filename=self._robust_classifier_name(attack=attack, eps=eps))
 
     def evaluate(self, x, y, ensemble_model=False):
         self.trained = True
@@ -151,36 +157,37 @@ def main(dataset_name, test, attack, eps, device):
     # model.save_classifier(relative_path=RESULTS)
     # exit()
     # === load classifier === #
-    # model.load_classifier(relative_path=RESULTS)
+    model.load_classifier(relative_path=RESULTS)
     # model.load_classifier(relative_path=TRAINED_MODELS)
     # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
 
     # === adversarial training === #
-    # robust_classifier = model.adversarial_train(x_train, y_train, device=device, attack="fgsm")
-    # robust_classifier.save_classifier(relative_path=RESULTS)
+    model.adversarial_train(x_train, y_train, device=device, attack=attack)
+    model.save_classifier(relative_path=RESULTS)
 
     # === evaluations === #
-    # model.evaluate(x_test, y_test)
-    # robust_classifier.evaluate(x_test, y_test)
+    # model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+    #                         dataset_name=dataset_name, test=test)
+    # model.load_robust_classifier(relative_path=RESULTS, attack=attack)
+    model.evaluate(x=x_test, y=y_test)
 
     seed = 0
-    # for attack, eps in {'fgsm':0.3, 'pgd':0.3}.items():
-    # x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed, eps=eps)
-    # model.save_adversaries(data=x_test_adv, attack=attack, seed=seed, eps=eps)
-    # model.evaluate(x=x_test_adv, y=y_test)
-    # images.append(x_test_adv)
-
-    images = []
-    labels = []
+    # images = []
+    # labels = []
     attacks = ["fgsm","pgd","carlini","deepfool","newtonfool"]
     for attack in attacks:
+        # x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed, eps=eps)
+        # model.save_adversaries(data=x_test_adv, attack=attack, seed=seed, eps=eps)
+
         x_test_adv = model.load_adversaries(attack=attack, seed=seed,
                                             eps=model._get_attack_eps(dataset_name=dataset_name, attack=attack))
-        images.append(x_test_adv)
-        avg_dist = compute_distances(x_test, x_test_adv, ord=model._get_norm(attack))['mean']
-        labels.append(str(attack) + " avg_dist=" + str(avg_dist))
+        model.evaluate(x=x_test_adv, y=y_test)
 
-    plot_images(image_data_list=images,labels=labels)
+        # images.append(x_test_adv)
+        # avg_dist = compute_distances(x_test, x_test_adv, ord=model._get_norm(attack))['mean']
+        # labels.append(str(attack) + " avg_dist=" + str(avg_dist))
+
+    # plot_images(image_data_list=images,labels=labels)
 
 
 if __name__ == "__main__":

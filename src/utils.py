@@ -137,8 +137,11 @@ def load_dataset(dataset_name, test):
 
 def save_to_pickle(data, relative_path, filename):
     """ saves data to pickle """
-    os.makedirs(os.path.dirname(relative_path+filename), exist_ok=True)
-    with open(relative_path+filename, 'wb') as f:
+
+    filepath = relative_path + filename
+    print("Saving pickle: ", filepath)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'wb') as f:
         pkl.dump(data, f)
 
 
@@ -155,11 +158,7 @@ def load_from_pickle(path, test):
     with open(path, 'rb') as f:
         u = pkl._Unpickler(f)
         u.encoding = 'latin1'
-        # BUG: In the pickles I'm also saving the labels, so here I only take the data.
-        # when loading only x_test it should become:
-        # data = u.load()
-        # todo: rigenerare i dati giusti su mnist o trasformare quelli che ho...
-        data = u.load()#[0]
+        data = u.load()
     if test is True:
         data = data[:TEST_SIZE]
     return data

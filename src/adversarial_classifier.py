@@ -13,6 +13,7 @@ from keras.layers import Input
 from tensorflow.python.client import device_lib
 from keras.models import load_model
 import random
+from art.utils import master_seed
 
 ############
 # defaults #
@@ -153,13 +154,18 @@ class AdversarialClassifier(sklKerasClassifier):
     @staticmethod
     def _get_norm(attack):
         """ Returns the norm used for computing perturbations on the given method. """
-        # if attack == "deepfool":
-        #     return 2
-        # else:
-        #     return np.inf
         return np.inf
 
-    def generate_adversaries(self, x, y, attack, seed, eps=0):
+    def _get_attack_eps(self, dataset_name, attack):
+        if dataset_name == "mnist":
+            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.8, 'deepfool': None, 'newtonfool':None}
+        elif dataset_name == "cifar":
+            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.5, 'deepfool': None, 'newtonfool':None}
+        else:
+            raise ValueError("Wrong dataset name.")
+        return eps[attack]
+
+    def generate_adversaries(self, x, y, attack, eps=None, seed=0):
         """
         Generates adversaries on the input data x using a given attack method.
 
@@ -168,12 +174,16 @@ class AdversarialClassifier(sklKerasClassifier):
         :param attack: art.attack method
         :return: adversarially perturbed data
         """
-        random.seed(seed)
 
         if self.trained:
+            master_seed(seed)
+            # random.seed(seed)
             classifier = artKerasClassifier(clip_values=(0,1), model=self.model)
         else:
             raise AttributeError("Train your classifier first.")
+
+        if eps is None:
+            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
 
         # classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
         # classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
@@ -183,22 +193,22 @@ class AdversarialClassifier(sklKerasClassifier):
             attacker = FastGradientMethod(classifier, eps=eps)
             x_adv = attacker.generate(x=x)
         elif attack == 'deepfool':
-            attacker = DeepFool(classifier)
+            attacker = DeepFool(classifier, nb_grads=5)
             x_adv = attacker.generate(x)
         elif attack == 'virtual':
-            attacker = VirtualAdversarialMethod(classifier, eps=eps)
+            attacker = VirtualAdversarialMethod(classifier)
             x_adv = attacker.generate(x)
         elif attack == 'carlini':
-            attacker = CarliniLInfMethod(classifier, targeted=False)
+            attacker = CarliniLInfMethod(classifier, targeted=False, eps=eps)
             x_adv = attacker.generate(x=x)
         elif attack == 'pgd':
             attacker = ProjectedGradientDescent(classifier, eps=eps)
             x_adv = attacker.generate(x=x)
         elif attack == 'newtonfool':
-            attacker = NewtonFool(classifier)
+            attacker = NewtonFool(classifier, eta=0.3)
             x_adv = attacker.generate(x=x)
         elif attack == 'boundary':
-            attacker = BoundaryAttack(classifier, targeted=True, max_iter=500, delta=0.05, epsilon=0.5)
+            attacker = BoundaryAttack(classifier, targeted=True, max_iter=500, delta=0.05, epsilon=eps)
             y=np.random.permutation(y)
             x_adv = attacker.generate(x=x, y=y)
         elif attack == 'spatial':
@@ -216,7 +226,7 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             return x_adv
 
-    def save_adversaries(self, data, attack, seed, eps=None):
+    def save_adversaries(self, data, attack, eps, seed=0):
         """
         Save adversarially augmented test set.
         :param data: test set
@@ -232,12 +242,16 @@ class AdversarialClassifier(sklKerasClassifier):
             save_to_pickle(data=data, relative_path=RESULTS,
                            filename=self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl")
 
-    def load_adversaries(self, attack, seed, eps=None):
+    def load_adversaries(self, attack, seed=0, eps=None):
         if eps:
             path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
         else:
-            path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl"
-        print("\nLoading adversaries: ", path)
+            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
+            if eps is None:
+                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
+            else:
+                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl"
+
         x_test_adv = load_from_pickle(path=path, test=self.test)
         return x_test_adv
 
@@ -251,7 +265,9 @@ class AdversarialClassifier(sklKerasClassifier):
         if filename is None:
             filename = self.filename
         os.makedirs(os.path.dirname(relative_path + folder), exist_ok=True)
-        self.model.save(relative_path + folder + filename + ".h5")
+        filepath = relative_path + folder + filename + ".h5"
+        print("Saving classifier: ", filepath)
+        self.model.save(filepath)
 
     def load_classifier(self, relative_path, folder=None, filename=None):
         """
