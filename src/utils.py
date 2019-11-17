@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-TEST_SIZE = 100
+TEST_SIZE = 10
 
 ######################
 # data preprocessing #
@@ -170,7 +170,7 @@ def load_from_pickle(path, test):
 ##############
 
 
-def plot_images(image_data_list, cmap=None, test=False):
+def plot_images(image_data_list, cmap=None, test=False, labels=None):
     """
     Plots the first `n_images` images of each element in image_data_list, on different rows.
 
@@ -179,7 +179,7 @@ def plot_images(image_data_list, cmap=None, test=False):
     :param test: if True it does not hang on the image
     """
 
-    n_images = 5
+    n_images = 3
     fig, axs = plt.subplots(nrows=len(image_data_list), ncols=n_images, figsize=(n_images, 1.5*len(image_data_list)))
     # fig.suptitle("CIFAR10 projection", fontsize=20, y=0.95)
     if image_data_list[0].shape[3] == 1:
@@ -188,6 +188,8 @@ def plot_images(image_data_list, cmap=None, test=False):
     for group in range(len(image_data_list)):
         for im_idx in range(n_images):
             axs[group, im_idx].imshow(np.squeeze(image_data_list[group][im_idx]), cmap=cmap)
+            if labels:
+                axs[group, 1].set_title(labels[group])
 
     if test is False:
         # If not in testing mode, block imshow.

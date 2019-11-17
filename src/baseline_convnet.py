@@ -147,8 +147,8 @@ def main(dataset_name, test, attack, eps, device):
                             dataset_name=dataset_name, test=test)
 
     # === training === #
-    model.train(x_train, y_train, device)
-    model.save_classifier(relative_path=RESULTS)
+    # model.train(x_train, y_train, device)
+    # model.save_classifier(relative_path=RESULTS)
     # exit()
     # === load classifier === #
     # model.load_classifier(relative_path=RESULTS)
@@ -160,36 +160,28 @@ def main(dataset_name, test, attack, eps, device):
     # robust_classifier.save_classifier(relative_path=RESULTS)
 
     # === evaluations === #
-    model.evaluate(x_test, y_test)
+    # model.evaluate(x_test, y_test)
     # robust_classifier.evaluate(x_test, y_test)
 
-    # x_test_adv = model.generate_adversaries(x=x_test[:10], y=y_test[:10], attack=attack, eps=eps)
-    # model.evaluate(x=x_test_adv, y=y_test[:10])
+    seed = 0
+    # for attack, eps in {'fgsm':0.3, 'pgd':0.3}.items():
+    # x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed, eps=eps)
+    # model.save_adversaries(data=x_test_adv, attack=attack, seed=seed, eps=eps)
+    # model.evaluate(x=x_test_adv, y=y_test)
+    # images.append(x_test_adv)
 
-    # images = []
-    for seed in [0,1,2]:
-        for attack in ['fgsm', 'pgd']:
-            for eps in [0.3]:
-                x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, eps=eps, seed=seed)
-                # images.append(x_test_adv)
-                model.save_adversaries(data=x_test_adv, attack=attack, eps=eps, seed=seed)
-                model.evaluate(x=x_test_adv, y=y_test)
-        for attack in ['carlini','newtonfool','boundary','spatial','zoo']: #'deepfool',
-            x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, eps=0, seed=seed)
-            # images.append(x_test_adv)
-            model.save_adversaries(data=x_test_adv, attack=attack, eps=0, seed=seed)
-            model.evaluate(x=x_test_adv, y=y_test)
+    images = []
+    labels = []
+    attacks = ["fgsm","pgd","carlini","deepfool","newtonfool"]
+    for attack in attacks:
+        x_test_adv = model.load_adversaries(attack=attack, seed=seed,
+                                            eps=model._get_attack_eps(dataset_name=dataset_name, attack=attack))
+        images.append(x_test_adv)
+        avg_dist = compute_distances(x_test, x_test_adv, ord=model._get_norm(attack))['mean']
+        labels.append(str(attack) + " avg_dist=" + str(avg_dist))
 
-    # x_test_adv = model.load_adversaries(attack=attack,eps=eps)
-    # plot_images([x_test,x_test_adv])#,np.array(x_test_adv,dtype=int)])
-    # plot_images(images)
-    # for method in ['fgsm', 'pgd', 'deepfool','carlini']:
-    #     x_test_adv = model.load_adversaries(attack=method, eps=0.3)
-    #     # model.evaluate(x_test_adv, y_test)
-    #     robust_classifier.evaluate(x_test_adv, y_test)
-    # x_test_adv = model.load_adversaries(attack="carlini", eps=0.5)
-    # # model.evaluate(x_test_adv, y_test)
-    # robust_classifier.evaluate(x_test_adv, y_test)
+    plot_images(image_data_list=images,labels=labels)
+
 
 if __name__ == "__main__":
     try:
