@@ -13,7 +13,7 @@ DATASETS = "mnist, cifar"
 class ParallelRandomEnsemble(RandomEnsemble):
 
     def __init__(self, input_shape, num_classes, size_proj, proj_idx, n_proj, data_format, dataset_name,
-                 projection_mode, test, epochs=None, centroid_translation=None):
+                 projection_mode, test, epochs=None, centroid_translation=False):
         super(ParallelRandomEnsemble, self).__init__(input_shape=input_shape, num_classes=num_classes, n_proj=n_proj,
                                                      size_proj=size_proj, projection_mode=projection_mode,
                                                      data_format=data_format, dataset_name=dataset_name, test=test,
@@ -132,8 +132,7 @@ class ParallelRandomEnsemble(RandomEnsemble):
                                                        test=False)
         return classifiers
 
-    def evaluate(self, x, y, report_projections=False, model_path=RESULTS, device="cpu"):
-        # todo: maybe add translation option here,   or handle loading automatically
+    def evaluate(self, x, y, report_projections=False, model_path=RESULTS, device="cpu", add_baseline_prob=False):
         """
         Computes parallel evaluation of the model, then joins the results from the single workers into the final
         probability vector.
@@ -146,17 +145,33 @@ class ParallelRandomEnsemble(RandomEnsemble):
         """
         K.clear_session()
         n_jobs = 2 if device == "gpu" else self.n_proj
+        if self.centroid_translation:
+            translation = load_from_pickle(path=model_path + self.folder + "training_data_centroid.pkl",
+                                                       test=False)
+        else:
+            translation = None
+
         proj_predictions = Parallel(n_jobs=n_jobs)(
             delayed(_parallel_evaluate)(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                         data_format=self.data_format, dataset_name=self.dataset_name,
                                         relative_path=model_path, folder=self.folder, input_data=x, seed=i,
                                         filename=self._set_baseline_filename(seed=i), size_proj=self.size_proj,
-                                        projection_mode=self.projection_mode, translation=self.translation_vector)
+                                        projection_mode=self.projection_mode, translation=translation)
             for i in list(self.random_seeds))
         predictions = np.sum(np.array(proj_predictions), axis=0)
         # print(np.array(proj_predictions)[:,0])
         # print(predictions[0])
         # exit()
+
+        if add_baseline_prob:
+            print("\nAdding baseline probability vector to the predictions.")
+            baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
+                                       data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
+            baseline.load_classifier(relative_path=TRAINED_MODELS, folder="baseline/", filename=baseline.filename)
+            baseline_predictions = baseline.predict(x)
+
+            # sum the probabilities across all predictors
+            predictions = np.add(predictions, baseline_predictions)
 
         y_pred = np.argmax(predictions, axis=1)
         y_true = np.argmax(y, axis=1)
@@ -222,7 +237,6 @@ def _parallel_train(x_train, y_train, input_shape, num_classes, data_format, dat
     import tensorflow as tf
     g = tf.get_default_graph()
     _set_session(device, n_jobs)
-    # g = tf.Graph()
     with g.as_default():
         model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                        proj_idx=proj_idx, data_format=data_format, dataset_name=dataset_name,
@@ -243,8 +257,6 @@ def _parallel_train(x_train, y_train, input_shape, num_classes, data_format, dat
 def _parallel_load_classifier(input_shape, num_classes, data_format, dataset_name, relative_path, folder, filename,
                               n_jobs):
     _set_session(device, n_jobs)
-    # g = tf.Graph()
-    # with g.as_default():
     classifier = BaselineConvnet(input_shape=input_shape, num_classes=num_classes,
                                  test=test, data_format=data_format, dataset_name=dataset_name)
     classifier.load_classifier(relative_path=relative_path, folder=folder, filename=filename)
@@ -255,29 +267,22 @@ def main(dataset_name, test, proj_idx, n_proj, size_proj, proj_mode, device):
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
-    # === serial gpu training === #
-    # model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
-    #                                proj_idx=proj_idx, n_proj=1, data_format=data_format, dataset_name=dataset_name,
-    #                                projection_mode=proj_mode, test=test)
-    # for proj_idx in range(n_proj):
-    #     model.train_single_projection(x_train, y_train, proj_idx=proj_idx, device=device)
-    # exit()
-
     # === parallel train, save and load the whole ensemble === #
     model = ParallelRandomEnsemble(input_shape=input_shape, num_classes=num_classes, size_proj=size_proj,
                                    proj_idx=None, n_proj=n_proj, data_format=data_format, dataset_name=dataset_name,
-                                   projection_mode=proj_mode, test=test, centroid_translation=True)
-    model.train(x_train, y_train, device=device)
-    model_path = RESULTS
-    model.evaluate(x=x_test, y=y_test, device=device, model_path=model_path)
-    for attack in ["fgsm","pgd","carlini"]:
-        x_test_adv = model.load_adversaries(attack=attack, eps=0.3)
-        model.evaluate(x_test_adv, y_test, device=device, model_path=model_path)
-        x_test_adv = model.load_adversaries(attack="carlini", eps=0.5)
-        model.evaluate(x_test_adv, y_test, device=device, model_path=model_path)
-    x_test_adv = model.load_adversaries(attack="deepfool",eps=None)
-    model.evaluate(x_test_adv, y_test, device=device, model_path=model_path)
+                                   projection_mode=proj_mode, test=test, centroid_translation=False)
+    # model.train(x_train, y_train, device=device)
+    # exit()
 
+    model_path = RESULTS
+    # model_path = TRAINED_MODELS
+    add_baseline_prob=True
+
+    # model.evaluate(x=x_test, y=y_test, device=device, model_path=model_path, add_baseline_prob=add_baseline_prob)
+    # for attack, eps in {'fgsm':0.3,'pgd':0.3,'pgd':0.5,'carlini':0.5,'deepfool':None,'newtonfool':None}.items():
+    for attack, eps in {'deepfool':None}.items():
+        x_test_adv = model.load_adversaries(attack=attack, eps=eps)
+        model.evaluate(x_test_adv, y_test, device=device, model_path=model_path, add_baseline_prob=add_baseline_prob)
 
 
 if __name__ == "__main__":

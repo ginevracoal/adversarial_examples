@@ -14,7 +14,6 @@ from projection_functions import *
 ############
 
 REPORT_PROJECTIONS = False
-ADD_BASELINE_PROB = False
 PROJ_MODE = "flat, channels, one_channel, grayscale"
 MODEL_NAME = "randens"
 
@@ -78,6 +77,7 @@ class RandomEnsemble(BaselineConvnet):
             return np.mean(np.mean(x_train, axis=0), axis=2)
         else:
             return None
+            # return np.zeros(shape=[1, rows, cols, channels], dtype=np.float32)
 
     def train(self, x_train, y_train, device):
         """
@@ -193,7 +193,7 @@ class RandomEnsemble(BaselineConvnet):
         predictions = predictions / predictions.sum(axis=1)[:, None]
         return predictions
 
-    def predict(self, x, **kwargs):
+    def predict(self, x, add_baseline_prob=False):
         """
         # todo docstring
         Compute the ensemble prediction probability vector.
@@ -210,7 +210,7 @@ class RandomEnsemble(BaselineConvnet):
         elif self.ensemble_method == 'mode':
             predictions = self._mode_ensemble_classifier(self.classifiers, projected_data)
 
-        if ADD_BASELINE_PROB:
+        if add_baseline_prob:
             print("\nAdding baseline probability vector to the predictions.")
             baseline = BaselineConvnet(input_shape=self.original_input_shape, num_classes=self.num_classes,
                                        data_format=self.data_format, dataset_name=self.dataset_name, test=self.test)
@@ -239,12 +239,12 @@ class RandomEnsemble(BaselineConvnet):
         y_pred = super(RandomEnsemble, self).evaluate(x, y, ensemble_model=True)
         # y_pred = self.classifiers.evaluate(x, y)
         if report_projections:
-            x_proj, _ = self.compute_projections(x)
+            x_proj, _ = self.compute_projections(x, translation=self.translation_vector)
             self.report_projections(classifiers=self.classifiers, x_test_proj=x_proj, y_test=y)
 
         return y_pred
 
-    def generate_adversaries(self, x, y, attack, eps):
+    def generate_adversaries(self, x, y, attack, seed=0, eps=0.5):
         # todo: refactor
         """ Adversaries are generated on the baseline classifier """
 
@@ -265,13 +265,13 @@ class RandomEnsemble(BaselineConvnet):
         """ Sets baseline filenames inside randens folder based on the projection seed. """
         filename = self.dataset_name + "_baseline" + "_size=" + str(self.size_proj) + \
                    "_" + str(self.projection_mode)
+        if self.centroid_translation:
+            filename = filename + "_centroid"
+
         if self.epochs == None:
             filename = filename + "_" + str(seed)
         else:
             filename = filename + "_epochs=" + str(self.epochs) + "_" + str(seed)
-
-        if self.centroid_translation:
-            filename = filename + "_centroid"
         return filename
 
     def save_classifier(self, relative_path, folder=None, filename=None):
@@ -311,6 +311,8 @@ class RandomEnsemble(BaselineConvnet):
         if self.centroid_translation:
             self.translation_vector = load_from_pickle(path=relative_path + self.folder + "training_data_centroid.pkl",
                                                        test=False)
+        else:
+            self.translation_vector = None
 
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
 
@@ -342,24 +344,19 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
-                           data_format=data_format, dataset_name=dataset_name, test=test, epochs=None)
+                           data_format=data_format, dataset_name=dataset_name, test=test, epochs=None,
+                           centroid_translation=False)
     # === train === #
-    model.train(x_train, y_train, device=device)
-    model.save_classifier(relative_path=RESULTS)
+    # model.train(x_train, y_train, device=device)
+    # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path=TRAINED_MODELS)
     # model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
-    for method in ['fgsm', 'pgd', 'carlini']:
-        x_test_adv = model.load_adversaries(attack=method, eps=0.3)
-        model.evaluate(x_test_adv, y_test)
-    for method in ['fgsm', 'pgd', 'carlini']:
-        x_test_adv = model.load_adversaries(attack=method, eps=0.5)
-        model.evaluate(x_test_adv, y_test)
-    x_test_adv = model.load_adversaries(attack="deepfool", eps=None)
+    x_test_adv = model.load_adversaries(attack=attack)
     model.evaluate(x_test_adv, y_test)
 
     # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
