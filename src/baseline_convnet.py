@@ -7,6 +7,7 @@ Simple CNN model. This is our benchmark on the MNIST dataset.
 import sys
 from adversarial_classifier import *
 from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
+from utils import _set_session
 
 ############
 # defaults #
@@ -38,7 +39,7 @@ class BaselineConvnet(AdversarialClassifier):
         :param test: if True only takes the first 100 samples
         :return: batch_size, epochs
         """
-        batch_size = 100 if test else 500
+        batch_size = 100 #if test else 500
         return {'batch_size': batch_size, 'epochs': epochs}
 
     def _get_logits(self, inputs):
@@ -91,8 +92,10 @@ class BaselineConvnet(AdversarialClassifier):
 
         start_time = time.time()
         print("\n===== Adversarial training =====")
-        # generate adversarial examples on train and test sets
+        eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
+        self.trained = True
         x_train_adv = self.generate_adversaries(x_train, y_train, attack, eps)
+        # x_train_adv = self.load_adversaries(attack=attack, eps=eps)
 
         # Data augmentation: expand the training set with the adversarial samples
         x_train_ext = np.append(x_train, x_train_adv, axis=0)
@@ -102,9 +105,9 @@ class BaselineConvnet(AdversarialClassifier):
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
         robust_classifier.train(x_train_ext, y_train_ext, device)
-        self.filename = self._robust_classifier_name(attack=attack, eps=eps)
+        robust_classifier.filename = self._robust_classifier_name(attack=attack, eps=eps)
 
-        print("\nAdversarial training time: --- %s seconds ---" % (time.time() - start_time))
+        print("Adversarial training time: --- %s seconds ---" % (time.time() - start_time))
         return robust_classifier
 
     def _robust_classifier_name(self, attack, eps=None):
@@ -129,14 +132,27 @@ class BaselineConvnet(AdversarialClassifier):
         robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
                                             test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
-
+        self.trained = True
         return robust_classifier.load_classifier(relative_path=relative_path,
                                                  filename=self._robust_classifier_name(attack=attack, eps=eps))
 
-    def evaluate(self, x, y, ensemble_model=False):
-        self.trained = True
-        return super(BaselineConvnet, self).evaluate(x, y)
-
+    def train_const_SGD(self, x_train, y_train, device, epochs, lr):
+        """
+        Perform SGD optimization with constant learning rate on a pre-trained network.
+        :param epochs: number of epochs
+        :param lr: learning rate
+        :return: re-trained network
+        """
+        if self.trained:
+            self.filename = "SGD_lr=" + str(lr) + "_ep=" + str(epochs) + "_" + self.filename
+            self.epochs = epochs
+            self.model.compile(loss=keras.losses.categorical_crossentropy,
+                                optimizer=keras.optimizers.SGD(lr=lr, clipnorm=1.),
+                                metrics=['accuracy'])
+            self.train(x_train=x_train, y_train=y_train, device=device)
+            return self
+        else:
+            raise AttributeError("Train your classifier first.")
 
 def main(dataset_name, test, attack, eps, device):
     """
@@ -147,6 +163,7 @@ def main(dataset_name, test, attack, eps, device):
     """
 
     # === initialize === #
+    _set_session(device=device, n_jobs=1)
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
     model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
@@ -157,17 +174,16 @@ def main(dataset_name, test, attack, eps, device):
     # model.save_classifier(relative_path=RESULTS)
     # exit()
     # === load classifier === #
-    model.load_classifier(relative_path=RESULTS)
-    # model.load_classifier(relative_path=TRAINED_MODELS)
-    # robust_classifier = model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
+    # model.load_classifier(relative_path=RESULTS)
+    model.load_classifier(relative_path=TRAINED_MODELS)
+    model.train_const_SGD(x_train=x_train, y_train=y_train, device=device, epochs=50, lr=0.01)
+    # model.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, eps=eps)
 
     # === adversarial training === #
-    model.adversarial_train(x_train, y_train, device=device, attack=attack)
+    # model = model.adversarial_train(x_train, y_train, device=device, attack=attack)
     model.save_classifier(relative_path=RESULTS)
 
     # === evaluations === #
-    # model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-    #                         dataset_name=dataset_name, test=test)
     # model.load_robust_classifier(relative_path=RESULTS, attack=attack)
     model.evaluate(x=x_test, y=y_test)
 

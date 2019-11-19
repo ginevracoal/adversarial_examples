@@ -110,18 +110,14 @@ class AdversarialClassifier(sklKerasClassifier):
         device_name = self._set_device_name(device)
         with tf.device(device_name):
             mini_batch = MINIBATCH
+            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
+                               metrics=['accuracy'])
+            start_time = time.time()
             if self.epochs == None:
                 es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-                self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-                                   metrics=['accuracy'])
-                start_time = time.time()
-                self.model.fit(x_train, y_train, epochs=30, batch_size=mini_batch, callbacks=[es])
+                self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es], shuffle=True)
             else:
-                self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-                                   metrics=['accuracy'])
-                start_time = time.time()
-                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch)
-
+                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, shuffle=True)
             print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
             self.trained = True
             return self
@@ -176,9 +172,9 @@ class AdversarialClassifier(sklKerasClassifier):
         """
 
         if self.trained:
+            classifier = artKerasClassifier(clip_values=(0,1), model=self.model)
             master_seed(seed)
             # random.seed(seed)
-            classifier = artKerasClassifier(clip_values=(0,1), model=self.model)
         else:
             raise AttributeError("Train your classifier first.")
 
@@ -248,9 +244,9 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
             if eps is None:
-                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
-            else:
                 path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl"
+            else:
+                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
 
         x_test_adv = load_from_pickle(path=path, test=self.test)
         return x_test_adv
@@ -266,7 +262,7 @@ class AdversarialClassifier(sklKerasClassifier):
             filename = self.filename
         os.makedirs(os.path.dirname(relative_path + folder), exist_ok=True)
         filepath = relative_path + folder + filename + ".h5"
-        print("Saving classifier: ", filepath)
+        print("\nSaving classifier: ", filepath)
         self.model.save(filepath)
 
     def load_classifier(self, relative_path, folder=None, filename=None):
@@ -279,7 +275,7 @@ class AdversarialClassifier(sklKerasClassifier):
             folder = self.folder
         if filename is None:
             filename = self.filename
-        print("loading model: ", relative_path + folder + filename + ".h5")
+        print("\nLoading model: ", relative_path + folder + filename + ".h5")
         self.model = load_model(relative_path + folder + filename + ".h5")
         self.trained = True
         return self
