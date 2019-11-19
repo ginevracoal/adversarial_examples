@@ -1,7 +1,7 @@
 Package                        Version
 ------------------------------ -------
 absl-py                        0.7.1  
-Adversarial-Robustness-Toolbox 0.7.0  
+Adversarial-Robustness-Toolbox 1.0.1  
 astor                          0.7.1  
 attrs                          19.1.0 
 backcall                       0.1.0  
@@ -71,6 +71,7 @@ tensorflow-estimator           1.13.0
 termcolor                      1.1.0  
 terminado                      0.8.2  
 testpath                       0.4.2  
+torch                          1.3.1  
 tornado                        6.0.2  
 traitlets                      4.3.2  
 wcwidth                        0.1.7  
