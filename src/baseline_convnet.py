@@ -41,7 +41,7 @@ class BaselineConvnet(AdversarialClassifier):
         :param test: if True only takes a few samples
         :return: batch_size, epochs
         """
-        batch_size = 100
+        batch_size = 10 if test else 100
         return {'batch_size': batch_size, 'epochs': epochs}
 
     def _get_logits(self, inputs):
@@ -175,6 +175,7 @@ def plot_attacks(dataset_name, test, attacks):
     images = []
     labels = []
     for attack in attacks:
+        eps = model._get_attack_eps(dataset_name=model.dataset_name, attack=attack)
         x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, eps=eps)
         images.append(x_test_adv)
         avg_dist = compute_distances(x_test, x_test_adv, ord=model._get_norm(attack))['mean']
@@ -191,7 +192,7 @@ def train_eval_attacks(dataset_name, test, attacks, seed, device="gpu"):
                                                                                            test=test)
     # baseline training #
     baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                            dataset_name=dataset_name, test=test)
+                               dataset_name=dataset_name, test=test)
     baseline.train(x_train, y_train, device)
 
     # adversarial training #
@@ -203,18 +204,21 @@ def train_eval_attacks(dataset_name, test, attacks, seed, device="gpu"):
         robust_baselines.append(robust_baseline)
 
     # evaluations #
-    K.clear_session()
+    # K.clear_session()
+    print("\nTest set:")
     baseline.evaluate(x=x_test, y=y_test)
     for idx in range(len(attacks)):
+        print("\nEvaluation on", attacks[idx], "robust baseline")
         robust_baselines[idx].evaluate(x=x_test, y=y_test)
 
+    print("\nAdversaries:")
     for attack in attacks:
         x_test_adv = baseline.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed)
         # model.save_adversaries(data=x_test_adv, attack=attack, seed=seed)
 
         baseline.evaluate(x=x_test, y=y_test)
         for idx in range(len(attacks)):
-            print("\n", attacks[idx], " robust baseline.")
+            print("\nAttack against", attacks[idx], "robust baseline")
             robust_baselines[idx].evaluate(x=x_test_adv, y=y_test)
 
 
@@ -264,14 +268,12 @@ if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
         test = eval(sys.argv[2])
-        # attacks = list(sys.argv[3].strip('[]').split(','))
         device = sys.argv[3]
         seed = int(sys.argv[4])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
-        # attacks = input("\nChoose a list of attacks ("+ATTACKS+"): ")
         device = input("\nChoose a device (cpu/gpu): ")
         seed = input("\nSet a training seed (type=int): ")
 
