@@ -127,7 +127,8 @@ class RandomRegularizer(BaselineConvnet):
                 loss = K.categorical_crossentropy(target=outputs,
                                                   output=self._get_logits(
                                                       inputs=tf_flat_projection(input_data=channel_inputs,
-                                                                                random_seed=seed, size_proj=size)[1]),
+                                                                                random_seed=seed, size_proj=size,
+                                                                                translation=None)[1]),
                                                   from_logits=True, axis=axis)
                 loss_gradient = self._compute_gradients(loss, [channel_inputs])[0]
             else:
@@ -221,8 +222,11 @@ class RandomRegularizer(BaselineConvnet):
                     print("\nprojection",proj+1,"/",self.n_proj)
                     loss = self.loss_wrapper(inputs,outputs)
                     self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                    self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch,
-                                   callbacks=[early_stopping])
+                    if self.epochs == None:
+                        self.model.fit(x_train_sample, y_train_sample, epochs=100, batch_size=mini_batch,
+                                       callbacks=[early_stopping])
+                    else:
+                        self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch)
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True

@@ -67,7 +67,7 @@ def compute_single_projection(input_data, seed, size_proj, projection_mode, tran
 
     return projection, inverse_projection
 
-def tf_flat_projection(input_data, random_seed, size_proj, translation):
+def tf_flat_projection(input_data, random_seed, size_proj, translation=None):
     """ Computes a projection of the whole input data flattened over channels and also computes the inverse projection.
     It samples `size_proj` random directions for the projection using the given `random_seed`, then translates the
     affine subspace using the input data centroid.

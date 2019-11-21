@@ -37,19 +37,19 @@ class Test(unittest.TestCase):
         # model training
         model.train(self.x_train, self.y_train, device=DEVICE)
         model.evaluate(self.x_test, self.y_test)
-        x_test_adv = model.generate_adversaries(self.x_test, self.y_test, attack="fgsm", eps=EPS)
-        model.save_adversaries(data=x_test_adv,attack="fgsm",eps=EPS)
+        x_test_adv = model.generate_adversaries(self.x_test, self.y_test, attack="fgsm", eps=EPS, seed=0)
+        model.save_adversaries(data=x_test_adv,attack="fgsm",eps=EPS, seed=0)
         model.evaluate(x_test_adv, self.y_test)
 
         # save and load classifier
         model.save_classifier(relative_path=RESULTS)
         model.load_classifier(relative_path=RESULTS)
         model.evaluate(self.x_test, self.y_test)
-        x_test_adv = model.load_adversaries(attack="fgsm",eps=EPS)
+        x_test_adv = model.load_adversaries(attack="fgsm",eps=EPS,seed=0)
         model.evaluate(x_test_adv, self.y_test)
 
         # adversarial training
-        model.adversarial_train(x_train=self.x_train, y_train=self.y_train, device="cpu", attack='fgsm', eps=EPS)
+        model.adversarial_train(x_train=self.x_train, y_train=self.y_train, device="cpu", attack='fgsm')
 
     def test_random_ensemble(self):
         for projection_mode in ["flat","channels","grayscale"]:
@@ -61,7 +61,7 @@ class Test(unittest.TestCase):
 
         # evaluate
         x_test_pred = model.evaluate(self.x_test, self.y_test)
-        x_test_adv = self.baseline.load_adversaries(attack="fgsm",eps=EPS)
+        x_test_adv = self.baseline.load_adversaries(attack="fgsm",eps=EPS,seed=0)
         model.evaluate(x_test_adv, self.y_test)
 
         # save and load
@@ -130,11 +130,20 @@ class Test(unittest.TestCase):
                                        size_proj=SIZE_PROJECTION, proj_idx=None, n_proj=2,
                                        data_format=self.data_format, dataset_name="mnist",
                                        projection_mode="flat", test=True)
-        # model.train(x=self.x_train, y=self.y_train, device=DEVICE, n_jobs=2)
+        model.train(x_train=self.x_train, y_train=self.y_train, device=DEVICE, n_jobs=2)
         model_path = RESULTS
         model.evaluate(x=self.x_test, y=self.y_test, device=DEVICE, model_path=model_path)
-        x_test_adv = model.load_adversaries(attack="fgsm", eps=0.3)
+        x_test_adv = model.load_adversaries(attack="fgsm", eps=0.3, seed=0)
         model.evaluate(x=x_test_adv, y=self.y_test, device=DEVICE, model_path=model_path)
+
+    def test_weighted_ensemble(self):
+        pass
+
+    def test_robustness_measures(self):
+        pass
+
+    def test_centroid_translation(self):
+        pass
 
 if __name__ == '__main__':
     unittest.main()

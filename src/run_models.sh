@@ -19,8 +19,8 @@
 # === baseline === #
 SCRIPT="baseline"
 DATASET_NAME="mnist"
-TEST="False"
-DEVICE="cpu"
+TEST="True"
+DEVICE="gpu"
 SEED=0
 
 # === randens === #
@@ -69,13 +69,12 @@ SEED=0
 ## cluster
 if [ $HOSTNAME != "zenbook" ] ; then
   cd ~/adversarial_examples/src/
-  ##export CUDA_VISIBLE_DEVICES=-1 # GPU
 fi
 
 ## activate environment
-if [ $DEVICE = "cpu" ]; then
+if [ "$DEVICE" == "cpu" ]; then
   source ~/virtualenvs/venv/bin/activate
-elif [ $DEVICE = "gpu" ]; then
+elif [ "$DEVICE" == "gpu" ]; then
   conda activate tensorflow-gpu
 fi
 
@@ -89,8 +88,6 @@ if [ "$TEST" = "True" ] ; then
   FILEPATH="${FILEPATH}_test"
 fi
 OUT="${FILEPATH}_out.txt"
-CLEAN_OUT="${FILEPATH}_clean.txt"
-COMPLEXITY="${FILEPATH}_complexity.txt"
 
 if [ $SCRIPT = "baseline" ]; then
   python3 "baseline_convnet.py" $DATASET_NAME $TEST $DEVICE $SEED > $OUT
