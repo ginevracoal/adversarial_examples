@@ -7,8 +7,9 @@ import time
 import os
 import matplotlib.pyplot as plt
 import math
+import tensorflow as tf
 
-TEST_SIZE = 10
+TEST_SIZE = 20
 
 ######################
 # data preprocessing #
@@ -273,3 +274,26 @@ def compute_distances(x1,x2,ord):
     mean = np.mean([np.linalg.norm(flat_x1[idx] - flat_x2[idx], ord=ord) for idx in range(len(x1))])
     max = np.max([np.linalg.norm(flat_x1[idx] - flat_x2[idx], ord=ord) for idx in range(len(x1))])
     return {"min":min,"mean": mean,"max": max}
+
+
+def _set_session(device, n_jobs):
+    """
+     Initialize tf session on device.
+    :param device:
+    :param n_jobs:
+    :return:
+    """
+    # print(device_lib.list_local_devices())
+    from keras.backend.tensorflow_backend import set_session
+    if device == "gpu":
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+        # config.allow_soft_placement = True
+        # config.log_device_placement = True  # to log device placement (on which device the operation ran)
+        config.gpu_options.per_process_gpu_memory_fraction = 1/n_jobs
+        sess = tf.compat.v1.Session(config=config)
+        set_session(sess)  # set this TensorFlow session as the default session for Keras
+        sess.run(tf.global_variables_initializer())
+        # print("check cuda: ", tf.test.is_built_with_cuda())
+        # print("check gpu: ", tf.test.is_gpu_available())
+        return sess

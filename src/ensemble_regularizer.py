@@ -85,12 +85,13 @@ class EnsembleRegularizer(RandomRegularizer):
         else:
             raise AttributeError("\nModel has not been trained yet.")
 
-    def load_classifier(self, relative_path):
+    def load_classifier(self, relative_path, folder=None, filename=None):
         """
         Loads trained ensemble classifiers in a list.
         :param relative_path: relative path of folder containing trained models.
         :return: list of loaded classifiers.
         """
+        # todo: bug in custom loss function
         start_time = time.time()
         classifiers = []
         for i in range(self.ensemble_size):
@@ -122,10 +123,10 @@ def main(dataset_name, test, ensemble_size, projection_mode, lam, device):
                                 projection_mode=projection_mode, data_format=data_format, dataset_name=dataset_name,
                                 lam=lam, test=test)
     # === train === #
-    model.train(x_train, y_train, device)
+    # model.train(x_train, y_train, device)
     # model.save_classifier()
     # model.load_classifier(relative_path=TRAINED_MODELS)
-    # model.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
+    model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
