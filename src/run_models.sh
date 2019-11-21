@@ -17,32 +17,31 @@
 #######################################
 
 # === baseline === #
-#SCRIPT="baseline"
-#DATASET_NAME="mnist"
-#TEST="False"
-#ATTACK="deepfool"
-#EPS=0.5
-#DEVICE="cpu"
+SCRIPT="baseline"
+DATASET_NAME="mnist"
+TEST="False"
+DEVICE="cpu"
+SEED=0
 
 # === randens === #
 #SCRIPT="randens"
 #DATASET_NAME="mnist"
 #TEST="False"
-#N_PROJ_LIST=[500] #[6,9,12,15]
+#N_PROJ_LIST=[5] #[6,9,12,15]
 #SIZE_PROJ_LIST=[8] #[8,12,16,20]
 #PROJ_MODE="channels"
 #ATTACK="fgsm"
 #EPS=0.3
-#DEVICE="gpu"
+#DEVICE="cpu"
 
 # === parallel_random_ensemble === #
-SCRIPT="parallel_randens"
-DATASET_NAME="mnist"
-TEST="False"
-N_PROJ=50
-SIZE_PROJ_LIST=[8] #[8,12,16,20]
-PROJ_MODE="channels"
-DEVICE="cpu"
+#SCRIPT="parallel_randens"
+#DATASET_NAME="mnist"
+#TEST="False"
+#N_PROJ=5
+#SIZE_PROJ_LIST=[20] #[8,12,16,20]
+#PROJ_MODE="channels"
+#DEVICE="cpu"
 
 # === randreg === #
 #SCRIPT="randreg"
@@ -94,7 +93,7 @@ CLEAN_OUT="${FILEPATH}_clean.txt"
 COMPLEXITY="${FILEPATH}_complexity.txt"
 
 if [ $SCRIPT = "baseline" ]; then
-  python3 "baseline_convnet.py" $DATASET_NAME $TEST $ATTACK $EPS $DEVICE > $OUT
+  python3 "baseline_convnet.py" $DATASET_NAME $TEST $DEVICE $SEED > $OUT
 elif [ $SCRIPT = "randens" ]; then
   python3 "random_ensemble.py" $DATASET_NAME $TEST $N_PROJ_LIST $SIZE_PROJ_LIST $PROJ_MODE $ATTACK $EPS $DEVICE>> $OUT
 elif [ $SCRIPT = "parallel_randens" ]; then
