@@ -14,17 +14,18 @@ import random
 ############
 
 MIN_SIZE = 10
-MAX_SIZE = 20
-MIN_PROJ = 2
-MAX_PROJ = 4
+MAX_SIZE = 25
+MIN_PROJ = 1
+MAX_PROJ = 1
 
-L_RATE = 5
+L_RATE = 0.5
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "channels"  # "channels, grayscale"
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/random_regularizer/"
+TRAINED_MODELS = "../trained_models/randreg/"
+MODEL_NAME = "randreg"
 
 
 class RandomRegularizer(BaselineConvnet):
@@ -36,7 +37,7 @@ class RandomRegularizer(BaselineConvnet):
         super(RandomRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.init_seed = init_seed
         self.lam = lam
-        self.n_proj = None
+        self.n_proj = 2 if test else 10
         self.projection_mode = projection_mode
         self.inputs = Input(shape=self.input_shape)
         self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
@@ -45,13 +46,18 @@ class RandomRegularizer(BaselineConvnet):
         print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
               ", init_seed = ", self.init_seed)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
-        print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,"), size_proj~(",MIN_SIZE,",",MAX_SIZE,")")
+        # print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,")")
+        print("\nsize_proj~(",MIN_SIZE,",",MAX_SIZE,")")
 
     def _get_proj_params(self):
         random.seed(self.init_seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)  # random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
+
+    def _set_model_path(self, model_name="randreg"):
+        """ Defines model path and filename """
+        return super(RandomRegularizer, self)._set_model_path(model_name=model_name)
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -114,7 +120,6 @@ class RandomRegularizer(BaselineConvnet):
         return regularization / self.batch_size
 
     def _loss_on_projections_regularizer(self, inputs, outputs):
-
         channels = self._get_n_channels(inputs)
         size, seed = self._get_proj_params().values()
 
@@ -139,7 +144,7 @@ class RandomRegularizer(BaselineConvnet):
 
             # expectation #
             regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient/channels, ord=2, axis=0)))
-        return regularization / (self.batch_size * self.n_proj)
+        return regularization / self.batch_size #(self.batch_size * self.n_proj)
 
         #     # max #
         #     regularization += tf.reduce_max(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
@@ -164,7 +169,7 @@ class RandomRegularizer(BaselineConvnet):
         projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
         regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
         regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
-        return regularization / (self.batch_size * self.n_proj)
+        return regularization / self.batch_size
 
     def _loss_on_perturbations_regularizer(self, inputs, outputs):
         sess = tf.Session()
@@ -194,58 +199,72 @@ class RandomRegularizer(BaselineConvnet):
         return regularization / self.batch_size
 
     def train(self, x_train, y_train, device):
+        """
+        Separates the training data into batches, computes a random projection of each batch
+        :param x_train: input samples
+        :param y_train: input labels
+        :param device: device for computations (cpu/gpu)
+        :return: trained model (self)
+        """
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
-        # print(len(x_train), self.batch_size)
-        batches = int(len(x_train)/self.batch_size)
-        x_train_batches = np.split(x_train, batches)
-        y_train_batches = np.split(y_train, batches)
-
+        # batches = int(len(x_train)/self.batch_size)
+        n_batches = self.n_proj
+        print("n_batches = ", n_batches)
+        self.batch_size = int(len(x_train)/n_batches)
+        # print(len(x_train), self.batch_size, n_batches)
+        x_train_batches = np.split(x_train, n_batches)
+        y_train_batches = np.split(y_train, n_batches)
         start_time = time.time()
 
-        for batch in range(batches):
-            print("\n=== training batch", batch+1,"/",batches,"===")
-            idxs = np.random.choice(len(x_train_batches[0]), self.batch_size, replace=False)
-            x_train_sample = x_train_batches[batch][idxs]
-            y_train_sample = y_train_batches[batch][idxs]
-            inputs = tf.convert_to_tensor(x_train_sample)
-            outputs = tf.convert_to_tensor(y_train_sample)
-            early_stopping = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
+        for batch in range(n_batches):
+            print("\n=== training batch", batch+1,"/",n_batches,"===")
+            # idxs = np.random.choice(len(x_train_batches[0]), self.batch_size, replace=False)
+            # x_train_sample = x_train_batches[batch][idxs]
+            # y_train_sample = y_train_batches[batch][idxs]
+            # inputs = tf.convert_to_tensor(x_train_sample)
+            # outputs = tf.convert_to_tensor(y_train_sample)
+            x_train_batch = x_train_batches[batch]
+            y_train_batch = y_train_batches[batch]
+            inputs = tf.convert_to_tensor(x_train_batch)
+            outputs = tf.convert_to_tensor(y_train_batch)
 
             mini_batch = MINIBATCH
             device_name = self._set_device_name(device)
             with tf.device(device_name):
-                self.n_proj = random.randint(MIN_PROJ, MAX_PROJ) if self.test is False else TEST_PROJ
-                print("\nn_proj =",self.n_proj)
-                for proj in range(self.n_proj):
-                    print("\nprojection",proj+1,"/",self.n_proj)
-                    loss = self.loss_wrapper(inputs,outputs)
-                    self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
-                    if self.epochs == None:
-                        self.model.fit(x_train_sample, y_train_sample, epochs=100, batch_size=mini_batch,
-                                       callbacks=[early_stopping])
-                    else:
-                        self.model.fit(x_train_sample, y_train_sample, epochs=self.epochs, batch_size=mini_batch)
+                loss = self.loss_wrapper(inputs,outputs)
+                self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
+                if self.epochs == None:
+                    es = keras.callbacks.EarlyStopping(monitor='val_loss', verbose=1)
+                    self.model.fit(x_train_batch, y_train_batch, epochs=80, batch_size=mini_batch,
+                                   callbacks=[es], shuffle=True, validation_split=0.2)
+                else:
+                    self.model.fit(x_train_batch, y_train_batch, epochs=self.epochs, batch_size=mini_batch,
+                                   shuffle=True, validation_split=0.2)
 
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
         return self
 
 
-def main(dataset_name, test, lam, projection_mode, eps, device, seed):
+def main(dataset_name, test, lam, projection_mode, device, seed):
     """
     :param dataset_name: choose between "mnist" and "cifar"
     :param test: if True only takes the first 100 samples
-    :param lam: lambda regularization weight parameter
-    :param projection_mode: method for computing projections on RGB images
-    :param eps: upper ths for adversaries distance
+    # :param lam: lambda regularization weight parameter
+    # :param projection_mode: method for computing projections on RGB images
+    # :param eps: upper ths for adversaries distance
     :param device: code execution device (cpu/gpu)
     :param seed: random seed for the projections
     """
 
     # === initialize === #
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name, test=test)
+    random.seed(seed)
+    master_seed(seed)
+
+    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
+                                                                                           test=test)
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                 dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test,
@@ -253,15 +272,15 @@ def main(dataset_name, test, lam, projection_mode, eps, device, seed):
 
     # === train === #
     randreg.train(x_train, y_train, device)
-    # randreg.save_classifier()
+    randreg.save_classifier(relative_path=RESULTS, filename=randreg.filename+"_seed="+str(seed))
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
     # randreg.load_classifier(relative_path=TRAINED_MODELS)
 
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
-    for method in ['fgsm','pgd','deepfool','carlini']:
-        x_test_adv = randreg.load_adversaries(method, eps)
-        randreg.evaluate(x_test_adv, y_test)
+    # for method in ['fgsm','pgd','deepfool','carlini','newtonfool]:
+    #     x_test_adv = randreg.load_adversaries(attack=method, seed=seed)
+    #     randreg.evaluate(x_test_adv, y_test)
 
 
 if __name__ == "__main__":
@@ -270,19 +289,16 @@ if __name__ == "__main__":
         test = eval(sys.argv[2])
         lam = float(sys.argv[3])
         projection_mode = sys.argv[4]
-        eps = float(sys.argv[5])
-        device = sys.argv[6]
-        seed = int(sys.argv[7])
+        device = sys.argv[5]
+        seed = int(sys.argv[6])
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
         test = input("\nDo you just want to test the code? (True/False): ")
         lam = float(input("\nChoose lambda regularization weight (type=float): "))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
-        eps = float(input("\nSet a ths for perturbation norm: "))
         device = input("\nChoose a device (cpu/gpu): ")
         seed = input("\nSet a random seed (int>=0).")
 
-    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, eps=eps, device=device,
-         seed=seed)
+    main(dataset_name=dataset_name, test=test, lam=lam, projection_mode=projection_mode, device=device, seed=seed)
 

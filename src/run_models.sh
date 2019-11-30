@@ -44,14 +44,13 @@ SEED=0
 #DEVICE="cpu"
 
 # === randreg === #
-#SCRIPT="randreg"
-#DATASET_NAME="mnist"
-#TEST="False"
-#LAMBDA=0.5
-#PROJ_MODE="loss_on_projections"
-#EPS=0.3
-#DEVICE="cpu"
-#SEED=0
+SCRIPT="randreg"
+DATASET_NAME="mnist"
+TEST="True"
+LAMBDA=0.5
+PROJ_MODE="projected_loss"
+DEVICE="cpu"
+SEED=0
 
 # === ensemble_regularizer === #
 #SCRIPT="ensemble_regularizer"
@@ -96,7 +95,14 @@ elif [ $SCRIPT = "randens" ]; then
 elif [ $SCRIPT = "parallel_randens" ]; then
   python3 "parallel_random_ensemble.py" $DATASET_NAME $TEST 0 $N_PROJ $SIZE_PROJ_LIST $PROJ_MODE $DEVICE>> $OUT
 elif [ $SCRIPT = "randreg" ]; then
-  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $EPS $DEVICE $SEED >> $OUT
+  python3 "random_regularizer.py" $DATASET_NAME $TEST $LAMBDA $PROJ_MODE $DEVICE $SEED >> $OUT
 elif [ $SCRIPT = "ensemble_regularizer" ]; then
   python3 "ensemble_regularizer.py" $DATASET_NAME $TEST $ENSEMBLE_SIZE $PROJ_MODE $LAMBDA $DEVICE >> $OUT
+fi
+
+## deactivate environment
+if [ "$DEVICE" == "cpu" ]; then
+  deactivate
+elif [ "$DEVICE" == "gpu" ]; then
+  conda deactivate
 fi
