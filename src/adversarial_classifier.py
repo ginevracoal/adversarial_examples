@@ -2,29 +2,48 @@
 
 from keras.models import Model
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
-from art.classifiers import KerasClassifier as artKerasClassifier
-from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, \
-    ProjectedGradientDescent, NewtonFool, CarliniL2Method, CarliniLInfMethod, BoundaryAttack, SpatialTransformation, ZooAttack
 from sklearn.metrics import classification_report
 from utils import *
+from utils import _set_session
 import time
 import tensorflow as tf
 from keras.layers import Input
 from tensorflow.python.client import device_lib
 from keras.models import load_model
 import random
-from art.utils import master_seed
+import warnings
+#from tensorflow_probability.python.optimizer import VariationalSGD
 
 ############
 # defaults #
 ############
 
+ADVERSARIAL_PKG = "cleverhans" # cleverhans, art
 MINIBATCH = 20
 TRAINED_MODELS = "../trained_models/"
 DATA_PATH = "../data/"
 RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
-ATTACKS = "None, fgsm, pgd, deepfool, carlini"
+ATTACKS = "None, fgsm, pgd, deepfool, carlini, newtonfool, virtual"
+
+###################
+# adversarial pkg #
+###################
+
+if ADVERSARIAL_PKG == "art":
+    import art
+    from art.classifiers import KerasClassifier as artKerasClassifier
+    from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, \
+        ProjectedGradientDescent, NewtonFool, CarliniLInfMethod, BoundaryAttack, SpatialTransformation, ZooAttack
+    from art.utils import master_seed
+
+elif ADVERSARIAL_PKG == "cleverhans":
+    import cleverhans
+    from cleverhans.utils_keras import KerasModelWrapper
+    from cleverhans.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, ProjectedGradientDescent,\
+        CarliniWagnerL2
+else:
+    raise ValueError("wrong package name.")
 
 
 class AdversarialClassifier(sklKerasClassifier):
@@ -45,7 +64,6 @@ class AdversarialClassifier(sklKerasClassifier):
         self.folder, self.filename = self._set_model_path().values()
         self.trained = False
 
-    # todo: docstrings
     def _set_model_path(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -59,24 +77,24 @@ class AdversarialClassifier(sklKerasClassifier):
     @staticmethod
     def _set_session(device):
         """ Initialize tf session """
-        print(device_lib.list_local_devices())
+        # print(device_lib.list_local_devices())
 
         if device == "gpu":
-            print("check cuda: ", tf.test.is_built_with_cuda())
-            print("check gpu: ", tf.test.is_gpu_available())
-            # config = tf.ConfigProto()
-            # config.gpu_options.allow_growth = True
-            # sess = tf.Session(config=config)
-            from keras.backend.tensorflow_backend import set_session
+            n_jobs = 1
+            # print("check cuda: ", tf.test.is_built_with_cuda())
+            # print("check gpu: ", tf.test.is_gpu_available())
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-            config.log_device_placement = True  # to log device placement (on which device the operation ran)
-            sess = tf.Session(config=config)
-            set_session(sess)  # set this TensorFlow session as the default session for Keras
+            # config.allow_soft_placement = True
+            # config.log_device_placement = True  # to log device placement (on which device the operation ran)
+            config.gpu_options.per_process_gpu_memory_fraction = 1 / n_jobs
+            sess = tf.compat.v1.Session(config=config)
+            keras.backend.set_session(sess)  # set this TensorFlow session as the default session for Keras
+            sess.run(tf.global_variables_initializer())
             return sess
         elif device == "cpu":
-            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
-            # sess.run(tf.global_variables_initializer())
+            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+            sess.run(tf.global_variables_initializer())
             return sess
 
     def _set_model(self):
@@ -103,6 +121,10 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             raise AssertionError("Wrong device name.")
 
+    def set_optimizer(self):
+        return keras.optimizers.Adadelta()
+        # return VariationalSGD(batch_size=mini_batch, total_num_examples=len(x_train))
+
     def train(self, x_train, y_train, device):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
@@ -110,14 +132,16 @@ class AdversarialClassifier(sklKerasClassifier):
         device_name = self._set_device_name(device)
         with tf.device(device_name):
             mini_batch = MINIBATCH
-            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(),
-                               metrics=['accuracy'])
+            optimizer = self.set_optimizer()
+            self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=optimizer, metrics=['accuracy'])
             start_time = time.time()
             if self.epochs == None:
-                es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-                self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es], shuffle=True)
+                es = keras.callbacks.EarlyStopping(monitor='val_loss', verbose=1)
+                self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es], shuffle=True,
+                               validation_split=0.2)
             else:
-                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, shuffle=True)
+                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, shuffle=True,
+                               validation_split=0.2)
             print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
             self.trained = True
             return self
@@ -134,8 +158,9 @@ class AdversarialClassifier(sklKerasClassifier):
         :return: predictions
         """
         if self.trained:
+            classification_prob = self.predict(x)
             y_true = np.argmax(y, axis=1)
-            y_pred = np.argmax(self.predict(x), axis=1)
+            y_pred = np.argmax(classification_prob, axis=1)
             nb_correct_adv_pred = np.sum(y_pred == y_true)
 
             print("Correctly classified: {}".format(nb_correct_adv_pred))
@@ -144,6 +169,7 @@ class AdversarialClassifier(sklKerasClassifier):
             acc = nb_correct_adv_pred / y.shape[0]
             print("Accuracy: %.2f%%" % (acc * 100))
             # print(classification_report(y_true, y_pred, labels=list(range(self.num_classes))))
+            return classification_prob, y_true, y_pred
         else:
             raise AttributeError("Train your classifier before the evaluation.")
 
@@ -156,12 +182,12 @@ class AdversarialClassifier(sklKerasClassifier):
         if dataset_name == "mnist":
             eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.8, 'deepfool': None, 'newtonfool':None}
         elif dataset_name == "cifar":
-            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.5, 'deepfool': None, 'newtonfool':None}
+            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.3, 'deepfool': None, 'newtonfool':None}
         else:
-            raise ValueError("Wrong dataset name.")
+            raise ValueError("Wrong name.")
         return eps[attack]
 
-    def generate_adversaries(self, x, y, attack, eps=None, seed=0):
+    def generate_adversaries(self, x, y, attack, eps=None, seed=0, device="cpu"):
         """
         Generates adversaries on the input data x using a given attack method.
 
@@ -170,50 +196,85 @@ class AdversarialClassifier(sklKerasClassifier):
         :param attack: art.attack method
         :return: adversarially perturbed data
         """
+        def batch_generate(attacker, x, batches=10):
+            x_batches = np.split(x, batches)
+            x_adv = []
+            for x_batch in x_batches:
+                x_adv.append(attacker.generate_np(x_batch))
+            x_adv = np.vstack(x_adv)
+            return x_adv
 
-        if self.trained:
-            classifier = artKerasClassifier(clip_values=(0,1), model=self.model)
-            master_seed(seed)
-            # random.seed(seed)
-        else:
-            raise AttributeError("Train your classifier first.")
-
+        x_adv = None
         if eps is None:
             eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
 
-        # classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
-        # classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
-        print("\nGenerating adversaries with", attack, "method on", self.dataset_name)
-        x_adv = None
-        if attack == 'fgsm':
-            attacker = FastGradientMethod(classifier, eps=eps)
-            x_adv = attacker.generate(x=x)
-        elif attack == 'deepfool':
-            attacker = DeepFool(classifier, nb_grads=5)
-            x_adv = attacker.generate(x)
-        elif attack == 'virtual':
-            attacker = VirtualAdversarialMethod(classifier)
-            x_adv = attacker.generate(x)
-        elif attack == 'carlini':
-            attacker = CarliniLInfMethod(classifier, targeted=False, eps=eps)
-            x_adv = attacker.generate(x=x)
-        elif attack == 'pgd':
-            attacker = ProjectedGradientDescent(classifier, eps=eps)
-            x_adv = attacker.generate(x=x)
-        elif attack == 'newtonfool':
-            attacker = NewtonFool(classifier, eta=0.3)
-            x_adv = attacker.generate(x=x)
-        elif attack == 'boundary':
-            attacker = BoundaryAttack(classifier, targeted=True, max_iter=500, delta=0.05, epsilon=eps)
-            y=np.random.permutation(y)
-            x_adv = attacker.generate(x=x, y=y)
-        elif attack == 'spatial':
-            attacker = SpatialTransformation(classifier, max_translation=3.0,num_translations=5, max_rotation=8.0,
-                                             num_rotations=3)
-            x_adv = attacker.generate(x=x, y=y)
-        elif attack == 'zoo':
-            attacker = ZooAttack(classifier)
-            x_adv = attacker.generate(x=x, y=y)
+        if self.trained:
+            print("\nGenerating adversaries with", attack, "method on", self.dataset_name)
+            random.seed(seed)
+            with warnings.catch_warnings():
+                if ADVERSARIAL_PKG == "art":
+                    classifier = artKerasClassifier(clip_values=(0,255), model=self.model)
+                    master_seed(seed)
+
+                    # classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
+                    # classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
+                    if attack == 'fgsm':
+                        attacker = art.attacks.FastGradientMethod(classifier, eps=eps)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'deepfool':
+                        attacker = art.attacks.DeepFool(classifier, nb_grads=5)
+                        x_adv = attacker.generate(x)
+                    elif attack == 'virtual':
+                        attacker = art.attacks.VirtualAdversarialMethod(classifier)
+                        x_adv = attacker.generate(x)
+                    elif attack == 'carlini':
+                        attacker = art.attacks.CarliniLInfMethod(classifier, targeted=False, eps=eps)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'pgd':
+                        attacker = art.attacks.ProjectedGradientDescent(classifier, eps=eps)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'newtonfool':
+                        attacker = art.attacks.NewtonFool(classifier, eta=0.3)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'boundary':
+                        attacker = art.attacks.BoundaryAttack(classifier, targeted=False, max_iter=500, delta=0.05, epsilon=eps)
+                        # y = np.random.permutation(y)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'spatial':
+                        attacker = art.attacks.SpatialTransformation(classifier, max_translation=3.0, num_translations=5,
+                                                         max_rotation=8.0,
+                                                         num_rotations=3)
+                        x_adv = attacker.generate(x=x)
+                    elif attack == 'zoo':
+                        attacker = ZooAttack(classifier)
+                        x_adv = attacker.generate(x=x, y=y)
+                    else:
+                        raise("wrong attack name.")
+
+                elif ADVERSARIAL_PKG == "cleverhans":
+                    session = self._set_session(device=device)
+                    classifier = KerasModelWrapper(self.model)
+
+                    if attack == 'fgsm':
+                        attacker = cleverhans.attacks.FastGradientMethod(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'deepfool':
+                        attacker = cleverhans.attacks.DeepFool(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'virtual':
+                        attacker = cleverhans.attacks.VirtualAdversarialMethod(classifier, sess=session)
+                        # x_normalized = (x-min(x))/(max(x)-min(x))
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'carlini':
+                        attacker = cleverhans.attacks.CarliniWagnerL2(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'pgd':
+                        attacker = cleverhans.attacks.ProjectedGradientDescent(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                else:
+                    raise ValueError("wrong pkg name.")
+        else:
+            raise AttributeError("Train your classifier first.")
 
         print("Distance from perturbations: ", compute_distances(x, x_adv, ord=self._get_norm(attack)))
 
@@ -222,7 +283,7 @@ class AdversarialClassifier(sklKerasClassifier):
         else:
             return x_adv
 
-    def save_adversaries(self, data, attack, eps, seed=0):
+    def save_adversaries(self, data, attack, eps=None, seed=0):
         """
         Save adversarially augmented test set.
         :param data: test set
@@ -231,25 +292,31 @@ class AdversarialClassifier(sklKerasClassifier):
         :param eps:
         :return:
         """
-        if eps:
-            save_to_pickle(data=data, relative_path=RESULTS,
-                           filename=self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl")
-        else:
-            save_to_pickle(data=data, relative_path=RESULTS,
-                           filename=self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl")
+        filename = self.dataset_name + "_x_test_" + attack + "_seed=" + str(seed) + ".pkl"
+        eps_filename = self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(seed) + ".pkl"
 
-    def load_adversaries(self, attack, seed=0, eps=None):
         if eps:
-            path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
+            save_to_pickle(data=data, relative_path=RESULTS, filename=eps_filename)
         else:
             eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
             if eps is None:
-                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(seed) + ".pkl"
+                save_to_pickle(data=data, relative_path=RESULTS, filename=filename)
             else:
-                path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_" + str(eps) + "_" + str(seed) + ".pkl"
+                save_to_pickle(data=data, relative_path=RESULTS, filename=eps_filename)
 
-        x_test_adv = load_from_pickle(path=path, test=self.test)
-        return x_test_adv
+    def load_adversaries(self, attack, seed=0, eps=None):
+        path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_seed=" + str(seed) + ".pkl"
+        if eps:
+            eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(seed) + ".pkl"
+            return load_from_pickle(path=eps_path, test=self.test)
+        else:
+            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
+            if eps is None:
+                return load_from_pickle(path=path, test=self.test)
+            else:
+                eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(
+                    seed) + ".pkl"
+                return load_from_pickle(path=eps_path, test=self.test)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
         """
