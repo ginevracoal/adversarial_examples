@@ -112,7 +112,7 @@ class BaselineConvnet(AdversarialClassifier):
         print("\n===== Adversarial training =====")
         eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
         x_train_adv = self.generate_adversaries(x_train, y_train, attack, eps, seed=seed, device=device)
-        # x_train_adv = self.load_adversaries(attack=attack, eps=eps)
+        # x_train_adv = self.load_adversaries(attack=attack, relative_path=DATA_PATH)
 
         # Data augmentation: expand the training set with the adversarial samples
         # x_train_ext = np.append(x_train, x_train_adv, axis=0)
@@ -266,7 +266,7 @@ def main(dataset_name, test, device, seed):
     # for attack in attacks:
     #     x_test_adv = model.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed, eps=eps)
     #     model.save_adversaries(data=x_test_adv, attack=attack, seed=seed, eps=eps)
-    #     x_test_adv = model.load_adversaries(attack=attack, seed=seed)
+    #     x_test_adv = model.load_adversaries(attack=attack, relative_path=DATA_PATH, seed=seed)
     #     model.evaluate(x=x_test_adv, y=y_test)
 
 

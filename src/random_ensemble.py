@@ -7,7 +7,7 @@ separately on each projection, then it returns an ensemble classification on the
 
 from baseline_convnet import *
 from projection_functions import *
-
+from robustness_measures import softmax_difference
 
 ############
 # defaults #
@@ -25,7 +25,7 @@ class RandomEnsemble(BaselineConvnet):
     probabilities from the single projections.
     """
     def __init__(self, input_shape, num_classes, n_proj, size_proj, projection_mode, data_format, dataset_name, test,
-                 epochs=None, centroid_translation=False):
+                 library, epochs=None, centroid_translation=False):
         """
         Extends BaselineConvnet initializer with additional informations about the projections.
 
@@ -41,12 +41,17 @@ class RandomEnsemble(BaselineConvnet):
 
         if size_proj > input_shape[1]:
             raise ValueError("The size of projections has to be lower than the image size.")
+        # todo: refactor centroid translation
         self.centroid_translation = centroid_translation
+        self.translation_vector = None
+        ######################################
         self.original_input_shape = input_shape
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
-        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, epochs)
+        super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, library, epochs)
+        self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
+        # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,)
         self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
         # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
         #                               54, 42, 150, 184, 52, 17, 127, 13])
@@ -141,6 +146,10 @@ class RandomEnsemble(BaselineConvnet):
         """
         # compute predictions for each projection
         proj_predictions = np.array([classifier.predict(projected_data[i]) for i, classifier in enumerate(classifiers)])
+
+        # todo: little analysis on ensemble behaviour
+        # print(proj_predictions[:,0,:])
+
         # sum the probabilities across all predictors
         predictions = np.sum(proj_predictions, axis=0)
         return predictions
@@ -195,13 +204,11 @@ class RandomEnsemble(BaselineConvnet):
 
     def predict(self, x, add_baseline_prob=False):
         """
-        # todo docstring
-        Compute the ensemble prediction probability vector.
-
-        :param classifiers: list of trained classifiers over different projections
-        :param data: input data
+        Compute the ensemble prediction probability vector by summing up the probability vectors obtained over different
+        projections.
+        :param x: input data
         :param add_baseline_prob: if True adds baseline probabilities to logits layer
-        :return: probability vector final predictions for the input data
+        :return: probability vector final predictions on x
         """
         projected_data, _ = self.compute_projections(x, translation=self.translation_vector)
         predictions = None
@@ -236,16 +243,15 @@ class RandomEnsemble(BaselineConvnet):
 
     def evaluate(self, x, y, report_projections=False):
         """ Extends evaluate() with projections reports"""
-        y_pred = super(RandomEnsemble, self).evaluate(x, y, ensemble_model=True)
+        classification_prob, y_true, y_pred = super(RandomEnsemble, self).evaluate(x, y)
         # y_pred = self.classifiers.evaluate(x, y)
         if report_projections:
             x_proj, _ = self.compute_projections(x, translation=self.translation_vector)
             self.report_projections(classifiers=self.classifiers, x_test_proj=x_proj, y_test=y)
+        # print(classification_prob[0],y_true[0],y_pred[0])
+        return classification_prob, y_true, y_pred
 
-        return y_pred
-
-    def generate_adversaries(self, x, y, attack, seed=0, eps=0.5):
-        # todo: refactor
+    def generate_adversaries(self, x, y, attack, seed=0, eps=None, device="cpu"):
         """ Adversaries are generated on the baseline classifier """
 
         baseline = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -254,8 +260,8 @@ class RandomEnsemble(BaselineConvnet):
         x_adv = baseline.generate_adversaries(x, y, attack=attack, eps=eps)
         return x_adv
 
-    def _set_model_path(self):
-        folder = MODEL_NAME + "/" + self.dataset_name + "_randens" + "_size=" + str(self.size_proj) +\
+    def _set_model_path(self, model_name="randens"):
+        folder = MODEL_NAME + "/" + self.dataset_name + "_" + str(model_name) + "_size=" + str(self.size_proj) +\
                  "_" + str(self.projection_mode)
         if self.centroid_translation:
             folder = folder + "_centroid"
@@ -301,6 +307,7 @@ class RandomEnsemble(BaselineConvnet):
         :return: list of trained classifiers
         """
         start_time = time.time()
+        self.trained = True
 
         classifiers = []
         for i in self.random_seeds:
@@ -318,9 +325,6 @@ class RandomEnsemble(BaselineConvnet):
 
         self.classifiers = classifiers
         return classifiers
-
-    def load_robust_classifier(self, relative_path, attack, eps):
-        raise NotImplementedError
 
 
 ########
@@ -345,19 +349,21 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
                            n_proj=n_proj, size_proj=size_proj, projection_mode=projection_mode,
                            data_format=data_format, dataset_name=dataset_name, test=test, epochs=None,
-                           centroid_translation=False)
+                           centroid_translation=False, library="cleverhans")
     # === train === #
     # model.train(x_train, y_train, device=device)
     # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    model.load_classifier(relative_path=TRAINED_MODELS)
-    # model.load_classifier(relative_path=RESULTS)
+    # model.load_classifier(relative_path=TRAINED_MODELS)
+    model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     model.evaluate(x=x_test, y=y_test)
-    x_test_adv = model.load_adversaries(attack=attack)
-    model.evaluate(x_test_adv, y_test)
+    for attack in ["fgsm", "pgd"]:#, "carlini", "deepfool", "newtonfool"]:
+        x_test_adv = model.load_adversaries(relative_path=RESULTS, attack=attack)
+        model.evaluate(x=x_test_adv, y=y_test)
+        softmax_difference(classifier=model, x1=x_test, x2=x_test_adv)
 
     # x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
     # print("Distance from perturbations: ", compute_distances(x_test, x_test_adv, ord=model._get_norm(attack)))

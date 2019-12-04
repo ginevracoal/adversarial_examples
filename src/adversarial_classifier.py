@@ -286,26 +286,16 @@ class AdversarialClassifier(sklKerasClassifier):
         if eps:
             save_to_pickle(data=data, relative_path=RESULTS, filename=eps_filename)
         else:
-            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
-            if eps is None:
-                save_to_pickle(data=data, relative_path=RESULTS, filename=filename)
-            else:
-                save_to_pickle(data=data, relative_path=RESULTS, filename=eps_filename)
+            save_to_pickle(data=data, relative_path=RESULTS, filename=filename)
 
-    def load_adversaries(self, attack, seed=0, eps=None):
-        path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_seed=" + str(seed) + ".pkl"
+    def load_adversaries(self, relative_path, attack, seed=0, eps=None):
+        path = relative_path + self.dataset_name + "_x_test_" + attack + "_"+ str(self.library) + "_seed=" + str(seed) + ".pkl"
         if eps:
-            eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) +\
+            eps_path = relative_path + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) +\
                        "_"+str(self.library)+ "_seed=" + str(seed) + ".pkl"
             return load_from_pickle(path=eps_path, test=self.test)
         else:
-            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
-            if eps is None:
-                return load_from_pickle(path=path, test=self.test)
-            else:
-                eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) +\
-                           "_"+str(self.library) + "_seed=" + str(seed) + ".pkl"
-                return load_from_pickle(path=eps_path, test=self.test)
+            return load_from_pickle(path=path, test=self.test)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
         """
