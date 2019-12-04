@@ -18,7 +18,6 @@ import warnings
 # defaults #
 ############
 
-ADVERSARIAL_PKG = "cleverhans" # cleverhans, art
 MINIBATCH = 20
 TRAINED_MODELS = "../trained_models/"
 DATA_PATH = "../data/"
@@ -26,32 +25,13 @@ RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini, newtonfool, virtual"
 
-###################
-# adversarial pkg #
-###################
-
-if ADVERSARIAL_PKG == "art":
-    import art
-    from art.classifiers import KerasClassifier as artKerasClassifier
-    from art.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, \
-        ProjectedGradientDescent, NewtonFool, CarliniLInfMethod, BoundaryAttack, SpatialTransformation, ZooAttack
-    from art.utils import master_seed
-
-elif ADVERSARIAL_PKG == "cleverhans":
-    import cleverhans
-    from cleverhans.utils_keras import KerasModelWrapper
-    from cleverhans.attacks import FastGradientMethod, DeepFool, VirtualAdversarialMethod, ProjectedGradientDescent,\
-        CarliniWagnerL2
-else:
-    raise ValueError("wrong package name.")
-
 
 class AdversarialClassifier(sklKerasClassifier):
     """
     Adversarial Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, epochs=None):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, library="art", epochs=None):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
@@ -63,6 +43,7 @@ class AdversarialClassifier(sklKerasClassifier):
         self.classes_ = self._set_classes()
         self.folder, self.filename = self._set_model_path().values()
         self.trained = False
+        self.library = library # art, cleverhans
 
     def _set_model_path(self, *args, **kwargs):
         raise NotImplementedError
@@ -136,7 +117,7 @@ class AdversarialClassifier(sklKerasClassifier):
             self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=optimizer, metrics=['accuracy'])
             start_time = time.time()
             if self.epochs == None:
-                es = keras.callbacks.EarlyStopping(monitor='val_loss', verbose=1)
+                es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
                 self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es], shuffle=True,
                                validation_split=0.2)
             else:
@@ -199,8 +180,8 @@ class AdversarialClassifier(sklKerasClassifier):
         def batch_generate(attacker, x, batches=10):
             x_batches = np.split(x, batches)
             x_adv = []
-            for x_batch in x_batches:
-                x_adv.append(attacker.generate_np(x_batch))
+            for idx, x_batch in enumerate(x_batches):
+                x_adv.append(attacker.generate_np(x_val=x_batch))
             x_adv = np.vstack(x_adv)
             return x_adv
 
@@ -212,7 +193,11 @@ class AdversarialClassifier(sklKerasClassifier):
             print("\nGenerating adversaries with", attack, "method on", self.dataset_name)
             random.seed(seed)
             with warnings.catch_warnings():
-                if ADVERSARIAL_PKG == "art":
+                if self.library == "art":
+                    import art.attacks
+                    from art.classifiers import KerasClassifier as artKerasClassifier
+                    from art.utils import master_seed
+
                     classifier = artKerasClassifier(clip_values=(0,255), model=self.model)
                     master_seed(seed)
 
@@ -246,12 +231,15 @@ class AdversarialClassifier(sklKerasClassifier):
                                                          num_rotations=3)
                         x_adv = attacker.generate(x=x)
                     elif attack == 'zoo':
-                        attacker = ZooAttack(classifier)
+                        attacker = art.attacks.ZooAttack(classifier)
                         x_adv = attacker.generate(x=x, y=y)
                     else:
                         raise("wrong attack name.")
 
-                elif ADVERSARIAL_PKG == "cleverhans":
+                elif self.library == "cleverhans":
+                    import cleverhans.attacks
+                    from cleverhans.utils_keras import KerasModelWrapper
+
                     session = self._set_session(device=device)
                     classifier = KerasModelWrapper(self.model)
 
@@ -263,7 +251,6 @@ class AdversarialClassifier(sklKerasClassifier):
                         x_adv = batch_generate(attacker, x)
                     elif attack == 'virtual':
                         attacker = cleverhans.attacks.VirtualAdversarialMethod(classifier, sess=session)
-                        # x_normalized = (x-min(x))/(max(x)-min(x))
                         x_adv = batch_generate(attacker, x)
                     elif attack == 'carlini':
                         attacker = cleverhans.attacks.CarliniWagnerL2(classifier, sess=session)
@@ -277,11 +264,11 @@ class AdversarialClassifier(sklKerasClassifier):
             raise AttributeError("Train your classifier first.")
 
         print("Distance from perturbations: ", compute_distances(x, x_adv, ord=self._get_norm(attack)))
-
-        if self.test:
-            return x_adv[:TEST_SIZE]
-        else:
-            return x_adv
+        #
+        # if self.test:
+        #     return x_adv[:TEST_SIZE]
+        # else:
+        return x_adv
 
     def save_adversaries(self, data, attack, eps=None, seed=0):
         """
@@ -292,8 +279,9 @@ class AdversarialClassifier(sklKerasClassifier):
         :param eps:
         :return:
         """
-        filename = self.dataset_name + "_x_test_" + attack + "_seed=" + str(seed) + ".pkl"
-        eps_filename = self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(seed) + ".pkl"
+        filename = self.dataset_name + "_x_test_" + attack + "_"+str(self.library)+ "_seed=" + str(seed) + ".pkl"
+        eps_filename = self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_"+str(self.library)+ "_seed=" \
+                       + str(seed) + ".pkl"
 
         if eps:
             save_to_pickle(data=data, relative_path=RESULTS, filename=eps_filename)
@@ -307,15 +295,16 @@ class AdversarialClassifier(sklKerasClassifier):
     def load_adversaries(self, attack, seed=0, eps=None):
         path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_seed=" + str(seed) + ".pkl"
         if eps:
-            eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(seed) + ".pkl"
+            eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) +\
+                       "_"+str(self.library)+ "_seed=" + str(seed) + ".pkl"
             return load_from_pickle(path=eps_path, test=self.test)
         else:
             eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
             if eps is None:
                 return load_from_pickle(path=path, test=self.test)
             else:
-                eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) + "_seed=" + str(
-                    seed) + ".pkl"
+                eps_path = DATA_PATH + self.dataset_name + "_x_test_" + attack + "_eps=" + str(eps) +\
+                           "_"+str(self.library) + "_seed=" + str(seed) + ".pkl"
                 return load_from_pickle(path=eps_path, test=self.test)
 
     def save_classifier(self, relative_path, folder=None, filename=None):
