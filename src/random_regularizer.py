@@ -18,46 +18,55 @@ MAX_SIZE = 25
 MIN_PROJ = 1
 MAX_PROJ = 1
 
-L_RATE = 0.5
+L_RATE = 0.01
 TEST_SIZE = 2
 TEST_PROJ = 1
 PROJ_MODE = "no_projections, loss_on_projections, projected_loss, loss_on_perturbations"
 CHANNEL_MODE = "channels"  # "channels, grayscale"
 DERIVATIVES_ON_INPUTS = True  # if True compute gradient derivatives w.r.t. the inputs, else w.r.t. the projected inputs
-TRAINED_MODELS = "../trained_models/randreg/"
+TRAINED_MODELS = "../trained_models/"
 MODEL_NAME = "randreg"
 
 
 class RandomRegularizer(BaselineConvnet):
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, init_seed=0):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, lam, projection_mode, test, library,
+                 seed=0, epochs=None):
         """
         :param dataset_name: name of the dataset is required for setting different CNN architectures.
         """
-        super(RandomRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.init_seed = init_seed
-        self.lam = lam
-        self.n_proj = 2 if test else 10
+        self.seed = seed
         self.projection_mode = projection_mode
+        super(RandomRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, test, library,
+                                                epochs)
+        self.lam = lam
+        self.n_proj = 3 # projections per batch
+        self.batch_size = 1000
         self.inputs = Input(shape=self.input_shape)
-        self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
-                          "_" + str(self.projection_mode) + "_" + str(self.init_seed)
+        # self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
+        #                   "_" + str(self.projection_mode) + "_" + str(self.init_seed)
 
         print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
-              ", init_seed = ", self.init_seed)
+              ", init_seed = ", self.seed)
         print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
-        # print("\nn_proj~(",MIN_PROJ,",",MAX_PROJ,")")
-        print("\nsize_proj~(",MIN_SIZE,",",MAX_SIZE,")")
+        print("\nsize_proj~(",MIN_SIZE,",",MAX_SIZE,")", ", proj_per_batch=", self.n_proj)
 
     def _get_proj_params(self):
-        random.seed(self.init_seed)
+        random.seed(self.seed)
         size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)  # random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
 
     def _set_model_path(self, model_name="randreg"):
         """ Defines model path and filename """
-        return super(RandomRegularizer, self)._set_model_path(model_name=model_name)
+        folder = str(model_name)+"/"
+        if self.epochs == None:
+            filename = self.dataset_name + "_" + str(model_name) + "_" + str(self.projection_mode) + "_seed=" \
+                       + str(self.seed)
+        else:
+            filename = self.dataset_name + "_" + str(model_name) + "_epochs=" + str(self.epochs) + "_" \
+                       + str(self.projection_mode) +"_seed="+str(self.seed)
+        return {'folder': folder, 'filename': filename}
 
     def loss_wrapper(self, inputs, outputs):
         """ Loss wrapper for custom loss function.
@@ -84,6 +93,7 @@ class RandomRegularizer(BaselineConvnet):
 
             return K.binary_crossentropy(y_true, y_pred) + self.lam * regularization_term
 
+        self.loss = custom_loss
         return custom_loss
 
     def _compute_gradients(self, tensor, var_list):
@@ -155,20 +165,25 @@ class RandomRegularizer(BaselineConvnet):
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
 
-        size, seed = self._get_proj_params().values()
         channels = self._get_n_channels(inputs)
-
         axis = 1 if self.data_format == "channels_first" else -1
 
+        # compute loss gradients
         loss_gradient = 0
         for channel in range(channels):
             channel_data = tf.expand_dims(input=inputs[:,:,:,channel], axis=3)
             loss = K.categorical_crossentropy(target=outputs, output=self._get_logits(inputs=channel_data),
                                               from_logits=True, axis=axis)
             loss_gradient += self._compute_gradients(loss, [inputs])[0] / channels
-        projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
-        regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
-        regularization = tf.reduce_sum(tf.math.square(tf.norm(regularization, ord=2, axis=0)))
+
+        # project and regularize
+        size = self._get_proj_params()['size']
+        regularization = 0
+        for proj in range(self.n_proj):
+            seed = self._get_proj_params()['seed']
+            projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
+            # regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
+            regularization += tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=0))) / self.n_proj
         return regularization / self.batch_size
 
     def _loss_on_perturbations_regularizer(self, inputs, outputs):
@@ -210,9 +225,9 @@ class RandomRegularizer(BaselineConvnet):
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         # batches = int(len(x_train)/self.batch_size)
-        n_batches = self.n_proj
+        n_batches = 1 if self.test else int(len(x_train)/self.batch_size)
         print("n_batches = ", n_batches)
-        self.batch_size = int(len(x_train)/n_batches)
+        # self.batch_size = int(len(x_train)/n_batches)
         # print(len(x_train), self.batch_size, n_batches)
         x_train_batches = np.split(x_train, n_batches)
         y_train_batches = np.split(y_train, n_batches)
@@ -243,10 +258,28 @@ class RandomRegularizer(BaselineConvnet):
                     self.model.fit(x_train_batch, y_train_batch, epochs=self.epochs, batch_size=mini_batch,
                                    shuffle=True, validation_split=0.2)
 
+            # # intermediate evaluations
+            # x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(
+            #     dataset_name=dataset_name,
+            #     test=test)
+            # self.evaluate(x=x_test, y=y_test)
+            # for method in ['fgsm', 'pgd', 'deepfool', 'carlini', 'newtonfool']:
+            #     x_test_adv = self.load_adversaries(attack=method, seed=seed)
+            #     self.evaluate(x_test_adv, y_test)
+
         print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
         self.trained = True
         return self
 
+    def load_classifier(self, relative_path, folder=None, filename=None):
+        if folder is None:
+            folder = self.folder
+        if filename is None:
+            filename = self.filename
+        print("\nLoading model: ", relative_path + folder + filename + ".h5")
+        self.model = load_model(relative_path + folder + filename + ".h5", custom_objects={'custom_loss':self.loss})
+        self.trained = True
+        return self
 
 def main(dataset_name, test, lam, projection_mode, device, seed):
     """
@@ -259,28 +292,27 @@ def main(dataset_name, test, lam, projection_mode, device, seed):
     :param seed: random seed for the projections
     """
 
+
     # === initialize === #
     random.seed(seed)
-    master_seed(seed)
-
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
 
     randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                 dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test,
-                                init_seed=seed)
+                                seed=seed, library="cleverhans")
 
     # === train === #
     randreg.train(x_train, y_train, device)
-    randreg.save_classifier(relative_path=RESULTS, filename=randreg.filename+"_seed="+str(seed))
+    randreg.save_classifier(relative_path=RESULTS)#, filename=randreg.filename+"_seed="+str(seed))
     # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
-    # randreg.load_classifier(relative_path=TRAINED_MODELS)
+    # randreg.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
-    # for method in ['fgsm','pgd','deepfool','carlini','newtonfool]:
-    #     x_test_adv = randreg.load_adversaries(attack=method, seed=seed)
-    #     randreg.evaluate(x_test_adv, y_test)
+    for method in ['fgsm','pgd','deepfool','virtual', 'spatial']:
+        x_test_adv = randreg.load_adversaries(attack=method, seed=0, relative_path=DATA_PATH)
+        randreg.evaluate(x_test_adv, y_test)
 
 
 if __name__ == "__main__":
