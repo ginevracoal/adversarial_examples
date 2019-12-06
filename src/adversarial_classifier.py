@@ -160,13 +160,12 @@ class AdversarialClassifier(sklKerasClassifier):
         return np.inf
 
     def _get_attack_eps(self, dataset_name, attack):
-        if dataset_name == "mnist":
-            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.8, 'deepfool': None, 'newtonfool':None}
-        elif dataset_name == "cifar":
-            eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.3, 'deepfool': None, 'newtonfool':None}
-        else:
-            raise ValueError("Wrong name.")
-        return eps[attack]
+        # if dataset_name == "mnist":
+        #     eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.8}
+        # elif dataset_name == "cifar":
+        #     eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.3}
+        # return eps[attack]
+        return None
 
     def generate_adversaries(self, x, y, attack, eps=None, seed=0, device="cpu"):
         """
@@ -177,6 +176,7 @@ class AdversarialClassifier(sklKerasClassifier):
         :param attack: art.attack method
         :return: adversarially perturbed data
         """
+        random.seed(seed)
         def batch_generate(attacker, x, batches=10):
             x_batches = np.split(x, batches)
             x_adv = []
@@ -186,12 +186,11 @@ class AdversarialClassifier(sklKerasClassifier):
             return x_adv
 
         x_adv = None
-        if eps is None:
-            eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
+        # if eps is None:
+        #     eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
 
         if self.trained:
             print("\nGenerating adversaries with", attack, "method on", self.dataset_name)
-            random.seed(seed)
             with warnings.catch_warnings():
                 if self.library == "art":
                     import art.attacks
@@ -213,7 +212,7 @@ class AdversarialClassifier(sklKerasClassifier):
                         attacker = art.attacks.VirtualAdversarialMethod(classifier)
                         x_adv = attacker.generate(x)
                     elif attack == 'carlini':
-                        attacker = art.attacks.CarliniLInfMethod(classifier, targeted=False, eps=eps)
+                        attacker = art.attacks.CarliniLInfMethod(classifier, targeted=False, eps=0.5)
                         x_adv = attacker.generate(x=x)
                     elif attack == 'pgd':
                         attacker = art.attacks.ProjectedGradientDescent(classifier, eps=eps)
@@ -222,7 +221,7 @@ class AdversarialClassifier(sklKerasClassifier):
                         attacker = art.attacks.NewtonFool(classifier, eta=0.3)
                         x_adv = attacker.generate(x=x)
                     elif attack == 'boundary':
-                        attacker = art.attacks.BoundaryAttack(classifier, targeted=False, max_iter=500, delta=0.05, epsilon=eps)
+                        attacker = art.attacks.BoundaryAttack(classifier, targeted=False, max_iter=500, delta=0.05)
                         # y = np.random.permutation(y)
                         x_adv = attacker.generate(x=x)
                     elif attack == 'spatial':
@@ -249,14 +248,20 @@ class AdversarialClassifier(sklKerasClassifier):
                     elif attack == 'deepfool':
                         attacker = cleverhans.attacks.DeepFool(classifier, sess=session)
                         x_adv = batch_generate(attacker, x)
-                    elif attack == 'virtual':
-                        attacker = cleverhans.attacks.VirtualAdversarialMethod(classifier, sess=session)
-                        x_adv = batch_generate(attacker, x)
                     elif attack == 'carlini':
                         attacker = cleverhans.attacks.CarliniWagnerL2(classifier, sess=session)
                         x_adv = batch_generate(attacker, x)
                     elif attack == 'pgd':
                         attacker = cleverhans.attacks.ProjectedGradientDescent(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'spatial':
+                        attacker = cleverhans.attacks.SpatialTransformationMethod(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'virtual':
+                        attacker = cleverhans.attacks.VirtualAdversarialMethod(classifier, sess=session)
+                        x_adv = batch_generate(attacker, x)
+                    elif attack == 'saliency':
+                        attacker = cleverhans.attacks.SaliencyMapMethod(classifier, sess=session)
                         x_adv = batch_generate(attacker, x)
                 else:
                     raise ValueError("wrong pkg name.")
