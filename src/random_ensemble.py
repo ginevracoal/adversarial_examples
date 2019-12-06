@@ -359,9 +359,16 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
+    seed=0
+    baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                               dataset_name=dataset_name, test=test, epochs=None, library="cleverhans")
+    baseline.load_classifier(relative_path=RESULTS, filename=baseline.filename+"_seed="+str(seed))
+
     model.evaluate(x=x_test, y=y_test)
-    for attack in ["fgsm", "pgd"]:#, "carlini", "deepfool", "newtonfool"]:
-        x_test_adv = model.load_adversaries(relative_path=RESULTS, attack=attack)
+    for attack in ["fgsm", "pgd", "deepfool"]:#, "carlini", "deepfool", "newtonfool"]:
+        x_test_adv = baseline.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed)
+        baseline.save_adversaries(data=x_test_adv, attack=attack, seed=seed)
+        # x_test_adv = model.load_adversaries(relative_path=RESULTS, attack=attack)
         model.evaluate(x=x_test_adv, y=y_test)
         softmax_difference(classifier=model, x1=x_test, x2=x_test_adv)
 
