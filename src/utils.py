@@ -8,6 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import math
 import tensorflow as tf
+import torch
 
 TEST_SIZE = 20
 
@@ -41,7 +42,6 @@ def preprocess_mnist(test, img_rows=28, img_cols=28):
     x_test = x_test.astype('float32')
     x_train /= 255
     x_test /= 255
-    print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape,)
 
     # convert class vectors to binary class matrices
     y_train = keras.utils.to_categorical(y_train, 10)
@@ -55,6 +55,16 @@ def preprocess_mnist(test, img_rows=28, img_cols=28):
 
     num_classes = 10
     data_format = 'channels_last'
+
+    # # swap channels
+    # x_train = np.zeros((x_train.shape[0], img_rows, img_cols, 1))
+    # x_train = np.rollaxis(x_train, 3, 1)
+    # x_test = np.zeros((x_test.shape[0], img_rows, img_cols, 1))
+    # x_test = np.rollaxis(x_test, 3, 1)
+    # data_format = "channels_first"
+    # input_shape = (1, img_rows, img_cols)
+
+    print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape)
     return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
 
@@ -66,6 +76,11 @@ def _onehot(integer_labels):
     onehot[np.arange(n_rows), integer_labels] = 1
     return onehot
 
+def onehot_to_labels(y):
+    if type(y) is np.ndarray:
+        return np.argmax(y, axis=1)
+    elif type(y) is torch.Tensor:
+        return torch.max(y, 1)[1]
 
 def load_cifar(test):
     """Return train_data, train_labels, test_data, test_labels
@@ -127,8 +142,6 @@ def load_dataset(dataset_name, test):
         return load_cifar(test=test)
     else:
         raise ValueError("\nWrong dataset name.")
-
-    # return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
 
 ################
@@ -283,8 +296,11 @@ def _set_session(device, n_jobs):
     :param n_jobs:
     :return:
     """
+
+
+    # from keras.backend.tensorflow_backend import set_session
+    sess = tf.Session()
     # print(device_lib.list_local_devices())
-    from keras.backend.tensorflow_backend import set_session
     if device == "gpu":
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
@@ -292,8 +308,9 @@ def _set_session(device, n_jobs):
         # config.log_device_placement = True  # to log device placement (on which device the operation ran)
         config.gpu_options.per_process_gpu_memory_fraction = 1/n_jobs
         sess = tf.compat.v1.Session(config=config)
-        set_session(sess)  # set this TensorFlow session as the default session for Keras
-        sess.run(tf.global_variables_initializer())
-        # print("check cuda: ", tf.test.is_built_with_cuda())
-        # print("check gpu: ", tf.test.is_gpu_available())
-        return sess
+
+    keras.backend.set_session(sess)  # set this TensorFlow session as the default session for Keras
+    sess.run(tf.global_variables_initializer())
+    # print("check cuda: ", tf.test.is_built_with_cuda())
+    # print("check gpu: ", tf.test.is_gpu_available())
+    return sess
