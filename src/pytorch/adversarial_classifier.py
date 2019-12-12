@@ -10,11 +10,14 @@ sys.path.append('../')
 import torch.nn as nn
 import torch
 from torch import optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from utils import *
 from pytorch.nets import torch_net
 from pytorch.sgd import SGD
 import time
+import random
+import copy
+from torch.utils.data.dataset import random_split
 
 
 RESULTS = "../../results/"+str(time.strftime('%Y-%m-%d'))+"/"
@@ -24,7 +27,7 @@ DATASETS = "mnist, cifar"
 
 def set_device(device_name):
     if device_name == "gpu":
-        return torch.device("gpu")
+        return torch.device("cuda")
     elif device_name == "cpu":
         return torch.device("cpu")
     else:
@@ -42,78 +45,93 @@ class AdversarialClassifier(object):
         self.library = library
         self.classifier_name = dataset_name + str("_sgd_classifier")
 
-    def set_optimizer(self):
-        return NotImplementedError
+    def set_optimizer(self, model, lr):
+        return SGD(params=list(model.parameters()), lr=lr)
 
-    def train(self, x_train, y_train, val_ratio=0.2, lr=0.01, epochs=10, device="cpu"):
+    def train(self, x_train, y_train, val_ratio=0.2, lr=0.01, epochs=100, device="cpu"):
+        # y_train = np.argmax(y_train, axis=1) # one_hot encoding to labels
         model = self.net
+        if device == "gpu":
+            model.cuda()
+        device = set_device(device_name=device)
+        # print(model)
+
+        loss_fn = nn.CrossEntropyLoss()
+        optimizer = self.set_optimizer(model=self.net, lr=lr)
 
         def validation_split(x_train, y_train, val_ratio):
-            split_idx = int(len(x_train)*(1-val_ratio))
-            train_data = list(zip(x_train[:split_idx,:],y_train[:split_idx,:]))
-            val_data = list(zip(x_train[split_idx:,:],y_train[split_idx:,:]))
-            dataloader = {'training':DataLoader(dataset=train_data, batch_size=128, shuffle=True, num_workers=2),
-                          'validation':DataLoader(dataset=val_data, batch_size=128, shuffle=True, num_workers=2)}
-            dataset_sizes = {'training':split_idx,'validation':len(x_train)-split_idx}
-            return dataloader, dataset_sizes
+            split_idx = int(len(x_train) * (1 - val_ratio))
+            x_tensor = torch.from_numpy(x_train).float()
+            y_tensor = torch.from_numpy(y_train).float()
+            dataset = TensorDataset(x_tensor, y_tensor)
+            train_dataset, val_dataset = random_split(dataset, [split_idx, len(x_train)-split_idx])
 
-        dataloader, dataset_sizes = validation_split(x_train, y_train, val_ratio)
+            train_loader = DataLoader(dataset=train_dataset, batch_size=128)
+            val_loader = DataLoader(dataset=val_dataset, batch_size=128)
+            return train_loader, val_loader
+
+        def train_step(inputs, labels):
+            model.train()  # train mode
+            outputs = model(inputs)  # make predictions
+            # print("check updates: outputs[0]=",outputs[0],", labels:",labels)
+            loss = loss_fn(outputs, labels)  # compute loss
+            loss.backward()  # compute gradients
+            optimizer.step()  # update parameters
+            optimizer.zero_grad()  # put gradients to zero
+            return loss.item()
+
+        train_loader, val_loader = validation_split(x_train, y_train, val_ratio)
 
         start = time.time()
+        losses = []
+        val_losses = []
         for epoch in range(epochs):
+            print("\n",'-' * 10)
             print('Epoch {}/{}'.format(epoch, epochs - 1))
-            # print('-' * 10)
 
-            # todo: add early stopping and tensorboard callbacks
-            for phase in ['training', 'validation']:
-                if phase == 'training':
-                    # scheduler.step() # changes the lr
-                    model.train()  # Set model to training mode
-                else:
-                    model.eval()  # Set model to evaluate mode
+            # === training ===
+            train_loss = 0.0
+            count_predictions = 0
+            correct_predictions = 0
+            for x_batch, y_batch in train_loader:
+                x_batch = x_batch.to(device)
+                labels = onehot_to_labels(y_batch).to(device)
+                train_loss = train_step(x_batch, labels)
+                losses.append(train_loss)
+                predictions = onehot_to_labels(model(x_batch))
+                count_predictions += labels.size(0)
+                correct_predictions += (predictions == labels).sum().item()
+            train_acc = 100 * correct_predictions / count_predictions
+            print('Training loss: {:.4f}, acc: {:.4f}'.format(train_loss, train_acc), end='   ')
 
-                optimizer = optim.SGD(model.parameters(), lr=lr)  # torch implementation
-                # optimizer = optim.Adam(model.parameters(), lr=0.001)
-                # print(list(model.parameters()))
-                # optimizer = SGD(params=list(model.parameters()), lr=0.001) # my implementation
+            # === validation ===
+            with torch.no_grad():
+                val_loss = 0.0
+                count_predictions = 0
+                correct_predictions = 0
+                for x_val, y_val in val_loader:
+                    x_val = x_val.to(device)
+                    labels = onehot_to_labels(y_val).to(device)
 
-                running_loss = 0.0
-                correct_preds = 0.0
-                # for i in range(self.n_samples):
-                for i, data in enumerate(dataloader[phase], 0):
-                    # load inputs and labels
-                    inputs, one_hot_labels = data
-                    labels = np.argmax(one_hot_labels, axis=1)
-                    # print(inputs.shape, one_hot_labels.shape)
+                    model.eval()
 
-                    # zero the parameter gradients
-                    optimizer.zero_grad()
-                    with torch.set_grad_enabled(phase == 'training'):
-                        # forward
-                        outputs = model(inputs)
-                        _, preds = torch.max(outputs, 1)
-                        loss = nn.CrossEntropyLoss()(outputs, labels)
+                    outputs = model(x_val)
+                    val_loss = loss_fn(outputs, labels)
+                    val_losses.append(val_loss.item())
 
-                        # backward + optimize only if in training phase
-                        if phase == 'training':
-                            loss.backward()
-                            optimizer.step()
-
-                    # print statistics
-                    running_loss += loss.item() * inputs.size(0)
-                    correct_preds += torch.sum(preds == labels)
-
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = correct_preds / dataset_sizes[phase]
-            print('{} Loss: {:.4f}, Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+                    predictions = onehot_to_labels(model(x_val))
+                    count_predictions += labels.size(0)
+                    correct_predictions += (predictions == labels).sum().item()
+                val_acc = 100 * correct_predictions / count_predictions
+                print('Validation loss: {:.4f}, acc: {:.4f}'.format(val_loss, val_acc), end='   ')
 
         time_elapsed = time.time() - start
-        print('\nTraining complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+        print('\n\nTraining time: {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
         self.net = model
         self.trained = True
+        # print(model.state_dict())
 
     def save_classifier(self, relative_path, filename=None):
-        # todo: come sta aggiornando self.net()? in quale metodo?
         if filename is None:
             filename = self.classifier_name
         os.makedirs(os.path.dirname(relative_path), exist_ok=True)
@@ -121,45 +139,45 @@ class AdversarialClassifier(object):
 
     def evaluate(self, x_test, y_test, device="cpu"):
         model = self.net
-        model.eval()
+        if device == "gpu":
+            model.cuda()
 
+        model.eval()
+        set_device(device_name=device)
         test_data = list(zip(x_test,y_test))
         testloader = DataLoader(dataset=test_data, batch_size=128, shuffle=True, num_workers=2)
 
-        # x = torch.tensor(x)
         if self.trained:
             with torch.no_grad():
-                # for i, data in enumerate(dataloader[phase], 0):
-                #     # load inputs and labels
-                #     inputs, one_hot_labels = data
-                #     labels = np.argmax(one_hot_labels, axis=1)
-
-                for idx, (inputs, one_hot_labels) in enumerate(testloader):
-                    outputs = model.forward(inputs)
-                    labels = np.argmax(one_hot_labels, axis=1)
-                    _, predicted = outputs.max(dim=1)
-
+                correct_predictions = 0
+                for idx, (x_test, y_test) in enumerate(testloader):
+                    x_test = x_test.to(device)
+                    y_test = y_test.to(device)
+                    outputs = model(x_test)
+                    labels = onehot_to_labels(y_test)
+                    values, predictions = outputs.max(dim=1)
                     # check predictions
                     if idx == 0:
-                        print(predicted)  # the predicted class
-                        print(torch.exp(_))  # the predicted probability
-                    equals = predicted == labels.data
+                        print(labels)
+                        print("predictions: ", predictions)  # the predicted class
+                        print("probabilities: ", values)  # the predicted probability
+                    correct_predictions += (predictions == labels).sum()
 
-                accuracy = equals.float().mean()
+                accuracy = correct_predictions / len(predictions)
                 print("Accuracy: %.2f%%" % (accuracy * 100))
-            # print(classification_report(y_true, y_pred, labels=list(range(self.num_classes))))
-            # return accuracy
+            return accuracy
         else:
             raise AttributeError("Train your classifier before the evaluation.")
 
 
 def main(dataset_name, test, device, seed):
+    random.seed(seed)
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
     model = AdversarialClassifier(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                   dataset_name=dataset_name, test=test)
-    model.train(x_train, y_train)
+    model.train(x_train, y_train, device=device, lr=0.01, epochs=300)
     model.save_classifier(relative_path=RESULTS)
     model.evaluate(x_test=x_test, y_test=y_test)
     # for attack in ['fgsm']:
