@@ -132,8 +132,10 @@ class SGDClassifier(object):
         for epoch in range(epochs):
             print("\n", '-' * 10)
             print('Epoch {}/{}'.format(epoch, epochs - 1))
+            optimizer_params.update({'epoch': epoch})
+            # print(optimizer_params)
             self.train_epoch(model=model, train_loader=train_loader, val_loader=val_loader, device=device,
-                             optimizer_params=optimizer_params.update({'epoch':epoch}))
+                             optimizer_params=optimizer_params)
 
         time_elapsed = time.time() - start
         print('\n\nTraining time: {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
@@ -195,7 +197,7 @@ class BayesianSGDClassifier(SGDClassifier):
         model.train()  # train mode
         outputs = model(inputs)  # make predictions
         loss = self.loss_fn(outputs, labels)  # compute loss
-        loss.backward()  # compute gradients
+        loss.backward(retain_graph=True)  # compute gradients
         optimizer.step(outputs=outputs, labels=labels, optimizer_params=optimizer_params)  # update parameters
         optimizer.zero_grad()  # put gradients to zero
         return loss.item()
