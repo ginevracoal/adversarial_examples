@@ -5,15 +5,16 @@
 """
 
 import sys
-sys.path.append('../')
+sys.path.append("../")
+from RandomProjections.directories import *
 
 import torch.nn as nn
 import torch
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
 from utils import *
-from pytorch.nets import torch_net
-from pytorch.sgd import SGD, BayesianSGD
+from BayesianSGD.nets import torch_net
+from BayesianSGD.sgd import SGD, BayesianSGD
 import time
 import random
 import copy
@@ -196,11 +197,21 @@ class BayesianSGDClassifier(SGDClassifier):
         optimizer = self.optimizer
         model.train()  # train mode
         outputs = model(inputs)  # make predictions
-        loss = self.loss_fn(outputs, labels)  # compute loss
-        loss.backward(retain_graph=True)  # compute gradients
-        optimizer.step(outputs=outputs, labels=labels, optimizer_params=optimizer_params)  # update parameters
+
+        loss1 = nn.CrossEntropyLoss()(outputs[0:1], labels[0:1])
+        lossS = nn.CrossEntropyLoss()(outputs, labels)
+
+        weights = list(self.net.parameters())
+
+        loss1.backward(retain_graph=True)
+        g1 = copy.deepcopy([layer_weights.grad.data for layer_weights in weights])
+        lossS.backward(retain_graph=True)
+        gS = copy.deepcopy([layer_weights.grad.data for layer_weights in weights])
+
+        optimizer_params.update({'g1':g1, 'gS':gS})
+        optimizer.step(outputs=outputs, labels=labels, optimizer_params=optimizer_params)
         optimizer.zero_grad()  # put gradients to zero
-        return loss.item()
+        return lossS.item()
 
 
 def main(dataset_name, test, device, seed):

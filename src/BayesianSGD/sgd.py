@@ -9,7 +9,7 @@ import numpy as np
 from torch.autograd import grad
 import torch
 import copy
-
+import cProfile
 
 class SGD(Optimizer):
     """ Simplified version of torch.SGD without Nesterov momentum. """
@@ -43,7 +43,7 @@ class SGD(Optimizer):
         """
 
         # to ensure compatibility with Optimizer base class
-        loss = None
+        # loss = None
         # if closure is not None:
         #     loss = closure()
 
@@ -55,7 +55,7 @@ class SGD(Optimizer):
                 continue
             gradient = layer_params.grad.data
             layer_params.data -= -self.lr * gradient
-        return loss
+        # return loss
 
 
 class BayesianSGD(SGD):
@@ -65,10 +65,10 @@ class BayesianSGD(SGD):
         # todo: che learning rate uso al passo zero?
         self.loss_fn = loss_fn
         self.k = 1 # decaying learning rate
-        self.noise_covariance = {}
+        self.noise_covariance_traces = {}
         # noise covariance matrix approximation
 
-    def update_noise_covariance(self, outputs, labels, layer_params, params, layer_idx):
+    def update_traces(self, outputs, labels, layer_params, params, layer_idx):
         """
         Updates the approximation of the noise covariance matrix at current epoch, then computes its Cholesky
         decomposition.
@@ -78,39 +78,36 @@ class BayesianSGD(SGD):
         :param C_new: new noise covariance approximation C_new, type=np.ndarray
         :param B: Cholesky decomposition factor B, type=np.ndarray
         """
-        # todo: questi gradienti a quali pesi e loss si riferiscono adesso?
+        # grad, _ = torch.autograd.grad(params['loss1'], params['weights'].requires_grad_(True))
 
-        # print(outputs[0], labels[0])
-        # exit()
-        loss_1 = self.loss_fn(outputs[0:1], labels[0:1])
-        loss_1.backward(retain_graph=True)
-        g1 = copy.deepcopy(torch.unsqueeze(torch.flatten(layer_params.grad.data), dim=0))
-        # g1 = copy.deepcopy(torch.flatten(layer_params.grad.data, start_dim=1))
-        print("g1: ",g1.shape)
+        # loss1 = nn.CrossEntropyLoss()(outputs[0:1], labels[0:1])
+        # loss1.backward(retain_graph=True)
+        # g1 = copy.deepcopy(torch.unsqueeze(torch.flatten(layer_params.grad.data), dim=0))
+        # lossS = nn.CrossEntropyLoss()(outputs, labels)
+        # lossS.backward()
+        # gS = copy.deepcopy(torch.unsqueeze(torch.flatten(layer_params.grad.data), dim=0))
 
-        loss_S = self.loss_fn(outputs, labels)
-        loss_S.backward(retain_graph=True)
-        gS = copy.deepcopy(torch.unsqueeze(torch.flatten(layer_params.grad.data), dim=0))
-        # gS = copy.deepcopy(torch.flatten(layer_params.grad.data, start_dim=1))
+        # g1 = torch.unsqueeze(torch.flatten(params['w1'][layer_idx].grad.data), dim=0)
+        # gS = torch.unsqueeze(torch.flatten(params['wS'][layer_idx].grad.data), dim=0)
 
+        g1 = torch.unsqueeze(torch.flatten(params['g1'][layer_idx]), dim=0)
+        gS = torch.unsqueeze(torch.flatten(params['gS'][layer_idx]), dim=0)
         k = 1/(params['epoch']+1)
-
-        if params['epoch']==0: #C_old is None:
-            C_new = torch.mm((g1 - gS).t(), (g1 - gS))
+        if params['epoch']==0:
+            new_trace = np.trace(torch.mm((g1 - gS).t(), (g1 - gS)))
         else:
-            C_old = self.noise_covariance[str(layer_idx)]
-            C_new = (1-k) * C_old + k * torch.mm((g1 - gS).t(),(g1 - gS))
+            old_trace = self.noise_covariance_traces[str(layer_idx)]
+            new_trace = (1-k) * old_trace + k * np.trace(torch.mm((g1 - gS).t(),(g1 - gS)))
 
-        self.noise_covariance.update({str(layer_idx): C_new})
-        print(len(self.noise_covariance))
-        print("C_new: ", C_new.shape)
+        self.noise_covariance_traces.update({str(layer_idx): new_trace})
+        print("traces:",self.noise_covariance_traces)
 
         # print(torch.eig(C_new))
         # exit()
         # B = np.linalg.cholesky(C_new)
         # return B
 
-        return C_new
+        return self.noise_covariance_traces
 
     def update_learning_rate(self, layer_params, outputs, labels, optimizer_params, layer_idx):
         """
@@ -120,11 +117,10 @@ class BayesianSGD(SGD):
         batch_size = len(outputs)
         n_layer_weights = np.prod([x for x in layer_params.shape])
         total_n_samples = optimizer_params['n_training_samples']
-        C = self.update_noise_covariance(outputs=outputs, labels=labels, layer_params=layer_params,
+        noise_covariance_traces = self.update_traces(outputs=outputs, labels=labels, layer_params=layer_params,
                                          params=optimizer_params, layer_idx=layer_idx)
-        trace = np.trace(C)
 
-        optimal_lr = (2 * batch_size * n_layer_weights) / (total_n_samples * trace)
+        optimal_lr = (2 * batch_size * n_layer_weights) / (total_n_samples * noise_covariance_traces[str(layer_idx)])
         return optimal_lr
 
     def step(self, outputs, labels, optimizer_params):
@@ -135,9 +131,6 @@ class BayesianSGD(SGD):
             if layer_params.grad is None:
                 continue
             gradient = layer_params.grad.data
-            # print(optimizer_params)
-            # exit()
-            # self.C_old = None
             lr = self.update_learning_rate(layer_params=layer_params, outputs=outputs, labels=labels,
                                            optimizer_params=optimizer_params, layer_idx=layer_idx)
             layer_params.data -= -lr * gradient
