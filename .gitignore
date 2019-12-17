@@ -4,5 +4,6 @@ adversarial-robustness-toolbox/
 *.csv
 data/
 */__pycache__/*
-results/2019*
-old_requirements.txt
+results/20*
+tensorboard/
+trained_models/
