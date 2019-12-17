@@ -5,8 +5,9 @@ This model computes random projections of the input points in a lower dimensiona
 separately on each projection, then it returns an ensemble classification on the original input data.
 """
 
-from baseline_convnet import *
-from projection_functions import *
+from directories import *
+from RandomProjections.baseline_convnet import *
+from RandomProjections.projection_functions import *
 from robustness_measures import softmax_difference
 
 ############
@@ -44,17 +45,13 @@ class RandomEnsemble(BaselineConvnet):
         # todo: refactor centroid translation
         self.centroid_translation = centroid_translation
         self.translation_vector = None
-        ######################################
         self.original_input_shape = input_shape
         self.n_proj = n_proj
         self.size_proj = size_proj
         self.projection_mode = projection_mode
         super(RandomEnsemble, self).__init__(input_shape, num_classes, data_format, dataset_name, test, library, epochs)
-        self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
-        # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,)
-        self.random_seeds = range(0,n_proj)  # random.sample(list(range(1, 1000)), n_proj)
-        # self.random_seeds = np.array([123, 45, 180, 172, 61, 63, 70, 83, 115, 67, 56, 133, 12, 198, 156,
-        #                               54, 42, 150, 184, 52, 17, 127, 13])
+        self.random_seeds = range(0,n_proj)
+        self.random_seeds = range(0,n_proj)
         self.input_shape = (size_proj, size_proj, input_shape[2])
         self.classifiers = None
         self.training_time = 0
@@ -327,12 +324,14 @@ class RandomEnsemble(BaselineConvnet):
         return classifiers
 
 
+# todo: define default methods for fast testing
+
 ########
 # MAIN #
 ########
 
 
-def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, device):
+def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, device):
     """
     :param dataset: choose between "mnist" and "cifar"
     :param test: if True only takes 100 samples
@@ -344,6 +343,8 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     """
 
     # === initialize === #
+    seed=0
+    attacks = ["fgsm","pgd","deepfool","virtual","spatial","saliency"]
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name, test)
 
     model = RandomEnsemble(input_shape=input_shape, num_classes=num_classes,
@@ -355,17 +356,16 @@ def main(dataset_name, test, n_proj, size_proj, projection_mode, attack, eps, de
     # model.save_classifier(relative_path=RESULTS)
 
     # === load classifier === #
-    # model.load_classifier(relative_path=TRAINED_MODELS)
-    model.load_classifier(relative_path=RESULTS)
+    model.load_classifier(relative_path=TRAINED_MODELS)
+    # model.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
-    seed=0
     baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                dataset_name=dataset_name, test=test, epochs=None, library="cleverhans")
     baseline.load_classifier(relative_path=RESULTS, filename=baseline.filename+"_seed="+str(seed))
 
     model.evaluate(x=x_test, y=y_test)
-    for attack in ["fgsm", "pgd", "deepfool"]:#, "carlini", "deepfool", "newtonfool"]:
+    for attack in attacks:
         x_test_adv = baseline.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed)
         baseline.save_adversaries(data=x_test_adv, attack=attack, seed=seed)
         # x_test_adv = model.load_adversaries(relative_path=RESULTS, attack=attack)
@@ -418,8 +418,7 @@ if __name__ == "__main__":
         size_proj_list = list(map(int, sys.argv[4].strip('[]').split(',')))
         projection_mode = sys.argv[5]
         attack = sys.argv[6]
-        eps = float(sys.argv[7])
-        device = sys.argv[8]
+        device = sys.argv[7]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset ("+DATASETS+"): ")
@@ -428,12 +427,11 @@ if __name__ == "__main__":
         size_proj_list = list(map(int, input("\nChoose the size of projections (type=list): ").strip('[]').split(',')))
         projection_mode = input("\nChoose projection mode ("+PROJ_MODE+"): ")
         attack = input("\nChoose an attack ("+ATTACKS+"): ")
-        eps = float(input("\nSet a ths for perturbation norm: "))
         device = input("\nChoose a device (cpu/gpu): ")
 
     for n_proj in n_proj_list:
         for size_proj in size_proj_list:
             K.clear_session()
             main(dataset_name=dataset_name, test=test, n_proj=n_proj, size_proj=size_proj,
-                 projection_mode=projection_mode, attack=attack, eps=eps, device=device)
+                 projection_mode=projection_mode, attack=attack, device=device)
 

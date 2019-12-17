@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 
 """
-Simple CNN model. This is our benchmark on the MNIST dataset.
+Simple CNN model.
 """
 
 import sys
-from adversarial_classifier import *
+sys.path.append("../")
+from RandomProjections.adversarial_classifier import *
 from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
+
 from utils import _set_session
 import random
-from robustness_measures import softmax_difference
+from robustness_measures import softmax_difference, softmax_robustness
 import copy
 
 ############
@@ -111,8 +113,7 @@ class BaselineConvnet(AdversarialClassifier):
 
         start_time = time.time()
         print("\n===== Adversarial training =====")
-        eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
-        x_train_adv = self.generate_adversaries(x_train, y_train, attack, eps, seed=seed, device=device)
+        x_train_adv = self.generate_adversaries(x_train, y_train, attack, seed=seed, device=device)
         # x_train_adv = self.load_adversaries(attack=attack, relative_path=DATA_PATH)
 
         # Data augmentation: expand the training set with the adversarial samples
@@ -123,25 +124,20 @@ class BaselineConvnet(AdversarialClassifier):
         # robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
         #                                     data_format=self.data_format, dataset_name=self.dataset_name)
         robust_classifier.train(x_train_adv, y_train, device)
-        robust_classifier.filename = self._robust_classifier_name(attack=attack, eps=eps)
+        robust_classifier.filename = self._robust_classifier_name(attack=attack, eps=eps, seed=seed)
 
         print("Adversarial training time: --- %s seconds ---" % (time.time() - start_time))
         return robust_classifier
 
-    def load_classifier(self, relative_path, folder=None, filename=None):
-        return super(BaselineConvnet, self).load_classifier(relative_path=relative_path,
-                                                            filename=self.filename+"_seed="+str(seed))
-
-    def _robust_classifier_name(self, attack, eps=None):
+    def _robust_classifier_name(self, attack, seed, eps=None):
         """ Defines adversarially trained baseline filename """
         if eps:
-            filename = self.filename + "_" + str(attack) + "_" + str(eps) + "_robust" +"_"+str(self.library)\
-                       +"_seed="+str(seed)
+            filename = self.filename + "_" + str(attack) + "_" + str(eps) + "_robust" +"_"+str(self.library)
         else:
-            filename = self.filename + "_" + str(attack) + "_robust" +"_"+str(self.library)+"_seed="+str(seed)
+            filename = self.filename + "_" + str(attack) + "_robust" +"_"+str(self.library)
         return filename
 
-    def load_robust_classifier(self, relative_path, attack, eps=None):
+    def load_robust_classifier(self, relative_path, attack, seed=0, eps=None):
         """
         Loads an adversarially trained robust classifier.
         :param relative_path: relative path
@@ -149,12 +145,10 @@ class BaselineConvnet(AdversarialClassifier):
         :param eps: threshold for the norm of a perturbation. If None,the default value from the baseclass is taken.
         returns: robust classifier
         """
-        robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes,
-                                            test=self.test,
+        robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
                                             data_format=self.data_format, dataset_name=self.dataset_name)
-        self.trained = True
-        return robust_classifier.load_classifier(relative_path=relative_path,
-                                                 filename=self._robust_classifier_name(attack=attack, eps=eps))
+        robust_classifier.filename = self._robust_classifier_name(attack=attack, eps=eps, seed=seed)
+        return robust_classifier.load_classifier(relative_path=relative_path)
 
     def train_const_SGD(self, x_train, y_train, device, epochs, lr):
         """
@@ -195,15 +189,15 @@ def plot_attacks(dataset_name, test, attacks, library):
     plot_images(image_data_list=images,labels=labels)
 
 
-def train_eval_attacks(dataset_name, test, attacks, seed, device):
+def train_generate_eval(dataset_name, test, attacks, seed, device, library):
     random.seed(seed)
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
 
     print("\n === Baseline training === ")
     baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                               dataset_name=dataset_name, test=test, epochs=None, library="cleverhans")
-    baseline.load_classifier(relative_path=TRAINED_MODELS)
+                               dataset_name=dataset_name, test=test, epochs=None, library=library)
+    baseline.load_classifier(relative_path=TRAINED_MODELS, filename=baseline.filename+"_seed="+str(seed))
     baseline.evaluate(x=x_test, y=y_test)
 
     print("\n === Adversarial training === ")
@@ -211,9 +205,9 @@ def train_eval_attacks(dataset_name, test, attacks, seed, device):
     for attack in attacks:
         print("\n", attack, "robust baseline")
         robust_baseline = baseline.adversarial_train(x_train, y_train, device, attack=attack, seed=seed)
+        robust_baseline.save_classifier(relative_path=RESULTS)
+        # robust_baseline = baseline.load_robust_classifier(relative_path=TRAINED_MODELS, attack=attack, seed=seed)
         robust_baseline.evaluate(x=x_test, y=y_test)
-        # filename = robust_baseline.filename+"_"+str(robust_baseline.library)+"_seed="+str(seed)
-        robust_baseline.save_classifier(relative_path=RESULTS)#, filename=filename)
         robust_baselines.append(robust_baseline)
 
     print("\n === Adversarial evaluations === ")
@@ -226,32 +220,42 @@ def train_eval_attacks(dataset_name, test, attacks, seed, device):
             print("\nAttack against", attack, "robust baseline")
             robust_baselines[idx].evaluate(x=x_test_adv, y=y_test)
 
-def baseline_train_eval(dataset_name, test, seed, device, attacks):
+
+def train_eval(dataset_name, test, seed, device, attacks, library):
     random.seed(seed)
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
     baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                               dataset_name=dataset_name, test=test, epochs=None, library="cleverhans")
+                               dataset_name=dataset_name, test=test, epochs=None, library=library)
     baseline.train(x_train, y_train, device)
     baseline.save_classifier(relative_path=RESULTS, filename=baseline.filename+"_seed="+str(seed))
     # baseline.load_classifier(relative_path=TRAINED_MODELS)
     baseline.evaluate(x=x_test, y=y_test)
     for attack in attacks:
-        x_test_adv = baseline.load_adversaries(attack=attack, relative_path=DATA_PATH, seed=0)
+        x_test_adv = baseline.generate_adversaries(x=x_test, y=y_test, attack=attack, seed=seed)
+        baseline.save_adversaries(data=x_test_adv, attack=attack, seed=seed)
+        # x_test_adv = baseline.load_adversaries(attack=attack, relative_path=DATA_PATH, seed=0)
+        softmax_difference(classifier=baseline, x1=x_test, x2=x_test_adv)
+        softmax_robustness(classifier=baseline, x1=x_test, x2=x_test_adv)
         baseline.evaluate(x=x_test_adv, y=y_test)
 
-def robust_eval(dataset_name, test, seed, device, robust_models, attacks):
-    random.seed(seed)
+
+def robust_eval(dataset_name, test, seed, device, robust_models, attacks, library):
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
     baseline = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
-                               dataset_name=dataset_name, test=test, epochs=None, library="cleverhans")
+                               dataset_name=dataset_name, test=test, epochs=None, library=library)
+    baseline.load_classifier(relative_path=TRAINED_MODELS)
+    baseline.evaluate(x=x_test, y=y_test)
     for method in robust_models:
-        robust_baseline = baseline.load_robust_classifier(relative_path=TRAINED_MODELS, attack=method)
+        print("\n===",method,"robust eval ===")
+        robust_baseline = baseline.load_robust_classifier(relative_path=TRAINED_MODELS, attack=method, seed=seed)
         robust_baseline.evaluate(x=x_test, y=y_test)
         for attack in attacks:
-            x_test_adv = baseline.load_adversaries(attack=attack, relative_path=DATA_PATH, seed=0)
-            robust_baseline.evaluate(x=x_test_adv, y=y_test)
+            for seed in [0,1,2]:
+                print("\nseed =", seed)
+                x_test_adv = baseline.load_adversaries(attack=attack, relative_path=DATA_PATH, seed=seed)
+                robust_baseline.evaluate(x=x_test_adv, y=y_test)
 
 
 def main(dataset_name, test, device, seed):
@@ -266,9 +270,12 @@ def main(dataset_name, test, device, seed):
     # robust_models = [""]
     attacks = ["fgsm","pgd","deepfool","virtual","spatial","saliency"]
     # plot_attacks(dataset_name=dataset_name, test=test, attacks=attacks, library="cleverhans")
-    # train_eval_attacks(dataset_name=dataset_name, test=test, attacks = attacks, seed=seed, device=device)
-    baseline_train_eval(dataset_name=dataset_name, test=test, seed=seed, device=device, attacks=attacks)
-    # robust_eval(dataset_name=dataset_name, test=test, seed=seed, device=device, robust_models=attacks, attacks=attacks)
+    # train_eval_attacks(dataset_name=dataset_name, test=test, attacks = attacks, seed=seed, device=device,
+    #                    library="cleverhans")
+    train_generate_eval(dataset_name=dataset_name, test=test, seed=seed, device=device, attacks=attacks,
+                        library="cleverhans")
+    # robust_eval(dataset_name=dataset_name, test=test, seed=seed, device=device, robust_models=attacks, attacks=attacks,
+    #             library="cleverhans")
 
     # === initialize === #
     # x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,

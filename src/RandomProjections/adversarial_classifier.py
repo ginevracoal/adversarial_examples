@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import sys
+sys.path.append("../")
+from RandomProjections.directories import *
 from keras.models import Model
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 from sklearn.metrics import classification_report
@@ -12,16 +15,12 @@ from tensorflow.python.client import device_lib
 from keras.models import load_model
 import random
 import warnings
-#from tensorflow_probability.python.optimizer import VariationalSGD
 
 ############
 # defaults #
 ############
 
 MINIBATCH = 20
-TRAINED_MODELS = "../trained_models/"
-DATA_PATH = "../data/"
-RESULTS = "../results/"+str(time.strftime('%Y-%m-%d'))+"/"
 DATASETS = "mnist, cifar"
 ATTACKS = "None, fgsm, pgd, deepfool, carlini, newtonfool, virtual"
 
@@ -31,7 +30,7 @@ class AdversarialClassifier(sklKerasClassifier):
     Adversarial Classifier base class
     """
 
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, library="art", epochs=None):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, library, epochs=None):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
@@ -43,7 +42,7 @@ class AdversarialClassifier(sklKerasClassifier):
         self.classes_ = self._set_classes()
         self.folder, self.filename = self._set_model_path().values()
         self.trained = False
-        self.library = library # art, cleverhans
+        self.library = library  # art, cleverhans
 
     def _set_model_path(self, *args, **kwargs):
         raise NotImplementedError
@@ -62,12 +61,8 @@ class AdversarialClassifier(sklKerasClassifier):
 
         if device == "gpu":
             n_jobs = 1
-            # print("check cuda: ", tf.test.is_built_with_cuda())
-            # print("check gpu: ", tf.test.is_gpu_available())
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-            # config.allow_soft_placement = True
-            # config.log_device_placement = True  # to log device placement (on which device the operation ran)
             config.gpu_options.per_process_gpu_memory_fraction = 1 / n_jobs
             sess = tf.compat.v1.Session(config=config)
             keras.backend.set_session(sess)  # set this TensorFlow session as the default session for Keras
@@ -96,7 +91,6 @@ class AdversarialClassifier(sklKerasClassifier):
     def _set_device_name(self, device):
         if device == "gpu":
             return "/device:GPU:0"
-            # device_name = "/job:localhost/replica:0/task:0/device:XLA_GPU:0')"
         elif device == "cpu":
             return "/CPU:0"
         else:
@@ -104,7 +98,6 @@ class AdversarialClassifier(sklKerasClassifier):
 
     def set_optimizer(self):
         return keras.optimizers.Adadelta()
-        # return VariationalSGD(batch_size=mini_batch, total_num_examples=len(x_train))
 
     def train(self, x_train, y_train, device):
         print("\nTraining infos:\nbatch_size = ", self.batch_size, "\nepochs = ", self.epochs,
@@ -115,16 +108,27 @@ class AdversarialClassifier(sklKerasClassifier):
             mini_batch = MINIBATCH
             optimizer = self.set_optimizer()
             self.model.compile(loss=keras.losses.categorical_crossentropy, optimizer=optimizer, metrics=['accuracy'])
-            start_time = time.time()
+
+            # callbacks
+            callbacks = []
+            tensorboard = keras.callbacks.TensorBoard(log_dir='../tensorboard/', histogram_freq=0, write_graph=True,
+                                                      write_images=True)
+            es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
             if self.epochs == None:
-                es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
-                self.model.fit(x_train, y_train, epochs=50, batch_size=mini_batch, callbacks=[es], shuffle=True,
-                               validation_split=0.2)
+                epochs = 50
+                callbacks.append(es)
             else:
-                self.model.fit(x_train, y_train, epochs=self.epochs, batch_size=mini_batch, shuffle=True,
-                               validation_split=0.2)
+                epochs = self.epochs
+            if self.test == False:
+                callbacks.append(tensorboard)
+
+            # training
+            start_time = time.time()
+            self.model.fit(x_train, y_train, epochs=epochs, batch_size=mini_batch, callbacks=callbacks,
+                               shuffle=True, validation_split=0.2)
             print("\nTraining time: --- %s seconds ---" % (time.time() - start_time))
             self.trained = True
+
             return self
 
     def predict(self, x, **kwargs):
@@ -159,14 +163,6 @@ class AdversarialClassifier(sklKerasClassifier):
         """ Returns the norm used for computing perturbations on the given method. """
         return np.inf
 
-    def _get_attack_eps(self, dataset_name, attack):
-        # if dataset_name == "mnist":
-        #     eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.8}
-        # elif dataset_name == "cifar":
-        #     eps = {'fgsm': 0.3, 'pgd': 0.3, 'carlini': 0.3}
-        # return eps[attack]
-        return None
-
     def generate_adversaries(self, x, y, attack, eps=None, seed=0, device="cpu"):
         """
         Generates adversaries on the input data x using a given attack method.
@@ -186,8 +182,6 @@ class AdversarialClassifier(sklKerasClassifier):
             return x_adv
 
         x_adv = None
-        # if eps is None:
-        #     eps = self._get_attack_eps(dataset_name=self.dataset_name, attack=attack)
 
         if self.trained:
             print("\nGenerating adversaries with", attack, "method on", self.dataset_name)
@@ -269,10 +263,6 @@ class AdversarialClassifier(sklKerasClassifier):
             raise AttributeError("Train your classifier first.")
 
         print("Distance from perturbations: ", compute_distances(x, x_adv, ord=self._get_norm(attack)))
-        #
-        # if self.test:
-        #     return x_adv[:TEST_SIZE]
-        # else:
         return x_adv
 
     def save_adversaries(self, data, attack, eps=None, seed=0):

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from random_regularizer import *
+import sys
+sys.path.append("../")
+from RandomProjections.random_regularizer import *
 # import multiprocessing
 # from joblib import Parallel, delayed
 
@@ -73,7 +75,7 @@ class EnsembleRegularizer(RandomRegularizer):
         ensemble_predictions = np.sum(predictions_list, axis=0)
         return ensemble_predictions
 
-    def save_classifier(self, relative_path):
+    def save_classifier(self, relative_path, folder=None, filename=None):
         """
         Saves all the ensemble classifiers separately using their index in filenames.
         :relative_path: path of folder containing the trained model
@@ -97,7 +99,7 @@ class EnsembleRegularizer(RandomRegularizer):
         for i in range(self.ensemble_size):
             randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
-                                        projection_mode=self.projection_mode, test=self.test, init_seed=i)
+                                        projection_mode=self.projection_mode, test=self.test, library="art")
             classifiers.append(randreg.load_classifier(relative_path))
             del randreg
         print("\nLoading time: --- %s seconds ---" % (time.time() - start_time))
@@ -135,7 +137,7 @@ def main(dataset_name, test, ensemble_size, projection_mode, lam, device):
     # set max norm for adversarial perturbations
     eps = EPS
     for attack in ['fgsm','pgd','deepfool','carlini']:
-        x_test_adv = model.load_adversaries(dataset_name=dataset_name,attack=attack, eps=eps, test=test)
+        x_test_adv = model.load_adversaries(attack=attack, eps=eps, relative_path=RESULTS)
         model.evaluate(x=x_test_adv, y=y_test)
 
 

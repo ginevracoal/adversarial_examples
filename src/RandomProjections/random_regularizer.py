@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 
+import sys
+sys.path.append("../")
 from tensorflow import keras
 import keras.losses
-from random_ensemble import *
-from projection_functions import *
+from RandomProjections.random_ensemble import *
+from RandomProjections.projection_functions import *
 import tensorflow as tf
 import random
+from joblib import Parallel, delayed
+
 # import tensorflow.compat.v1 as tf
 # tf.disable_v2_behavior()
 
@@ -40,20 +44,19 @@ class RandomRegularizer(BaselineConvnet):
         super(RandomRegularizer, self).__init__(input_shape, num_classes, data_format, dataset_name, test, library,
                                                 epochs)
         self.lam = lam
-        self.n_proj = 3 # projections per batch
-        self.batch_size = 1000
+        self.n_batches = 2 if test else 10
+        self.n_proj = 2 if test else 10 # projections per batch
         self.inputs = Input(shape=self.input_shape)
         # self.model_name = str(dataset_name) + "_randreg_lam=" + str(self.lam) + \
         #                   "_" + str(self.projection_mode) + "_" + str(self.init_seed)
 
         print("\nprojection mode =", self.projection_mode, ", channel mode =", CHANNEL_MODE,", lambda =", self.lam,
               ", init_seed = ", self.seed)
-        print("\nbatch_size =",self.batch_size,", epochs =",self.epochs,", lr =",L_RATE)
+        print("\nepochs =",self.epochs,", lr =",L_RATE)
         print("\nsize_proj~(",MIN_SIZE,",",MAX_SIZE,")", ", proj_per_batch=", self.n_proj)
 
     def _get_proj_params(self):
-        random.seed(self.seed)
-        size = random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
+        size = 28  #random.randint(MIN_SIZE, MAX_SIZE) if self.test is False else TEST_SIZE
         seed = random.randint(1, 100)  # random.sample(range(1, 100), n_proj) # list of seeds
         return {"size":size,"seed":seed}
 
@@ -127,7 +130,8 @@ class RandomRegularizer(BaselineConvnet):
             loss_gradient = self._compute_gradients(loss, [channel_inputs])[0]
             regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient / channels, ord=2, axis=0)))
 
-        return regularization / self.batch_size
+        batch_size = inputs.get_shape().as_list()[0]
+        return regularization / batch_size
 
     def _loss_on_projections_regularizer(self, inputs, outputs):
         channels = self._get_n_channels(inputs)
@@ -154,13 +158,18 @@ class RandomRegularizer(BaselineConvnet):
 
             # expectation #
             regularization += tf.reduce_sum(tf.math.square(tf.norm(loss_gradient/channels, ord=2, axis=0)))
-        return regularization / self.batch_size #(self.batch_size * self.n_proj)
+
+        batch_size = inputs.get_shape().as_list()[0]
+        return tf.math.divide(regularization,batch_size*self.n_proj)
 
         #     # max #
         #     regularization += tf.reduce_max(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
         # return regularization / (self.batch_size)
 
     def _projected_loss_regularizer(self, inputs, outputs):
+        sess = tf.Session()
+        sess.run(tf.local_variables_initializer())
+
         if DERIVATIVES_ON_INPUTS is False:
             raise AttributeError("\n You cannot compute partial derivatives w.r.t. projections in "
                                  "projected_loss regularizer. ")
@@ -178,13 +187,26 @@ class RandomRegularizer(BaselineConvnet):
 
         # project and regularize
         size = self._get_proj_params()['size']
+
+        # serial implementation
         regularization = 0
         for proj in range(self.n_proj):
             seed = self._get_proj_params()['seed']
             projected_loss = tf_flat_projection(input_data=loss_gradient, random_seed=seed, size_proj=size)[0]
             # regularization = tf.reshape(projected_loss, shape=(self.batch_size, size, size, channels))
             regularization += tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=0))) / self.n_proj
-        return regularization / self.batch_size
+
+        # todo: buggy parallel implementation
+        # seeds = random.sample(range(1, 100), self.n_proj)
+        # loss_gradient = loss_gradient.numpy()#tf.constant(loss_gradient).eval(session=sess, feed_dict={input: inputs})
+        # # print(size, loss_gradient)
+        # # exit()
+        # projected_loss = Parallel(n_jobs=self.n_proj)(
+        #     delayed(_parallel_project)(input_data=loss_gradient, random_seed=seed, size_proj=size) for seed in seeds)
+        # regularization = tf.reduce_sum(tf.math.square(tf.norm(projected_loss, ord=2, axis=0))) / self.n_proj
+
+        batch_size = inputs.get_shape().as_list()[0]
+        return regularization / batch_size
 
     def _loss_on_perturbations_regularizer(self, inputs, outputs):
         sess = tf.Session()
@@ -211,7 +233,8 @@ class RandomRegularizer(BaselineConvnet):
         loss_gradient = tf.cast(loss_gradient, tf.float32)
 
         regularization = tf.reduce_sum(tf.math.square(tf.norm(loss_gradient, ord=2, axis=0)))
-        return regularization / self.batch_size
+        batch_size = inputs.get_shape().as_list()[0]
+        return tf.math.divide(regularization,batch_size*self.n_proj)
 
     def train(self, x_train, y_train, device):
         """
@@ -225,16 +248,16 @@ class RandomRegularizer(BaselineConvnet):
               "\nx_train.shape = ", x_train.shape, "\ny_train.shape = ", y_train.shape, "\n")
 
         # batches = int(len(x_train)/self.batch_size)
-        n_batches = 1 if self.test else int(len(x_train)/self.batch_size)
-        print("n_batches = ", n_batches)
+        # n_batches = 1 if self.test else int(len(x_train)/self.batch_size)
+        print("n_batches = ", self.n_batches)
         # self.batch_size = int(len(x_train)/n_batches)
         # print(len(x_train), self.batch_size, n_batches)
-        x_train_batches = np.split(x_train, n_batches)
-        y_train_batches = np.split(y_train, n_batches)
+        x_train_batches = np.split(x_train, self.n_batches)
+        y_train_batches = np.split(y_train, self.n_batches)
         start_time = time.time()
 
-        for batch in range(n_batches):
-            print("\n=== training batch", batch+1,"/",n_batches,"===")
+        for batch in range(self.n_batches):
+            print("\n=== training batch", batch+1,"/",self.n_batches,"===")
             # idxs = np.random.choice(len(x_train_batches[0]), self.batch_size, replace=False)
             # x_train_sample = x_train_batches[batch][idxs]
             # y_train_sample = y_train_batches[batch][idxs]
@@ -249,14 +272,22 @@ class RandomRegularizer(BaselineConvnet):
             device_name = self._set_device_name(device)
             with tf.device(device_name):
                 loss = self.loss_wrapper(inputs,outputs)
-                self.model.compile(loss=loss, optimizer=keras.optimizers.Adadelta(lr=L_RATE), metrics=['accuracy'])
+                self.model.compile(loss=loss, optimizer=self.set_optimizer(), metrics=['accuracy'])
+
+                callbacks=[]
+                tensorboard = keras.callbacks.TensorBoard(log_dir='../tensorboard/', histogram_freq=0, write_graph=True,
+                                                         write_images=True)
+                es = keras.callbacks.EarlyStopping(monitor='loss', verbose=1)
                 if self.epochs == None:
-                    es = keras.callbacks.EarlyStopping(monitor='val_loss', verbose=1)
-                    self.model.fit(x_train_batch, y_train_batch, epochs=80, batch_size=mini_batch,
-                                   callbacks=[es], shuffle=True, validation_split=0.2)
+                    epochs = 50
+                    callbacks.append(es)
                 else:
-                    self.model.fit(x_train_batch, y_train_batch, epochs=self.epochs, batch_size=mini_batch,
-                                   shuffle=True, validation_split=0.2)
+                    epochs = self.epochs
+                if self.test == False:
+                    callbacks.append(tensorboard)
+
+                self.model.fit(x_train_batch, y_train_batch, epochs=epochs, batch_size=mini_batch, callbacks=callbacks,
+                               shuffle=True, validation_split=0.2)
 
             # # intermediate evaluations
             # x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(
@@ -271,15 +302,39 @@ class RandomRegularizer(BaselineConvnet):
         self.trained = True
         return self
 
+    # def save_classifier(self, relative_path, folder=None, filename=None):
+    #     """
+    #     Saves the trained model and adds the current datetime to the filepath.
+    #     :relative_path: path of folder containing the trained model
+    #     """
+    #     if folder is None:
+    #         folder = self.folder
+    #     if filename is None:
+    #         filename = self.filename
+    #     os.makedirs(os.path.dirname(relative_path + folder), exist_ok=True)
+    #     filepath = relative_path + folder + filename + ".h5"
+    #     print("\nSaving classifier: ", filepath)
+    #     self.model.save_weights(filepath)
+
     def load_classifier(self, relative_path, folder=None, filename=None):
+        # todo. set the architecture first, then load the weights
+        import keras.losses
+        # keras.losses.custom_loss = self.loss
+
         if folder is None:
             folder = self.folder
         if filename is None:
             filename = self.filename
         print("\nLoading model: ", relative_path + folder + filename + ".h5")
-        self.model = load_model(relative_path + folder + filename + ".h5", custom_objects={'custom_loss':self.loss})
+        self.model = self.model.load_weights(relative_path + folder + filename + ".h5")#, custom_objects={'custom_loss':self.loss})
+        # self.model = self.load_classifier(relative_path + folder + filename + ".h5")
         self.trained = True
         return self
+
+
+def _parallel_project(input_data, random_seed, size_proj):
+    return tf_flat_projection(input_data=input_data, random_seed=random_seed, size_proj=size_proj)[0]
+
 
 def main(dataset_name, test, lam, projection_mode, device, seed):
     """
@@ -292,9 +347,9 @@ def main(dataset_name, test, lam, projection_mode, device, seed):
     :param seed: random seed for the projections
     """
 
-
     # === initialize === #
     random.seed(seed)
+
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
                                                                                            test=test)
 
@@ -304,9 +359,13 @@ def main(dataset_name, test, lam, projection_mode, device, seed):
 
     # === train === #
     randreg.train(x_train, y_train, device)
-    randreg.save_classifier(relative_path=RESULTS)#, filename=randreg.filename+"_seed="+str(seed))
-    # randreg.load_classifier(relative_path=RESULTS + time.strftime('%Y-%m-%d') + "/")
-    # randreg.load_classifier(relative_path=RESULTS)
+    randreg.save_classifier(relative_path=RESULTS) #, filename=randreg.filename+"_seed="+str(seed))
+    del randreg
+
+    randreg = RandomRegularizer(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
+                                dataset_name=dataset_name, lam=lam, projection_mode=projection_mode, test=test,
+                                seed=seed, library="cleverhans")
+    randreg.load_classifier(relative_path=RESULTS)
 
     # === evaluate === #
     randreg.evaluate(x=x_test, y=y_test)
