@@ -30,7 +30,7 @@ projections.
 
 Inverse projections
 
-<img src="../../results/images/mnist_randens_proj=1_size=25.png" width="420"/> <img src="results/images/cifar_randens_proj=1_size=28.png" width="420">
+<img src="../../results/images/mnist_randens_proj=1_size=25.png" width="420"/> <img src="../../results/images/cifar_randens_proj=1_size=28.png" width="420">
 
 Adversarial robustness
 
