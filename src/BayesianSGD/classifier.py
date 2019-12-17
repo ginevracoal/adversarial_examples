@@ -5,12 +5,10 @@
 """
 
 import sys
-sys.path.append("../")
-from RandomProjections.directories import *
+sys.path.append(".")
+from directories import *
 
 import torch.nn as nn
-import torch
-from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
 from utils import *
 from BayesianSGD.nets import torch_net
@@ -21,8 +19,6 @@ import copy
 from torch.utils.data.dataset import random_split
 
 
-RESULTS = "../../results/"+str(time.strftime('%Y-%m-%d'))+"/"
-DATA_PATH = "../data/"
 DATASETS = "mnist, cifar"
 
 

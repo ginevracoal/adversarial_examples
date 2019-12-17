@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-sys.path.append("../")
-from RandomProjections.directories import *
+sys.path.append(".")
+from directories import *
+
 from keras.models import Model
 from keras.wrappers.scikit_learn import KerasClassifier as sklKerasClassifier
 from sklearn.metrics import classification_report

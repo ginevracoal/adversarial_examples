@@ -5,7 +5,9 @@ Simple CNN model.
 """
 
 import sys
-sys.path.append("../")
+sys.path.append(".")
+from directories import *
+
 from RandomProjections.adversarial_classifier import *
 from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
 

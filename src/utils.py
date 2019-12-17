@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import math
 import tensorflow as tf
 import torch
+from directories import *
 
 TEST_SIZE = 20
 
@@ -82,13 +83,13 @@ def onehot_to_labels(y):
     elif type(y) is torch.Tensor:
         return torch.max(y, 1)[1]
 
-def load_cifar(test):
+def load_cifar(test, data):
     """Return train_data, train_labels, test_data, test_labels
     The shape of data is 32 x 32 x3"""
     x_train = None
     y_train = []
 
-    data_dir='../data/cifar-10/'
+    data_dir=str(data)+'/cifar-10/'
 
     for i in range(1, 6):
         data_dic = unpickle(data_dir + "data_batch_{}".format(i))
@@ -128,7 +129,7 @@ def load_cifar(test):
     return x_train, _onehot(y_train), x_test, _onehot(y_test), input_shape, num_classes, data_format
 
 
-def load_dataset(dataset_name, test):
+def load_dataset(dataset_name, test, data=DATA_PATH):
     """
     Load dataset.
     :param dataset_name: choose between "mnist" and "cifar"
@@ -139,7 +140,7 @@ def load_dataset(dataset_name, test):
     if dataset_name == "mnist":
         return preprocess_mnist(test=test)
     elif dataset_name == "cifar":
-        return load_cifar(test=test)
+        return load_cifar(test=test, data=data)
     else:
         raise ValueError("\nWrong dataset name.")
 
