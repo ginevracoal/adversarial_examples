@@ -30,17 +30,17 @@ projections.
 
 Inverse projections
 
-<img src="../results/images/mnist_randens_proj=1_size=25.png" width="420"/> <img src="results/images/cifar_randens_proj=1_size=28.png" width="420">
+<img src="../../results/images/mnist_randens_proj=1_size=25.png" width="420"/> <img src="results/images/cifar_randens_proj=1_size=28.png" width="420">
 
 Adversarial robustness
 
-<img src="../results/images/mnist_randens_adversarial_accuracy.png" width="400"/> <img src="results/images/cifar_randens_adversarial_accuracy.png" width="400">
+<img src="../../results/images/mnist_randens_adversarial_accuracy.png" width="400"/> <img src="results/images/cifar_randens_adversarial_accuracy.png" width="400">
 
 
 Computational complexity
 
-<img src="../results/images/mnist_randens_complexity.png" width="400"/> <img src="results/images/cifar_randens_complexity.png" width="400">
+<img src="../../results/images/mnist_randens_complexity.png" width="400"/> <img src="results/images/cifar_randens_complexity.png" width="400">
 
 Perturbed images
 
-<img src="../results/images/cifar_perturbations.png" width="400"/> <img src="results/images/cifar_perturbations_plot.png" width="400">
+<img src="../../results/images/cifar_perturbations.png" width="400"/> <img src="results/images/cifar_perturbations_plot.png" width="400">
