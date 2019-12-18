@@ -8,6 +8,7 @@ import torch
 import cProfile
 from torch.optim.optimizer import Optimizer
 
+DEBUG = True
 
 class SGD(torch.optim.SGD):
     """ Simplified version of torch.SGD """
@@ -97,7 +98,7 @@ class BayesianSGD(SGD):
         g1 = torch.flatten(params['g1'][layer_idx])
         gS = torch.flatten(params['gS'][layer_idx])
 
-        k = self.lr/(params['epoch']+1)
+        k = 1/(params['epoch']+1)
 
         old_trace = self.noise_covariance_traces[str(layer_idx)]
 
@@ -105,8 +106,11 @@ class BayesianSGD(SGD):
         # cov_matrix = torch.mm(B.t(),B)
         # print(cov_matrix)
 
+        if DEBUG:
+            print("\nlayer ", layer_idx, "\nk =", k, "old_trace =", old_trace)
+            print(" g1[0:5]-gS[0:5] = ", g1[0:5]-gS[0:5])
         new_trace = (1-k) * old_trace + k * torch.dot((g1 - gS).t(),(g1 - gS))
-        print(old_trace, end=' ')
+
 
         self.noise_covariance_traces.update({str(layer_idx): new_trace})
         return self.noise_covariance_traces
@@ -121,9 +125,12 @@ class BayesianSGD(SGD):
             batch_size = self.custom_params['batch_length']
             n_layer_weights = np.prod([x for x in layer_params.shape])
             total_n_samples = self.custom_params['n_training_samples']
-            noise_covariance_traces = self.update_traces(params=self.custom_params, layer_idx=layer_idx)
+            noise_covariance_trace = self.update_traces(params=self.custom_params, layer_idx=layer_idx)[str(layer_idx)]
 
-            optimal_lr = (2 * batch_size * n_layer_weights) / (total_n_samples * noise_covariance_traces[str(layer_idx)])
+            #if DEBUG:
+                #print("batch_size=", batch_size,", n_layer_weights=", n_layer_weights,
+                #      ", total_n_samples=", total_n_samples,", noise_covariance_trace=", noise_covariance_trace)
+            optimal_lr = (2 * batch_size * n_layer_weights) / (total_n_samples * noise_covariance_trace)
             return optimal_lr
         else:
             return self.lr
@@ -144,6 +151,6 @@ class BayesianSGD(SGD):
             self.custom_params = custom_params
             lr = self.update_learning_rate(layer_params=layer_params, layer_idx=layer_idx)
             self.lr_updates.update({str(layer_idx):lr})
-            layer_params.data -= -lr * gradient
+            layer_params.data -= lr * gradient
 
         return loss

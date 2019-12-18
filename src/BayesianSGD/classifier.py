@@ -20,7 +20,7 @@ from torch.autograd import grad
 import torch
 from torch.utils.data.dataset import random_split
 
-
+DEBUG = True
 DATASETS = "mnist, cifar"
 
 
@@ -185,19 +185,20 @@ class SGDClassifier(object):
 
 
 class BayesianSGDClassifier(SGDClassifier):
-    def __init__(self, input_shape, num_classes, data_format, dataset_name, test):
+    def __init__(self, input_shape, num_classes, data_format, dataset_name, test, start_updates):
         super(BayesianSGDClassifier, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
         self.batch_size = 1000
+        self.start_updates = start_updates
         self.classifier_name = dataset_name + str("_bayesian_sgd")
 
     def set_optimizer(self, lr, start_updates=0):
         return BayesianSGD(params=list(self.net.parameters()), loss_fn=self.loss_fn, lr=lr, custom_params={},
-                           start_updates=start_updates)
+                           start_updates=self.start_updates)
 
     def train_epoch(self, model, train_loader, val_loader, device, custom_params):
         x_batch, y_batch = list(train_loader)[0]
         labels = onehot_to_labels(y_batch)
-        outputs = model(x_batch)
+        outputs = model(x_batch).to(device)
         weights = list(self.net.parameters())
 
         loss1 = self.loss_fn(outputs[0:1], labels[0:1])  # todo: solo il primo sample
@@ -210,9 +211,10 @@ class BayesianSGDClassifier(SGDClassifier):
         super(BayesianSGDClassifier, self).train_epoch(model=model, train_loader=train_loader, val_loader=val_loader,
                                                        device=device, custom_params=self.optimizer.custom_params)
 
-        print("\n\nEpoch updates:")
-        print("noise covariance traces = ", self.optimizer.noise_covariance_traces.values())
-        print("lr updates = ", list(self.optimizer.lr_updates.values()))
+        if DEBUG:
+            print("\n\nEpoch updates:")
+            print("noise covariance traces = ", self.optimizer.noise_covariance_traces.values())
+            print("lr updates = ", list(self.optimizer.lr_updates.values()))
 
 
 def main(dataset_name, test, device, seed):
@@ -222,7 +224,7 @@ def main(dataset_name, test, device, seed):
                                                                                            test=test)
 
     # model = SGDClassifier(
-    model = BayesianSGDClassifier(
+    model = BayesianSGDClassifier(start_updates=5,
         input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name, test=test)
 
     lr = 0.001
