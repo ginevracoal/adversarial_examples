@@ -8,6 +8,7 @@ import sys
 sys.path.append(".")
 from directories import *
 
+import itertools
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from utils import *
@@ -16,11 +17,12 @@ from BayesianSGD.sgd import SGD, BayesianSGD
 import time
 import random
 import copy
+import numpy as np
 from torch.autograd import grad
 import torch
 from torch.utils.data.dataset import random_split
 
-DEBUG = True
+
 DATASETS = "mnist, cifar"
 
 
@@ -34,6 +36,7 @@ def validation_split(x_train, y_train, val_ratio, batch_size):
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size)
     val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size)
     return train_loader, val_loader
+
 
 def set_device(device_name):
     if device_name == "gpu":
@@ -49,7 +52,7 @@ class SGDClassifier(object):
         self.net = torch_net(dataset_name=dataset_name, input_shape=input_shape, data_format=data_format)
         self.batch_size = 128
         self.optimizer = None
-        self.loss_fn = nn.CrossEntropyLoss()#reduce=None)
+        self.loss_fn = nn.CrossEntropyLoss()  # reduce=None)
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.data_format = data_format
@@ -58,7 +61,7 @@ class SGDClassifier(object):
         self.name = dataset_name + str("_sgd")
 
     def set_optimizer(self, lr):
-        return SGD(params=list(self.net.parameters()), lr=lr, custom_params={})
+        return SGD(params=list(self.net.parameters()), lr=lr)
         # return torch.optim.SGD(params=list(self.net.parameters()), lr=lr)
         # return torch.optim.Adam(params=list(self.net.parameters()))
 
@@ -67,10 +70,8 @@ class SGDClassifier(object):
         optimizer = self.optimizer
         model.train()  # train mode
         outputs = model(inputs)  # make predictions
-        # print("check updates: outputs[0]=",outputs[0],", labels:",labels)
         loss = self.loss_fn(outputs, labels)  # compute loss
         loss.backward()  # compute gradients
-        # optimizer.optimizer_params = optimizer_params
         optimizer.step(custom_params=custom_params)  # update parameters
         optimizer.zero_grad()  # put gradients to zero
         return loss.item()
@@ -93,7 +94,7 @@ class SGDClassifier(object):
             count_predictions += y_batch.size(0)
             correct_predictions += (predictions == labels).sum().item()
         train_acc = 100 * correct_predictions / count_predictions
-        print('\nTraining loss: {:.4f}, acc: {:.4f}'.format(train_loss, train_acc), end='   ')
+        print('Training loss: {:.4f}, acc: {:.4f}'.format(train_loss, train_acc), end=' -- ')
 
         # === validation === #
         with torch.no_grad():  # temporarily set all the requires_grad flag to false
@@ -104,7 +105,6 @@ class SGDClassifier(object):
             for x_val, y_val in val_loader:
                 x_val = x_val.to(device)
                 labels = onehot_to_labels(y_val).to(device)
-
                 outputs = model(x_val)
                 val_loss = self.loss_fn(outputs, labels)
                 val_losses.append(val_loss.item())
@@ -115,7 +115,7 @@ class SGDClassifier(object):
             val_acc = 100 * correct_predictions / count_predictions
             print('Validation loss: {:.4f}, acc: {:.4f}'.format(val_loss, val_acc), end='   ')
 
-    def train(self, x_train, y_train, val_ratio=0.2, lr=0.01, epochs=100, device="cpu"):
+    def train(self, x_train, y_train, lr, epochs, val_ratio=0.2, device="cpu"):
         model = self.net
         print(model)
 
@@ -132,13 +132,12 @@ class SGDClassifier(object):
         start = time.time()
 
         n_training_samples = len(train_loader)
-        self.optimizer.custom_params.update({'n_training_samples':n_training_samples})
+        custom_params = {'n_training_samples':n_training_samples}
         for epoch in range(epochs):
-            print("\n", '-' * 10)
-            print('Epoch {}/{}'.format(epoch, epochs - 1))
-            self.optimizer.custom_params.update({'epoch':epoch})
+            print('\nEpoch {}/{}'.format(epoch, epochs - 1), end=" -- ")
+            custom_params.update({'epoch':epoch})
             self.train_epoch(model=model, train_loader=train_loader, val_loader=val_loader, device=device,
-                             custom_params=self.optimizer.custom_params)
+                             custom_params=custom_params)
 
         time_elapsed = time.time() - start
         print('\n\nTraining time: {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
@@ -187,48 +186,58 @@ class SGDClassifier(object):
 class BayesianSGDClassifier(SGDClassifier):
     def __init__(self, input_shape, num_classes, data_format, dataset_name, test, start_updates):
         super(BayesianSGDClassifier, self).__init__(input_shape, num_classes, data_format, dataset_name, test)
-        self.batch_size = 1000
+        self.batch_size = 100
         self.start_updates = start_updates
         self.classifier_name = dataset_name + str("_bayesian_sgd")
+        self.updated = False
 
     def set_optimizer(self, lr, start_updates=0):
-        return BayesianSGD(params=list(self.net.parameters()), loss_fn=self.loss_fn, lr=lr, custom_params={},
+        return BayesianSGD(params=list(self.net.parameters()), loss_fn=self.loss_fn, lr=lr,
                            start_updates=self.start_updates)
 
-    def train_epoch(self, model, train_loader, val_loader, device, custom_params):
-        x_batch, y_batch = list(train_loader)[0]
+    def train_epoch(self, model, train_loader, val_loader, device, custom_params, debug = False):
+        x_batch, y_batch = list(train_loader)[0]  # only use the first batch for gradient updates in current epoch
         labels = onehot_to_labels(y_batch)
+        model.train()
         outputs = model(x_batch).to(device)
         weights = list(self.net.parameters())
 
-        loss1 = self.loss_fn(outputs[0:1], labels[0:1])  # todo: solo il primo sample
-        g1 = grad(loss1, weights, retain_graph=True)
-        lossS = self.loss_fn(outputs, labels)
-        gS = grad(lossS, weights, retain_graph=False)
+        if custom_params['epoch'] == self.start_updates:  # todo correggi
+            print("(starting lr updates) -- ", end = "")
 
-        self.optimizer.custom_params.update({'batch_length':len(y_batch),'n_training_samples':self.n_training_samples,
-                                      'g1':g1, 'gS':gS})
+        if self.updated is False:
+            loss1 = self.loss_fn(outputs[0:1], labels[0:1])
+            g1 = grad(loss1, weights, retain_graph=True)
+            lossS = self.loss_fn(outputs, labels)
+            gS = grad(lossS, weights)
+            custom_params.update({'batch_length':len(y_batch),'n_training_samples':self.n_training_samples,
+                                                 'g1':g1, 'gS':gS})
+        # self.updated = True
         super(BayesianSGDClassifier, self).train_epoch(model=model, train_loader=train_loader, val_loader=val_loader,
-                                                       device=device, custom_params=self.optimizer.custom_params)
+                                                       device=device, custom_params=custom_params)
 
-        if DEBUG:
+        if debug:
             print("\n\nEpoch updates:")
             print("noise covariance traces = ", self.optimizer.noise_covariance_traces.values())
             print("lr updates = ", list(self.optimizer.lr_updates.values()))
+
+    def train(self, x_train, y_train, lr, epochs, val_ratio=0.2, device="cpu"):
+        super(BayesianSGDClassifier, self).train(x_train, y_train, lr, epochs, val_ratio, device)
 
 
 def main(dataset_name, test, device, seed):
     random.seed(seed)
 
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_dataset(dataset_name=dataset_name,
-                                                                                           test=test)
+                                                                                           test=test, n_samples=10)
 
+    # todo: automatically start updates using a ths on the accuracy
     # model = SGDClassifier(
-    model = BayesianSGDClassifier(start_updates=5,
+    model = BayesianSGDClassifier(start_updates=33,
         input_shape=input_shape, num_classes=num_classes, data_format=data_format, dataset_name=dataset_name, test=test)
 
-    lr = 0.001
-    epochs = 25 if test else 100
+    lr = 0.1
+    epochs = 60
     model.train(x_train, y_train, device=device, lr=lr, epochs=epochs)
     model.save_classifier(relative_path=RESULTS, filename=model.name+"_lr="+str(lr)+"_epochs="+str(epochs)+"_"+str(seed))
     model.evaluate(x_test=x_test, y_test=y_test)
