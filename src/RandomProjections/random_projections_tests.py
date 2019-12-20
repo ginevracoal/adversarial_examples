@@ -1,8 +1,8 @@
 import unittest
 import sys
-sys.path.append("../")
+sys.path.append(".")
+from directories import *
 from utils import *
-from RandomProjections.directories import *
 from RandomProjections.baseline_convnet import BaselineConvnet
 from RandomProjections.random_ensemble import RandomEnsemble
 from RandomProjections.projection_functions import *
@@ -14,7 +14,6 @@ BATCH_SIZE = 20
 EPOCHS = 1
 N_PROJECTIONS = 1
 SIZE_PROJECTION = 6
-EPS = 0.3
 DEVICE = "cpu"
 
 
@@ -37,15 +36,15 @@ class Test(unittest.TestCase):
         # model training
         model.train(self.x_train, self.y_train, device=DEVICE)
         model.evaluate(self.x_test, self.y_test)
-        x_test_adv = model.generate_adversaries(self.x_test, self.y_test, attack="fgsm", eps=EPS, seed=0)
-        model.save_adversaries(data=x_test_adv,attack="fgsm",eps=EPS, seed=0)
+        x_test_adv = model.generate_adversaries(self.x_test, self.y_test, attack="fgsm", seed=0)
+        model.save_adversaries(data=x_test_adv,attack="fgsm", seed=0)
         model.evaluate(x_test_adv, self.y_test)
 
         # save and load classifier
         model.save_classifier(relative_path=RESULTS)
         model.load_classifier(relative_path=RESULTS)
         model.evaluate(self.x_test, self.y_test)
-        x_test_adv = model.load_adversaries(attack="fgsm",eps=EPS,seed=0,relative_path=RESULTS)
+        x_test_adv = model.load_adversaries(attack="fgsm",seed=0,relative_path=RESULTS)
         model.evaluate(x_test_adv, self.y_test)
 
         # adversarial training
@@ -61,7 +60,7 @@ class Test(unittest.TestCase):
 
         # evaluate
         x_test_pred = model.evaluate(self.x_test, self.y_test)
-        x_test_adv = self.baseline.load_adversaries(attack="fgsm",eps=EPS,seed=0,relative_path=RESULTS)
+        x_test_adv = self.baseline.load_adversaries(attack="fgsm",seed=0,relative_path=RESULTS)
         model.evaluate(x_test_adv, self.y_test)
 
         # save and load
@@ -77,6 +76,7 @@ class Test(unittest.TestCase):
         np.array_equal(x_test_pred, x_test_pred_loaded)
 
     def test_cifar_load_and_train(self):
+        print(os.getcwd())
         x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = load_cifar(test=True, data=DATA_PATH)
         model = BaselineConvnet(input_shape=input_shape, num_classes=num_classes, data_format=data_format,
                                 dataset_name="cifar", test=True)
@@ -114,17 +114,19 @@ class Test(unittest.TestCase):
 
     def test_ensemble_regularizer(self):
         ensemble_size=2
-        # model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape,
-        #                             num_classes=self.num_classes, data_format=self.data_format, dataset_name="mnist",
-        #                             lam=0.3, projection_mode="loss_on_projections", test=True)
-        # model.train(self.x_train, self.y_train, device="cpu")
-        # model.save_classifier(relative_path=RESULTS)
-        # del model
         model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape,
                                     num_classes=self.num_classes, data_format=self.data_format, dataset_name="mnist",
                                     lam=0.3, projection_mode="loss_on_projections", test=True)
-        model.load_classifier(relative_path=RESULTS)
-        model.evaluate(x=self.x_test, y=self.y_test)
+        model.train(self.x_train, self.y_train, device="cpu")
+        model.save_classifier(relative_path=RESULTS)
+        del model
+        # model = EnsembleRegularizer(ensemble_size=ensemble_size, input_shape=self.input_shape,
+        #                             num_classes=self.num_classes, data_format=self.data_format, dataset_name="mnist",
+        #                             lam=0.3, projection_mode="loss_on_projections", test=True)
+        # model.load_classifier(relative_path=RESULTS)
+        # model.evaluate(x=self.x_test, y=self.y_test)
+        # todo: working on the implementation
+        pass
 
     def test_parallel_randens(self):
         model = ParallelRandomEnsemble(input_shape=self.input_shape, num_classes=self.num_classes,
@@ -134,7 +136,7 @@ class Test(unittest.TestCase):
         model.train(x_train=self.x_train, y_train=self.y_train, device=DEVICE, n_jobs=2)
         model_path = RESULTS
         model.evaluate(x=self.x_test, y=self.y_test, device=DEVICE, model_path=model_path)
-        x_test_adv = model.load_adversaries(attack="fgsm", eps=0.3, seed=0)
+        x_test_adv = model.load_adversaries(attack="fgsm", seed=0, relative_path=RESULTS)
         model.evaluate(x=x_test_adv, y=self.y_test, device=DEVICE, model_path=model_path)
 
     def test_weighted_ensemble(self):

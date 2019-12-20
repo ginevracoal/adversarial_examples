@@ -126,7 +126,7 @@ class BaselineConvnet(AdversarialClassifier):
         # robust_classifier = BaselineConvnet(input_shape=self.input_shape, num_classes=self.num_classes, test=self.test,
         #                                     data_format=self.data_format, dataset_name=self.dataset_name)
         robust_classifier.train(x_train_adv, y_train, device)
-        robust_classifier.filename = self._robust_classifier_name(attack=attack, eps=eps, seed=seed)
+        robust_classifier.filename = self._robust_classifier_name(attack=attack, seed=seed)
 
         print("Adversarial training time: --- %s seconds ---" % (time.time() - start_time))
         return robust_classifier

@@ -40,7 +40,7 @@ class EnsembleRegularizer(RandomRegularizer):
         for i in range(self.ensemble_size):
             randreg = RandomRegularizer(input_shape=self.input_shape, num_classes=self.num_classes,
                                         data_format=self.data_format, dataset_name=self.dataset_name, lam=self.lam,
-                                        projection_mode=self.projection_mode, test=self.test, init_seed=i)
+                                        projection_mode=self.projection_mode, test=self.test, library="cleverhans")
             classifiers.append(randreg.train(x_train, y_train, device))
             del randreg
 

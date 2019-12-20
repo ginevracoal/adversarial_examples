@@ -95,7 +95,7 @@ def load_cifar(test, data, n_samples=None):
     x_train = None
     y_train = []
 
-    data_dir=str(data)+'/cifar-10/'
+    data_dir=str(data)+'cifar-10/'
 
     for i in range(1, 6):
         data_dic = unpickle(data_dir + "data_batch_{}".format(i))

@@ -164,7 +164,7 @@ class AdversarialClassifier(sklKerasClassifier):
         """ Returns the norm used for computing perturbations on the given method. """
         return np.inf
 
-    def generate_adversaries(self, x, y, attack, eps=None, seed=0, device="cpu"):
+    def generate_adversaries(self, x, y, attack, eps=0.3, seed=0, device="cpu"):
         """
         Generates adversaries on the input data x using a given attack method.
 
@@ -198,7 +198,7 @@ class AdversarialClassifier(sklKerasClassifier):
                     # classifier._loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
                     # classifier.custom_loss = self.loss_wrapper(tf.convert_to_tensor(x), None)
                     if attack == 'fgsm':
-                        attacker = art.attacks.FastGradientMethod(classifier, eps=eps)
+                        attacker = art.attacks.FastGradientMethod(classifier, eps=0.3)
                         x_adv = attacker.generate(x=x)
                     elif attack == 'deepfool':
                         attacker = art.attacks.DeepFool(classifier, nb_grads=5)
