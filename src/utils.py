@@ -18,7 +18,7 @@ TEST_SIZE = 20
 ######################
 
 
-def preprocess_mnist(test, img_rows=28, img_cols=28):
+def preprocess_mnist(test, img_rows=28, img_cols=28, n_samples=None):
     """Preprocess mnist dataset for keras training
 
     :param test: If test is True, only load the first 100 images
@@ -48,11 +48,17 @@ def preprocess_mnist(test, img_rows=28, img_cols=28):
     y_train = keras.utils.to_categorical(y_train, 10)
     y_test = keras.utils.to_categorical(y_test, 10)
 
-    if test:
-        x_train = x_train[:TEST_SIZE]
-        y_train = y_train[:TEST_SIZE]
-        x_test = x_test[:TEST_SIZE]
-        y_test = y_test[:TEST_SIZE]
+    if n_samples:
+        x_train = x_train[:n_samples]
+        y_train = y_train[:n_samples]
+        x_test = x_test[:n_samples]
+        y_test = y_test[:n_samples]
+    else:
+        if test:
+            x_train = x_train[:TEST_SIZE]
+            y_train = y_train[:TEST_SIZE]
+            x_test = x_test[:TEST_SIZE]
+            y_test = y_test[:TEST_SIZE]
 
     num_classes = 10
     data_format = 'channels_last'
@@ -83,7 +89,7 @@ def onehot_to_labels(y):
     elif type(y) is torch.Tensor:
         return torch.max(y, 1)[1]
 
-def load_cifar(test, data):
+def load_cifar(test, data, n_samples=None):
     """Return train_data, train_labels, test_data, test_labels
     The shape of data is 32 x 32 x3"""
     x_train = None
@@ -120,16 +126,22 @@ def load_cifar(test, data):
     x_train /= 255
     x_test /= 255
 
-    if test:
-        x_train = x_train[:TEST_SIZE]
-        y_train = y_train[:TEST_SIZE]
-        x_test = x_test[:TEST_SIZE]
-        y_test = y_test[:TEST_SIZE]
+    if n_samples:
+        x_train = x_train[:n_samples]
+        y_train = y_train[:n_samples]
+        x_test = x_test[:n_samples]
+        y_test = y_test[:n_samples]
+    else:
+        if test:
+            x_train = x_train[:TEST_SIZE]
+            y_train = y_train[:TEST_SIZE]
+            x_test = x_test[:TEST_SIZE]
+            y_test = y_test[:TEST_SIZE]
 
     return x_train, _onehot(y_train), x_test, _onehot(y_test), input_shape, num_classes, data_format
 
 
-def load_dataset(dataset_name, test, data=DATA_PATH):
+def load_dataset(dataset_name, test, data=DATA_PATH, n_samples=None):
     """
     Load dataset.
     :param dataset_name: choose between "mnist" and "cifar"
@@ -138,9 +150,9 @@ def load_dataset(dataset_name, test, data=DATA_PATH):
     # global x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
     if dataset_name == "mnist":
-        return preprocess_mnist(test=test)
+        return preprocess_mnist(test=test, n_samples=n_samples)
     elif dataset_name == "cifar":
-        return load_cifar(test=test, data=data)
+        return load_cifar(test=test, data=data, n_samples=n_samples)
     else:
         raise ValueError("\nWrong dataset name.")
 
