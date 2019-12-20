@@ -75,6 +75,14 @@ class SGD(torch.optim.SGD):
 class BayesianSGD(SGD):
 
     def __init__(self, params, lr, loss_fn, start_updates):
+        """
+        Bayesian SGD training from Mandt et al. (2017) performs constant SGD, then starts updating the learning rate
+        around a local minimum.
+        :param params: torch network parameters, type=list
+        :param lr: constant lr for the initial phase of the algorithm
+        :param loss_fn: type=torch.nn.modules.loss
+        :param start_updates: epoch index for starting the lr updates, type=int
+        """
         super(BayesianSGD, self).__init__(params=params, lr=lr)
         self.start_updates = start_updates
         self.loss_fn = loss_fn
@@ -88,11 +96,11 @@ class BayesianSGD(SGD):
         """
         Updates the approximation of the noise covariance matrix at current epoch, then computes its Cholesky
         decomposition.
-        :param C_old: old noise covariance approximation, type=np.ndarray
-        :param k: decaying learning rate for timestep t, type=int
+        :param custom_params: additional params that need to be updated, type=dict
+        :param layer_idx: index of current layer, updates are saved layer-wise, type=int
+        :param debug: activates debugging print calls, type=bool
         return
-        :param C_new: new noise covariance approximation C_new, type=np.ndarray
-        :param B: Cholesky decomposition factor B, type=np.ndarray
+        :param noise_covariance_traces: updated layer-wise noise covariance traces, type=dict
         """
 
         g1 =  torch.flatten(custom_params['g1'][layer_idx])
@@ -108,10 +116,16 @@ class BayesianSGD(SGD):
         self.noise_covariance_traces.update({str(layer_idx): new_trace})
         return self.noise_covariance_traces
 
-    def update_learning_rate(self, layer_params, layer_idx, custom_params, debug = False):
+    def update_learning_rate(self, layer_params, layer_idx, custom_params, debug=True):
         """
-        Computes the optimal layer-wise learning rate at current time, for performing constant SGD on a minibatch of
-        samples.
+        Computes the optimal layer-wise learning rate at current time in order to perform constant SGD on a minibatch of
+        samples that leads to Bayesian inference.
+        :param layer_params: current layer weights, type=torch.nn.parameter.Parameter
+        :param layer_idx: index of current layer, updates are saved layer-wise, type=int
+        :param custom_params: additional params that need to be updated, type=dict
+        :param debug: activates debugging print calls, type=bool
+        return
+        :param optimal_lr: optimal learning rate for current layer, type=int
         """
         batch_size = custom_params['batch_length']
         n_layer_weights = np.prod([x for x in layer_params.shape])
@@ -123,23 +137,25 @@ class BayesianSGD(SGD):
         optimal_lr = (2 * noise_covariance_trace) / (n_layer_weights)  # this is wrong
 
         if debug:
-            print("batch_size=", batch_size,", n_layer_weights=", n_layer_weights, end=" / ")
-            print("trace = ", noise_covariance_trace, "total_n_samples=", total_n_samples, end= "")
-            print(" -> optimal lr for layer", layer_idx, "= ", optimal_lr)
+            print("n_layer_weights=", n_layer_weights, "\ttrace = ", noise_covariance_trace, end= " ")
+            print("\t\t optimal lr for layer", layer_idx, "= ", optimal_lr)
 
         return optimal_lr
 
     def step(self, closure=None, custom_params=None):
-        # to ensure compatibility with Optimizer base class
+        """
+        Performs gradient updates.
+        :param closure: ensures compatibility with Optimizer base class
+        :param custom_params: additional params that need to be updated, type=dict
+        return
+        :param loss:
+        """
         loss = None
         if closure is not None:
             loss = closure()
 
-        weights = self.param_groups[0]
-
-
-        for layer_idx, layer_params in enumerate(weights['params']):
-
+        weights = self.param_groups[0]['params']
+        for layer_idx, layer_params in enumerate(weights):
             if layer_params.grad is None:
                 continue
             gradient = layer_params.grad.data
@@ -152,5 +168,4 @@ class BayesianSGD(SGD):
                 lr = self.lr
 
             layer_params.data -= lr * gradient
-
         return loss
