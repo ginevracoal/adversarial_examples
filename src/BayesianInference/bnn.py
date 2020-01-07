@@ -25,7 +25,6 @@ class BNN(nn.Module):
         # Set-up parameters for the distribution of weights for each layer `a<n>`
         a1_mean = torch.zeros(784, self.n_hidden)
         a1_scale = torch.ones(784, self.n_hidden)
-        # todo: capire qua le dimensioni
         a2_mean = torch.zeros(self.n_hidden + 1, self.n_classes)
         a2_scale = torch.ones(self.n_hidden + 1, self.n_hidden)
         a3_mean = torch.zeros(self.n_hidden + 1, self.n_classes)
@@ -86,13 +85,13 @@ class BNN(nn.Module):
         raise NotImplementedError
 
     def save(self, filename, relative_path=RESULTS+"bnn/"):
-        filepath = relative_path + filename + ".pt"
-
+        filepath = relative_path + filename + ".pr"
         os.makedirs(os.path.dirname(relative_path), exist_ok=True)
-        print("\nSaving classifier: ", filepath)
-        torch.save(self.state_dict(), filepath)
+        print("\nSaving params: ", filepath)
+        pyro.get_param_store().save(filepath)
 
     def load(self, filename, relative_path=RESULTS+"bnn/"):
-        filepath = relative_path+filename+".pt"
-        print("\nLoading classifier: ", filepath)
-        self.load_state_dict(torch.load(filepath))
+        filepath = relative_path+filename+".pr"
+        print("\nLoading params: ", filepath)
+        pyro.get_param_store().load(filepath)
+

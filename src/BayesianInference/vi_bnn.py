@@ -83,10 +83,8 @@ def main(dataset_name, lr, n_epochs, device, test, seed):
     bayesnn.evaluate_test(test_loader=test_data, device=device)
 
     filename = "vi_"+str(dataset_name)+"_lr="+str(lr)+"_epochs="+str(n_epochs)+"_seed="+str(seed)
-    bayesnn.save(filename=filename)
-    del bayesnn
-    bayesnn = VI_BNN(dataset_name=dataset_name, data_format=data_format, input_shape=input_shape, test=test)
-    bayesnn.load(filename=filename)
+    # bayesnn.save(filename=filename)
+    # bayesnn.load(filename=filename)
     bayesnn.evaluate_test(test_loader=test_data, device=device)
 
     if test is False:
