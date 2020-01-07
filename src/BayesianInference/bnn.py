@@ -20,9 +20,7 @@ class BNN(nn.Module):
 
     def model(self, inputs, labels=None, kl_factor=1.0):
         size = inputs.size(0)
-        flat_inputs = inputs.view(-1)
-        print(size, flat_inputs.size)
-        exit()
+        flat_inputs = inputs.view(-1, 784)
         # Set-up parameters for the distribution of weights for each layer `a<n>`
         a1_mean = torch.zeros(784, self.n_hidden)
         a1_scale = torch.ones(784, self.n_hidden)
@@ -46,7 +44,7 @@ class BNN(nn.Module):
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
             # One-hot encode labels
-            labels = nnf.one_hot(labels) if labels is not None else None
+            #labels = nnf.one_hot(labels) if labels is not None else None # they are one hot already!
 
             # Condition on the observed labels
             cond_model = pyro.sample('label', OneHotCategorical(logits=logits), obs=labels)
