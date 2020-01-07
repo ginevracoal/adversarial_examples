@@ -195,6 +195,15 @@ def load_from_pickle(path, test):
 # plot utils #
 ##############
 
+def plot_loss_accuracy(dict, path):
+    import matplotlib.pyplot as plt
+    fig, (ax1, ax2) = plt.subplots(2, figsize=(12,8))
+    ax1.plot(dict['loss'])
+    ax1.set_title("loss")
+    ax2.plot(dict['accuracy'])
+    ax2.set_title("accuracy")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path)
 
 def plot_images(image_data_list, cmap=None, test=False, labels=None):
     """
@@ -327,3 +336,4 @@ def _set_session(device, n_jobs):
     # print("check cuda: ", tf.test.is_built_with_cuda())
     # print("check gpu: ", tf.test.is_gpu_available())
     return sess
+
