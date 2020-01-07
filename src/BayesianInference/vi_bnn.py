@@ -2,15 +2,14 @@ import sys
 sys.path.append(".")
 from directories import *
 import pyro
-import torch
 from BayesianInference.bnn import BNN
-from BayesianSGD.sgd import PyroSGD
 from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO
 from pyro import poutine
 from torch.utils.data import DataLoader
 from utils import *
 import pyro.optim as pyroopt
 from pyro.optim import PyroOptim
+import random
 
 
 class VI_BNN(BNN):
@@ -61,20 +60,39 @@ class VI_BNN(BNN):
         print(f"Test accuracy: {correct / total * 100:.5f}")
 
 
-def main(device="cpu"):
+def main(dataset_name, lr, n_epochs, device, test, seed):
+    random.seed(seed)
+    batch_size = 128
+
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = \
-        load_dataset(dataset_name="mnist", test=True, n_samples=200)
+        load_dataset(dataset_name=dataset_name, test=test)
     pyro.clear_param_store()
-    bayesnn = VI_BNN(dataset_name="mnist", data_format=data_format, input_shape=input_shape, test=True)
+    bayesnn = VI_BNN(dataset_name=dataset_name, data_format=data_format, input_shape=input_shape, test=test)
 
-    train_data = DataLoader(dataset=list(zip(x_train,y_train)), batch_size=128)
+    train_data = DataLoader(dataset=list(zip(x_train,y_train)), batch_size=batch_size)
 
-    dict = bayesnn.infer_parameters(train_loader=train_data, device=device, num_epochs=3, lr=0.002)
+    dict = bayesnn.infer_parameters(train_loader=train_data, device=device, num_epochs=n_epochs, lr=lr)
     plot_loss_accuracy(dict, path=RESULTS+"plot.png")
 
-    test_data = DataLoader(dataset=list(zip(x_test, y_test)), batch_size=128)
+    test_data = DataLoader(dataset=list(zip(x_test, y_test)), batch_size=batch_size)
     bayesnn.evaluate_test(test_loader=test_data, device=device)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        dataset_name = sys.argv[1]
+        lr = float(sys.argv[2])
+        n_epochs = int(sys.argv[3])
+        device = sys.argv[4]
+        test = eval(sys.argv[5])
+        seed = int(sys.argv[6])
+
+    except IndexError:
+        dataset_name = input("\nChoose a dataset: ")
+        lr = input("\nSet the learning rate: ")
+        n_epochs = input("\nSet the number of epochs: ")
+        device = input("\nChoose a device (cpu/gpu): ")
+        test = input("\nDo you just want to test the code? (True/False): ")
+        seed = input("\nSet a training seed (type=int): ")
+
+    main(dataset_name, lr, n_epochs, device, test, seed)
