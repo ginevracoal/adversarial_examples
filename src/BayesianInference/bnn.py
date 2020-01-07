@@ -1,5 +1,6 @@
 
 from directories import *
+import os
 import torch.nn.functional as nnf
 from torch.distributions import constraints
 from torch import nn
@@ -83,3 +84,15 @@ class BNN(nn.Module):
 
     def forward(self, *args, **kwargs):
         raise NotImplementedError
+
+    def save(self, filename, relative_path=RESULTS+"bnn/"):
+        filepath = relative_path + filename + ".pt"
+
+        os.makedirs(os.path.dirname(relative_path), exist_ok=True)
+        print("\nSaving classifier: ", filepath)
+        torch.save(self.state_dict(), filepath)
+
+    def load(self, filename, relative_path=RESULTS+"bnn/"):
+        filepath = relative_path+filename+".pt"
+        print("\nLoading classifier: ", filepath)
+        self.load_state_dict(torch.load(filepath))

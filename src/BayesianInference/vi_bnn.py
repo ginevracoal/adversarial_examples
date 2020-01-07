@@ -10,6 +10,7 @@ from utils import *
 import pyro.optim as pyroopt
 from pyro.optim import PyroOptim
 import random
+import torch
 
 
 class VI_BNN(BNN):
@@ -18,6 +19,8 @@ class VI_BNN(BNN):
                                      test=test)
 
     def infer_parameters(self, train_loader, device, lr=0.01, momentum=0.9, num_epochs=30):
+        self.train()
+        print("\nSVI inference.")
         optim = pyroopt.SGD({'lr': lr, 'momentum': momentum, 'nesterov': True})
         svi = SVI(self.model, self.guide, optim, loss=Trace_ELBO())
         kl_factor = train_loader.batch_size / len(train_loader.dataset)
@@ -38,9 +41,11 @@ class VI_BNN(BNN):
                 correct += (pred.argmax(-1) == onehot_to_labels(labels).to(device)).sum().item()
                 accuracy = correct / total * 100
                 param_store = pyro.get_param_store()
-            print(f"[Epoch {i + 1}] loss: {total_loss:.2f} accuracy: {accuracy:.2f}")
+            print(f"[Epoch {i + 1}]\t loss: {total_loss:.2f} \t accuracy: {accuracy:.2f}")
             loss_list.append(total_loss)
             accuracy_list.append(accuracy)
+
+        print("\nlearned params =", list(pyro.get_param_store().get_all_param_names()))
         return {'loss':loss_list, 'accuracy':accuracy_list}
 
     def forward(self, inputs, n_samples=10):
@@ -51,13 +56,14 @@ class VI_BNN(BNN):
         return torch.stack(res, dim=0)
 
     def evaluate_test(self, test_loader, device):
+        self.eval()
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
             pred = self.forward(images.to(device).view(-1, 784), n_samples=1)
             total += labels.size(0)
             correct += (pred.argmax(-1) == onehot_to_labels(labels).to(device)).sum().item()
-        print(f"Test accuracy: {correct / total * 100:.5f}")
+        print(f"\nTest accuracy: {correct / total * 100:.5f}")
 
 
 def main(dataset_name, lr, n_epochs, device, test, seed):
@@ -72,10 +78,19 @@ def main(dataset_name, lr, n_epochs, device, test, seed):
     train_data = DataLoader(dataset=list(zip(x_train,y_train)), batch_size=batch_size)
 
     dict = bayesnn.infer_parameters(train_loader=train_data, device=device, num_epochs=n_epochs, lr=lr)
-    plot_loss_accuracy(dict, path=RESULTS+"plot.png")
 
     test_data = DataLoader(dataset=list(zip(x_test, y_test)), batch_size=batch_size)
     bayesnn.evaluate_test(test_loader=test_data, device=device)
+
+    filename = "vi_"+str(dataset_name)+"_lr="+str(lr)+"_epochs="+str(n_epochs)+"_seed="+str(seed)
+    bayesnn.save(filename=filename)
+    del bayesnn
+    bayesnn = VI_BNN(dataset_name=dataset_name, data_format=data_format, input_shape=input_shape, test=test)
+    bayesnn.load(filename=filename)
+    bayesnn.evaluate_test(test_loader=test_data, device=device)
+
+    if test is False:
+        plot_loss_accuracy(dict, path=RESULTS+"_"+filename+".png")
 
 
 if __name__ == "__main__":
