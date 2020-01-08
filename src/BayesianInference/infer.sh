@@ -1,5 +1,16 @@
 #!/bin/bash
 
+###########
+#  guide  #
+###########
+
+## DATASET_NAME    Supported: mnist
+## N_SAMPLES       Number of input samples
+## LR              Learning rate
+## EPOCHS          Number of epochs
+## DEVICE          Run on device "cpu" or "cuda"
+## SEED            Random initialization seed
+
 #######################################
 # settings -> comment unwanted lines! #
 #######################################
@@ -7,10 +18,10 @@
 # === vi_bnn === #
 SCRIPT="vi_bnn"
 DATASET_NAME="mnist"
+N_SAMPLES="10000"
 LR="0.002"
 EPOCHS="30"
 DEVICE="cpu"
-N_SAMPLES="10000"
 SEED=0
 
 # === hmc_bnn === #
