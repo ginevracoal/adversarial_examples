@@ -14,13 +14,14 @@ from BayesianInference.bnn import data_loaders
 
 
 class VI_BNN(BNN):
-    def __init__(self, dataset_name, input_shape, data_format):
-        super(VI_BNN, self).__init__(dataset_name=dataset_name, input_shape=input_shape, data_format=data_format)
+    def __init__(self, dataset_name, input_shape, data_format, device):
+        super(VI_BNN, self).__init__(dataset_name=dataset_name, input_shape=input_shape, data_format=data_format,
+                                     device=device)
 
-    def infer_parameters(self, train_loader, device, lr=0.01, momentum=0.9, num_epochs=30):
+    def infer_parameters(self, train_loader, lr=0.01, momentum=0.9, num_epochs=30):
         print("\nSVI inference.")
         optim = pyroopt.SGD({'lr': lr, 'momentum': momentum, 'nesterov': True})
-        svi = SVI(self.model, self.guide, optim, loss=Trace_ELBO())
+        svi = SVI(self.model, self.guide, optim, loss=TraceMeanField_ELBO())
         kl_factor = train_loader.batch_size / len(train_loader.dataset)
 
         loss_list = []
@@ -32,11 +33,11 @@ class VI_BNN(BNN):
             correct = 0.0
 
             for images, labels in train_loader:
-                loss = svi.step(inputs=images.to(device), labels=labels.to(device), kl_factor=kl_factor)
-                pred = self.forward(images.to(device), n_samples=1).mean(0)
+                loss = svi.step(inputs=images.to(self.device), labels=labels.to(self.device), kl_factor=kl_factor)
+                pred = self.forward(images.to(self.device), n_samples=1).mean(0)
                 total_loss += loss / len(train_loader.dataset)
                 total += labels.size(0)
-                correct += (pred.argmax(-1) == labels.to(device)).sum().item()
+                correct += (pred.argmax(-1) == labels.to(self.device)).sum().item()
                 accuracy = correct / total * 100
 
             print(f"[Epoch {i + 1}]\t loss: {total_loss:.2f} \t accuracy: {accuracy:.2f}")
@@ -61,9 +62,9 @@ def main(dataset_name, n_samples, lr, n_epochs, device, seed):
         data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_samples=n_samples)
 
     pyro.clear_param_store()
-    bayesnn = VI_BNN(dataset_name=dataset_name, data_format=data_format, input_shape=input_shape)
-    dict = bayesnn.infer_parameters(train_loader=train_loader, device=device, num_epochs=n_epochs, lr=lr)
-    bayesnn.evaluate_test(test_loader=test_loader, device=device)
+    bayesnn = VI_BNN(dataset_name=dataset_name, data_format=data_format, input_shape=input_shape, device=device)
+    dict = bayesnn.infer_parameters(train_loader=train_loader, num_epochs=n_epochs, lr=lr)
+    bayesnn.evaluate_test(test_loader=test_loader)
 
     filename = "vi_"+str(dataset_name)+"_samples="+str(n_samples)+"_lr="+str(lr)+"_epochs="+str(n_epochs)+"_seed="+str(seed)
     bayesnn.save(filename=filename)

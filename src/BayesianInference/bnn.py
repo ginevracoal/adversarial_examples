@@ -26,11 +26,12 @@ def data_loaders(dataset_name, batch_size, n_samples):
 
 
 class BNN(nn.Module):
-    def __init__(self, dataset_name, input_shape, data_format):
+    def __init__(self, dataset_name, input_shape, data_format, device):
         super(BNN, self).__init__()
         self.net = torch_net(dataset_name=dataset_name, input_shape=input_shape, data_format=data_format)
-        self.n_hidden = 1024
+        self.n_hidden = 512
         self.n_classes = 10
+        self.device = device
 
     def model(self, inputs, labels=None, kl_factor=1.0):
         size = inputs.size(0)
@@ -69,24 +70,24 @@ class BNN(nn.Module):
     def guide(self, inputs, labels=None, kl_factor=1.0):
         size = inputs.size(0)
         flat_inputs = inputs.view(-1, 784)
-        a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(784, self.n_hidden))
+        a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(784, self.n_hidden)).to(self.device)
         a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(784, self.n_hidden),
-                              constraint=constraints.greater_than(0.01))
+                              constraint=constraints.greater_than(0.01)).to(self.device)
         a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
-                                constraint=constraints.interval(0.1, 1.0))
-        a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden))
+                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden)).to(self.device)
         a2_scale = pyro.param('a2_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_hidden),
-                              constraint=constraints.greater_than(0.01))
+                              constraint=constraints.greater_than(0.01)).to(self.device)
         a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0))
-        a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden))
+                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden)).to(self.device)
         a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_hidden),
-                              constraint=constraints.greater_than(0.01))
+                              constraint=constraints.greater_than(0.01)).to(self.device)
         a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0))
-        a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_classes))
+                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_classes)).to(self.device)
         a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_classes),
-                              constraint=constraints.greater_than(0.01))
+                              constraint=constraints.greater_than(0.01)).to(self.device)
 
         with pyro.plate('data', size=size):
             h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_dropout*a1_scale, non_linearity=nnf.leaky_relu,
@@ -117,12 +118,12 @@ class BNN(nn.Module):
         print("\nLoading params: ", filepath)
         pyro.get_param_store().load(filepath)
 
-    def evaluate_test(self, test_loader, device):
+    def evaluate_test(self, test_loader):
         self.eval()
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
-            pred = self.forward(images.to(device).view(-1, 784), n_samples=1)
+            pred = self.forward(images.to(self.device).view(-1, 784), n_samples=1)
             total += labels.size(0)
-            correct += (pred.argmax(-1) == labels.to(device)).sum().item()
+            correct += (pred.argmax(-1) == labels.to(self.device)).sum().item()
         print(f"\nTest accuracy: {correct / total * 100:.5f}")
