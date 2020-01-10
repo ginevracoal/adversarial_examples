@@ -19,8 +19,12 @@ Examples of adversarial perturbations:
 - `src/` implementations
     - `RandomProjections/` methods based on random projections
     - `BayesianSGD/` implementation of Bayesian SGD from Blei et al. (2017)
+    - `BayesianInference/` BNN training using VI and HMC
 - `trained_models/`
     - `baseline/`
     - `randens/`
     - `randreg/`
+    - `bnn/`
 - `tensorboard/`
+
+Scripts should be executed from `src/` directory.
