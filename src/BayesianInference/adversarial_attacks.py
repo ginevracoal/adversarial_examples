@@ -102,26 +102,35 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
     print("\nAttack epsilon = {}\t Accuracy = {} / {} = {}".format(epsilon, correct, len(data_loader), accuracy))
     return accuracy, adv_examples
 
-def expected_loss_gradient(model, n_samples, image, label):
+def expected_loss_gradient(model, n_samples, image, label, mode):
     image.requires_grad = True
     loss_gradient = 0.0
     for _ in range(n_samples):
-        sampled_model = model.guide(None, None)
-        output = sampled_model(image)
-        loss = F.cross_entropy(output, label)
-        # zero gradients
-        sampled_model.zero_grad()
-        # compute gradients
-        loss.backward(retain_graph=True)
-        # Create the perturbed image by adjusting each pixel of the input image
-        # print(image.grad.data[0][0:10])
-        loss_gradient = loss_gradient + image.grad.data
+        if mode == "hidden":
+            raw_output = model.forward(image, n_samples=1).mean(0)
+            loss = F.cross_entropy(raw_output, label)
+            loss.backward(retain_graph=True)
+            loss_gradient = loss_gradient + image.grad.data
+        else:
+            sampled_model = model.guide(None)
+            output = sampled_model(image)
+            # todo:outputs should be the raw unnormalized outputs, but they're one hot
+            print(output)
+            exit()
+            loss = F.cross_entropy(output, label)
+            # zero gradients
+            sampled_model.zero_grad()
+            # compute gradients
+            loss.backward(retain_graph=True)
+            # Create the perturbed image by adjusting each pixel of the input image
+            # print(image.grad.data[0][0:10])
+            loss_gradient = loss_gradient + image.grad.data
 
     exp_loss_gradient = loss_gradient / n_samples
     print(f"mean = {loss_gradient[0].mean().item():.3f} \t var = {loss_gradient[0].var().item():.3f}")
     return exp_loss_gradient
 
-def expected_loss_gradients(model, n_samples, data_loader, device="cpu"):
+def expected_loss_gradients(model, n_samples, data_loader, device="cpu", mode=None):
     print("\nExpected loss gradients:")
     expected_loss_gradients = []
 
@@ -132,6 +141,6 @@ def expected_loss_gradients(model, n_samples, data_loader, device="cpu"):
         input_shape = image.size(1) * image.size(2) * image.size(3)
         label = label.to(device).argmax(-1)
         image = image.to(device).view(-1, input_shape)
-        expected_loss_gradients.append(expected_loss_gradient(model, n_samples, image, label))
+        expected_loss_gradients.append(expected_loss_gradient(model, n_samples, image, label, mode=mode))
 
     return expected_loss_gradients

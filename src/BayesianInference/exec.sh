@@ -23,6 +23,15 @@ LR="0.0001"
 EPOCHS="30"
 DEVICE="cpu"
 
+# === hidden_vi_bnn === #
+SCRIPT="hidden_vi_bnn"
+DATASET_NAME="mnist"
+N_INPUTS="10000"
+N_SAMPLES="1000"
+EPOCHS="30"
+LR="0.01"
+DEVICE="cpu"
+
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
 #DATASET_NAME="mnist"
@@ -53,7 +62,8 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_${SCRIPT}_out.txt"
 ## run script
 if [ $SCRIPT = "vi_bnn" ]; then
   python3 "BayesianInference/vi_bnn.py" $DATASET_NAME $N_SAMPLES $LR $EPOCHS $DEVICE > $OUT
-#elif [ $SCRIPT = "hm_bnn" ]; then
+elif [ $SCRIPT = "hidden_vi_bnn" ]; then
+  python3 "BayesianInference/hidden_vi_bnn.py" $DATASET_NAME $N_INPUTS $N_SAMPLES $EPOCHS $LR $DEVICE > $OUT
 fi
 
 ## deactivate environment

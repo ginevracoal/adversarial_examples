@@ -4,23 +4,28 @@ from torch import nn
 import torch
 import pyro
 from pyro.distributions import OneHotCategorical, Normal
+from pyro.nn import PyroModule
 
 
 class NN(nn.Module):
     def __init__(self, input_size, hidden_size, n_classes):
         super(NN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
+        self.drop1 = nn.Dropout(p=0.2)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.drop2 = nn.Dropout(p=0.2)
         self.fc3 = nn.Linear(hidden_size, hidden_size)
         self.out = nn.Linear(hidden_size, n_classes)
 
     def forward(self, x):
         output = self.fc1(x)
-        output = torch.tanh(output)
+        output = self.drop1(output)
+        output = torch.relu(output)
         output = self.fc2(output)
-        output = torch.tanh(output)
+        output = self.drop2(output)
+        output = torch.relu(output)
         output = self.fc3(output)
-        output = torch.tanh(output)
+        output = torch.relu(output)
         output = self.out(output)
         output = torch.sigmoid(output)
         return output
@@ -29,7 +34,7 @@ class NN(nn.Module):
 class BNN(nn.Module):
     def __init__(self, input_size, device):
         super(BNN, self).__init__()
-        self.hidden_size = 1024
+        self.hidden_size = 512
         self.n_classes = 10
         self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes)
         self.device = device
@@ -39,17 +44,17 @@ class BNN(nn.Module):
         flat_inputs = inputs.view(-1, self.input_size)
         net = self.net
 
-        fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight))
-        fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias))
+        fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight)).independent(2)
+        fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias)).independent(1)
 
-        fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight))
-        fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias))
+        fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight)).independent(2)
+        fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias)).independent(1)
 
-        fc3w_prior = Normal(loc=torch.zeros_like(net.fc3.weight), scale=torch.ones_like(net.fc3.weight))
-        fc3b_prior = Normal(loc=torch.zeros_like(net.fc3.bias), scale=torch.ones_like(net.fc3.bias))
+        fc3w_prior = Normal(loc=torch.zeros_like(net.fc3.weight), scale=torch.ones_like(net.fc3.weight)).independent(2)
+        fc3b_prior = Normal(loc=torch.zeros_like(net.fc3.bias), scale=torch.ones_like(net.fc3.bias)).independent(1)
 
-        outw_prior = Normal(loc=torch.zeros_like(net.out.weight), scale=torch.ones_like(net.out.weight))
-        outb_prior = Normal(loc=torch.zeros_like(net.out.bias), scale=torch.ones_like(net.out.bias))
+        outw_prior = Normal(loc=torch.zeros_like(net.out.weight), scale=torch.ones_like(net.out.weight)).independent(2)
+        outb_prior = Normal(loc=torch.zeros_like(net.out.bias), scale=torch.ones_like(net.out.bias)).independent(1)
 
         priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
                   'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
@@ -60,13 +65,14 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         # sample a regressor (which also samples w and b)
         lifted_reg_model = lifted_module()
-        # run the regressor forward conditioned on data
-        log_softmax = nn.Softmax(dim=1)
-        logits = log_softmax(lifted_reg_model(flat_inputs))
-        # logits = lifted_reg_model(flat_inputs)
-        # condition on the observed data
-        cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)
-        return cond_model
+        with pyro.plate("map", len(inputs)):
+            # run the regressor forward conditioned on data
+            # log_softmax = nn.Softmax(dim=1)
+            # logits = log_softmax(lifted_reg_model(flat_inputs))
+            logits = lifted_reg_model(flat_inputs)
+            # condition on the observed data
+            cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)
+            return cond_model
 
     def guide(self, inputs, labels=None):
         net = self.net
@@ -119,7 +125,7 @@ class BNN(nn.Module):
     def infer_parameters(self, train_loader, lr, n_epochs):
         raise NotImplementedError
 
-    def forward(self, inputs, n_samples=100):
+    def predict(self, inputs, n_samples=100):
         sampled_models = [self.guide(None, None) for _ in range(len(inputs))]
         one_hot_predictions = [model(inputs).data for model in sampled_models]
         mean = torch.mean(torch.stack(one_hot_predictions), 0)
@@ -142,7 +148,7 @@ class BNN(nn.Module):
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
-            pred = self.forward(images.to(self.device).view(-1, self.input_size))
+            pred = self.predict(images.to(self.device).view(-1, self.input_size))
             total += labels.size(0)
             correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
         accuracy = 100 * correct / total

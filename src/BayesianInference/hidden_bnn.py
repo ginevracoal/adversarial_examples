@@ -44,37 +44,28 @@ class BNN(nn.Module):
         # Set-up parameters for the distribution of weights for each layer `a<n>`
         a1_mean = torch.zeros(self.input_size, self.hidden_size)
         a1_scale = torch.ones(self.input_size, self.hidden_size)
-        a1_dropout = torch.tensor(0.25)
+        # a1_dropout = torch.tensor(0.25)
         a2_mean = torch.zeros(self.hidden_size+1, self.n_classes)
         a2_scale = torch.ones(self.hidden_size+1, self.hidden_size)
-        a2_dropout = torch.tensor(1.0)
+        # a2_dropout = torch.tensor(1.0)
         a3_mean = torch.zeros(self.hidden_size+1, self.n_classes)
         a3_scale = torch.ones(self.hidden_size+1, self.hidden_size)
-        a3_dropout = torch.tensor(1.0)
+        # a3_dropout = torch.tensor(1.0)
         a4_mean = torch.zeros(self.hidden_size+1, self.n_classes)
         a4_scale = torch.ones(self.hidden_size+1, self.n_classes)
         with pyro.plate('data', size=size):
             # sample conditionally independent hidden layers
-            h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_dropout*a1_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_dropout*a2_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_dropout*a3_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
+            h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale, #a1_dropout*a1_scale,
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale, #a2_dropout*a2_scale
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale, #a3_dropout*a3_scale
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
                                                            non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
 
-            # priors = {'a1_mean': a1_mean, 'a1_scale': a1_scale}
-            # lifted_module = pyro.poutine.lift("module", self.net, priors)
-            # # sample a regressor (which also samples w and b)
-            # lifted_reg_model = lifted_module()
-            # # run the regressor forward conditioned on data
-            # log_softmax = nn.Softmax(dim=1)
-            # logits = log_softmax(lifted_reg_model(flat_inputs))
-            # # logits = lifted_reg_model(flat_inputs)
-            # # condition on the observed data
             cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels)
             return cond_model
 
@@ -84,38 +75,33 @@ class BNN(nn.Module):
         a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
         a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
                               constraint=constraints.greater_than(0.01)).to(self.device)
-        a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        # a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
+        #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
         a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
         a2_scale = pyro.param('a2_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
                               constraint=constraints.greater_than(0.01)).to(self.device)
-        a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        # a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
+        #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
         a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
         a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
                               constraint=constraints.greater_than(0.01)).to(self.device)
-        a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
+        # a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
+        #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
         a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.hidden_size+1, self.n_classes)).to(self.device)
         a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.hidden_size+1, self.n_classes),
                                constraint=constraints.greater_than(0.01)).to(self.device)
 
         with pyro.plate('data', size=size):
-            h1 = pyro.sample('h1',
-                             bnn.HiddenLayer(flat_inputs, a1_mean, a1_dropout * a1_scale, non_linearity=nnf.leaky_relu,
-                                             KL_factor=kl_factor))
-            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_dropout * a2_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_dropout * a3_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
+            h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,#a1_dropout * a1_scale,
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,#a2_dropout * a2_scale
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale,#a3_dropout * a3_scale,
+                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
                                                            non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
-        # print("guide",pyro.get_param_store().get_param("a1_mean"))
-        # priors = {'a1_mean': a1_mean, 'a1_scale': a1_scale}
-        # lifted_module = pyro.poutine.lift(fn=self.model, prior=priors)
-        # return lifted_module()
 
     def forward(self, inputs, n_samples):
         res = []
@@ -132,7 +118,7 @@ class BNN(nn.Module):
             pred = self.forward(images.to(self.device), n_samples=1).mean(0).argmax(-1)
             correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
         accuracy = correct / total * 100
-        print(f"\nTest accuracy: {accuracy:.5f}")
+        print(f"\nAccuracy: {accuracy:.2f}")
 
     def save(self, filename, relative_path=RESULTS):
         filepath = relative_path+"bnn/"+filename+".pr"

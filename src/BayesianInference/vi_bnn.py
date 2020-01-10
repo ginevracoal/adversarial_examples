@@ -22,12 +22,13 @@ class VI_BNN(BNN):
     def infer_parameters(self, train_loader, lr, n_epochs):
         print("\nSVI inference.")
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
-        optim = pyroopt.Adam({"lr": lr, "betas": (0.8, 0.89)})
+        optim = pyroopt.Adam({"lr": lr})
         elbo = Trace_ELBO()
-        svi = SVI(self.model, self.guide, optim, loss=elbo)
+        svi = SVI(self.model, self.guide, optim, loss=elbo, num_samples=1000)
 
         loss_list = []
         accuracy_list = []
+        pyro.clear_param_store()
         for i in range(n_epochs):
             accuracy = 0
             total_loss = 0.0
@@ -39,7 +40,7 @@ class VI_BNN(BNN):
                                 labels=labels.to(self.device))
                 total_loss += loss / len(train_loader.dataset)
                 total += labels.size(0)
-                pred = self.forward(images.to(self.device).view(-1,self.input_size))
+                pred = self.predict(images.to(self.device).view(-1,self.input_size))
                 correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
                 accuracy = 100 * correct / total
                 # print(pyro.get_param_store().get_param("fc1w_mu"))
@@ -64,9 +65,9 @@ def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
     pyro.clear_param_store()
     bayesnn = VI_BNN(input_shape=input_shape, device=device)
 
-    dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
-    plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
-    bayesnn.save(filename=filename)
+    # dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
+    # plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
+    # bayesnn.save(filename=filename)
 
     bayesnn.load(filename=filename, relative_path=RESULTS)
 
@@ -80,7 +81,7 @@ def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
 
     # attack_bnn(model=bayesnn, n_samples=3, data_loader=test_loader)
 
-    # expected_loss_gradients(model=bayesnn, n_samples=2, data_loader=test_loader)
+    expected_loss_gradients(model=bayesnn, n_samples=2, data_loader=test_loader)
 
 
 

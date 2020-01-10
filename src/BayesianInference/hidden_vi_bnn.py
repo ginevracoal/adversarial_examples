@@ -3,7 +3,7 @@ sys.path.append(".")
 from directories import *
 import pyro
 from BayesianInference.hidden_bnn import BNN
-from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO
+from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO, EmpiricalMarginal
 from pyro import poutine
 from utils import *
 import pyro.optim as pyroopt
@@ -23,7 +23,7 @@ class VI_BNN(BNN):
     def infer_parameters(self, train_loader, lr, n_epochs):
         print("\nSVI inference.")
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
-        optim = pyroopt.Adam({"lr": lr, "betas": (0.95, 0.999)})
+        optim = pyroopt.Adam({"lr": lr})#, "betas": (0.95, 0.999)})
         elbo = TraceMeanField_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
@@ -51,49 +51,48 @@ class VI_BNN(BNN):
         return {'loss':loss_list, 'accuracy':accuracy_list}
 
 
-
-
-def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
+def main(dataset_name, n_inputs, n_samples, n_epochs, lr, device, seed=0):
     random.seed(seed)
     batch_size = 128
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_samples=n_samples)
+        data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_inputs=n_inputs)
 
     ## === infer params ===
     pyro.clear_param_store()
     bayesnn = VI_BNN(input_shape=input_shape, device=device)
-    filename = "hidden_vi_" + str(dataset_name) + "_samples=" + str(n_samples) + "_lr=" + str(lr) + "_epochs=" + str(
+    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_lr=" + str(lr) + "_epochs=" + str(
                n_epochs)
 
-    # dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
-    # plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
-    # bayesnn.save(filename=filename)
-
-    bayesnn.load(filename=filename, relative_path=RESULTS)
+    dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
+    plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
+    bayesnn.save(filename=filename)
+    # bayesnn.load(filename=filename, relative_path=RESULTS)
 
     ## === evaluate ===
     bayesnn.evaluate(test_loader=test_loader)
 
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset_name, batch_size=1, n_samples=n_samples)
+        data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_inputs)
 
-    sampled_model = bayesnn.guide(None, None)
-    attack_nn(sampled_model, data_loader=test_loader)
+    expected_loss_gradients(model=bayesnn, n_samples=n_samples, data_loader=test_loader, device="cpu",
+                            mode="hidden")
 
 
 if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
-        n_samples = int(sys.argv[2])
-        lr = float(sys.argv[3])
+        n_inputs = int(sys.argv[2])
+        n_samples = int(sys.argv[3])
         n_epochs = int(sys.argv[4])
-        device = sys.argv[5]
+        lr = float(sys.argv[5])
+        device = sys.argv[6]
 
     except IndexError:
         dataset_name = input("\nChoose a dataset: ")
-        n_samples = input("\nChoose the number of samples (type=int): ")
-        lr = input("\nSet the learning rate: ")
+        n_inputs = input("\nChoose the number of samples (type=int): ")
+        n_samples = input("\nChoose the number of model samples (type=int): ")
         n_epochs = input("\nSet the number of epochs: ")
+        lr = input("\nSet the learning rate: ")
         device = input("\nChoose a device (cpu/gpu): ")
 
-    main(dataset_name, n_samples, lr, n_epochs, device)
+    main(dataset_name,n_inputs, n_samples, n_epochs, lr, device)
