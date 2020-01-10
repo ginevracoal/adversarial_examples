@@ -2,7 +2,7 @@ import sys
 sys.path.append(".")
 from directories import *
 import pyro
-from BayesianInference.bnn import BNN
+from BayesianInference.hidden_bnn import BNN
 from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO
 from pyro import poutine
 from utils import *
@@ -10,20 +10,21 @@ import pyro.optim as pyroopt
 from pyro.optim import PyroOptim
 import random
 import torch
-from BayesianInference.pyro_utils import data_loaders
 from BayesianInference.adversarial_attacks import *
+from BayesianInference.pyro_utils import data_loaders
 
 
 class VI_BNN(BNN):
     def __init__(self, input_shape, device):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
+        self.n_classes = 10
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device)
 
     def infer_parameters(self, train_loader, lr, n_epochs):
         print("\nSVI inference.")
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
-        optim = pyroopt.Adam({"lr": lr, "betas": (0.8, 0.89)})
-        elbo = Trace_ELBO()
+        optim = pyroopt.Adam({"lr": lr, "betas": (0.95, 0.999)})
+        elbo = TraceMeanField_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
         loss_list = []
@@ -35,14 +36,12 @@ class VI_BNN(BNN):
             correct = 0.0
 
             for images, labels in train_loader:
-                loss = svi.step(inputs=images.to(self.device).view(-1,self.input_size),
-                                labels=labels.to(self.device))
+                loss = svi.step(inputs=images.to(self.device).view(-1,self.input_size), labels=labels.to(self.device))
                 total_loss += loss / len(train_loader.dataset)
                 total += labels.size(0)
-                pred = self.forward(images.to(self.device).view(-1,self.input_size))
+                pred = self.forward(images.to(device), n_samples=1).mean(0).argmax(-1)
                 correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
-                accuracy = 100 * correct / total
-                # print(pyro.get_param_store().get_param("fc1w_mu"))
+                accuracy = correct / total * 100
 
             print(f"[Epoch {i + 1}]\t loss: {total_loss:.2f} \t accuracy: {accuracy:.2f}")
             loss_list.append(total_loss)
@@ -52,21 +51,23 @@ class VI_BNN(BNN):
         return {'loss':loss_list, 'accuracy':accuracy_list}
 
 
+
+
 def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
     random.seed(seed)
     batch_size = 128
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_samples=n_samples)
-    filename = "vi_" + str(dataset_name) + "_samples=" + str(n_samples) + "_lr=" + str(lr) + "_epochs=" + str(
-               n_epochs)
 
     ## === infer params ===
     pyro.clear_param_store()
     bayesnn = VI_BNN(input_shape=input_shape, device=device)
+    filename = "hidden_vi_" + str(dataset_name) + "_samples=" + str(n_samples) + "_lr=" + str(lr) + "_epochs=" + str(
+               n_epochs)
 
-    dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
-    plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
-    bayesnn.save(filename=filename)
+    # dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr)
+    # plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
+    # bayesnn.save(filename=filename)
 
     bayesnn.load(filename=filename, relative_path=RESULTS)
 
@@ -76,12 +77,8 @@ def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=dataset_name, batch_size=1, n_samples=n_samples)
 
-    # attack_nn(model=bayesnn.guide(None, None), data_loader=test_loader)
-
-    # attack_bnn(model=bayesnn, n_samples=3, data_loader=test_loader)
-
-    # expected_loss_gradients(model=bayesnn, n_samples=2, data_loader=test_loader)
-
+    sampled_model = bayesnn.guide(None, None)
+    attack_nn(sampled_model, data_loader=test_loader)
 
 
 if __name__ == "__main__":

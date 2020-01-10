@@ -1,129 +1,149 @@
-
 from directories import *
 import os
-import torch.nn.functional as nnf
-from torch.distributions import constraints
 from torch import nn
 import torch
 import pyro
-from pyro.contrib import bnn
-from BayesianSGD.nets import torch_net
-from utils import load_dataset, onehot_to_labels
-from torch.distributions import OneHotCategorical
-from torch.utils.data import DataLoader
+from pyro.distributions import OneHotCategorical, Normal
 
 
-def data_loaders(dataset_name, batch_size, n_samples):
-    x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = \
-        load_dataset(dataset_name=dataset_name, n_samples=n_samples, test=False)
-    y_train = onehot_to_labels(y_train)
-    y_test = onehot_to_labels(y_test)
+class NN(nn.Module):
+    def __init__(self, input_size, hidden_size, n_classes):
+        super(NN, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.out = nn.Linear(hidden_size, n_classes)
 
-    train_loader = DataLoader(dataset=list(zip(x_train, y_train)), batch_size=batch_size)
-    test_loader = DataLoader(dataset=list(zip(x_test, y_test)), batch_size=batch_size)
-
-    return train_loader, test_loader, data_format, input_shape
+    def forward(self, x):
+        output = self.fc1(x)
+        output = torch.tanh(output)
+        output = self.fc2(output)
+        output = torch.tanh(output)
+        output = self.fc3(output)
+        output = torch.tanh(output)
+        output = self.out(output)
+        output = torch.sigmoid(output)
+        return output
 
 
 class BNN(nn.Module):
-    def __init__(self, dataset_name, input_shape, data_format, device):
+    def __init__(self, input_size, device):
         super(BNN, self).__init__()
-        self.net = torch_net(dataset_name=dataset_name, input_shape=input_shape, data_format=data_format)
-        self.n_hidden = 512
+        self.hidden_size = 1024
         self.n_classes = 10
+        self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes)
         self.device = device
+        self.input_size = input_size
 
-    def model(self, inputs, labels=None, kl_factor=1.0):
-        size = inputs.size(0)
-        flat_inputs = inputs.view(-1, 784)
-        # Set-up parameters for the distribution of weights for each layer `a<n>`
-        a1_mean = torch.zeros(784, self.n_hidden)
-        a1_scale = torch.ones(784, self.n_hidden)
-        a1_dropout = torch.tensor(0.25)
-        a2_mean = torch.zeros(self.n_hidden + 1, self.n_classes)
-        a2_scale = torch.ones(self.n_hidden + 1, self.n_hidden)
-        a2_dropout = torch.tensor(1.0)
-        a3_mean = torch.zeros(self.n_hidden + 1, self.n_classes)
-        a3_scale = torch.ones(self.n_hidden + 1, self.n_hidden)
-        a3_dropout = torch.tensor(1.0)
-        a4_mean = torch.zeros(self.n_hidden + 1, self.n_classes)
-        a4_scale = torch.ones(self.n_hidden + 1, self.n_classes)
-        with pyro.plate('data', size=size):
-            # sample conditionally independent hidden layers
-            h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_dropout*a1_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_dropout*a2_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_dropout*a3_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
-                                                           KL_factor=kl_factor,
-                                                           include_hidden_bias=False))
-            # One-hot encode labels
-            labels = nnf.one_hot(labels) if labels is not None else None
+    def model(self, inputs, labels=None):
+        flat_inputs = inputs.view(-1, self.input_size)
+        net = self.net
 
-            # Condition on the observed labels
-            cond_model = pyro.sample('label', OneHotCategorical(logits=logits), obs=labels)
-            return cond_model
+        fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight))
+        fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias))
 
-    def guide(self, inputs, labels=None, kl_factor=1.0):
-        size = inputs.size(0)
-        flat_inputs = inputs.view(-1, 784)
-        a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(784, self.n_hidden)).to(self.device)
-        a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(784, self.n_hidden),
-                              constraint=constraints.greater_than(0.01)).to(self.device)
-        a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
-        a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden)).to(self.device)
-        a2_scale = pyro.param('a2_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_hidden),
-                              constraint=constraints.greater_than(0.01)).to(self.device)
-        a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
-        a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_hidden)).to(self.device)
-        a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_hidden),
-                              constraint=constraints.greater_than(0.01)).to(self.device)
-        a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
-                                constraint=constraints.interval(0.1, 1.0)).to(self.device)
-        a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.n_hidden + 1, self.n_classes)).to(self.device)
-        a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.n_hidden + 1, self.n_classes),
-                              constraint=constraints.greater_than(0.01)).to(self.device)
+        fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight))
+        fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias))
 
-        with pyro.plate('data', size=size):
-            h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_dropout*a1_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_dropout*a2_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_dropout*a3_scale, non_linearity=nnf.leaky_relu,
-                                                   KL_factor=kl_factor))
-            logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
-                                                           KL_factor=kl_factor,
-                                                           include_hidden_bias=False))
+        fc3w_prior = Normal(loc=torch.zeros_like(net.fc3.weight), scale=torch.ones_like(net.fc3.weight))
+        fc3b_prior = Normal(loc=torch.zeros_like(net.fc3.bias), scale=torch.ones_like(net.fc3.bias))
 
-    def infer_parameters(self, dataloader, device, *args, **kwargs):
+        outw_prior = Normal(loc=torch.zeros_like(net.out.weight), scale=torch.ones_like(net.out.weight))
+        outb_prior = Normal(loc=torch.zeros_like(net.out.bias), scale=torch.ones_like(net.out.bias))
+
+        priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
+                  'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
+                  'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
+                  'out.weight': outw_prior, 'out.bias': outb_prior}
+
+        # lift module parameters to random variables sampled from the priors
+        lifted_module = pyro.random_module("module", net, priors)
+        # sample a regressor (which also samples w and b)
+        lifted_reg_model = lifted_module()
+        # run the regressor forward conditioned on data
+        log_softmax = nn.Softmax(dim=1)
+        logits = log_softmax(lifted_reg_model(flat_inputs))
+        # logits = lifted_reg_model(flat_inputs)
+        # condition on the observed data
+        cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)
+        return cond_model
+
+    def guide(self, inputs, labels=None):
+        net = self.net
+        softplus = torch.nn.Softplus()
+
+        # First layer weights
+        fc1w_mu_param = pyro.param("fc1w_mu", torch.randn_like(net.fc1.weight))
+        fc1w_sigma_param = softplus(pyro.param("fc1w_sigma", torch.randn_like(net.fc1.weight)))
+        fc1w_prior = Normal(loc=fc1w_mu_param, scale=fc1w_sigma_param)
+        # First layer bias
+        fc1b_mu_param = pyro.param("fc1b_mu", torch.randn_like(net.fc1.bias))
+        fc1b_sigma_param = softplus(pyro.param("fc1b_sigma", torch.randn_like(net.fc1.bias)))
+        fc1b_prior = Normal(loc=fc1b_mu_param, scale=fc1b_sigma_param)
+
+        # Second layer weights
+        fc2w_mu_param = pyro.param("fc2w_mu", torch.randn_like(net.fc2.weight))
+        fc2w_sigma_param = softplus(pyro.param("fc2w_sigma", torch.randn_like(net.fc2.weight)))
+        fc2w_prior = Normal(loc=fc2w_mu_param, scale=fc2w_sigma_param)
+        # Second layer bias
+        fc2b_mu_param = pyro.param("fc2b_mu", torch.randn_like(net.fc2.bias))
+        fc2b_sigma_param = softplus(pyro.param("fc2b_sigma", torch.randn_like(net.fc2.bias)))
+        fc2b_prior = Normal(loc=fc2b_mu_param, scale=fc2b_sigma_param)
+
+        # Third layer weights
+        fc3w_mu_param = pyro.param("fc3w_mu", torch.randn_like(net.fc3.weight))
+        fc3w_sigma_param = softplus(pyro.param("fc3w_sigma", torch.randn_like(net.fc3.weight)))
+        fc3w_prior = Normal(loc=fc3w_mu_param, scale=fc3w_sigma_param)
+        # Third layer bias
+        fc3b_mu_param = pyro.param("fc3b_mu", torch.randn_like(net.fc3.bias))
+        fc3b_sigma_param = softplus(pyro.param("fc3b_sigma", torch.randn_like(net.fc3.bias)))
+        fc3b_prior = Normal(loc=fc3b_mu_param, scale=fc3b_sigma_param)
+
+        # Output layer weights
+        outw_mu_param = pyro.param("outw_mu", torch.randn_like(net.out.weight))
+        outw_sigma_param = softplus(pyro.param("outw_sigma", torch.randn_like(net.out.weight)))
+        outw_prior = Normal(loc=outw_mu_param, scale=outw_sigma_param).independent()
+        # Output layer bias
+        outb_mu_param = pyro.param("outb_mu", torch.randn_like(net.out.bias))
+        outb_sigma_param = softplus(pyro.param("outb_sigma", torch.randn_like(net.out.bias)))
+        outb_prior = Normal(loc=outb_mu_param, scale=outb_sigma_param)
+
+        priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
+                  'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
+                  'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
+                  'out.weight': outw_prior, 'out.bias': outb_prior}
+
+        lifted_module = pyro.random_module("module", net, priors)
+        return lifted_module()
+
+    def infer_parameters(self, train_loader, lr, n_epochs):
         raise NotImplementedError
 
-    def forward(self, *args, **kwargs):
-        raise NotImplementedError
+    def forward(self, inputs, n_samples=100):
+        sampled_models = [self.guide(None, None) for _ in range(len(inputs))]
+        one_hot_predictions = [model(inputs).data for model in sampled_models]
+        mean = torch.mean(torch.stack(one_hot_predictions), 0)
+        std = torch.std(torch.stack(one_hot_predictions), 0)
+        predicted_classes = mean.argmax(-1)
+        return predicted_classes
 
-    def save(self, filename, relative_path=RESULTS+"bnn/"):
-        filepath = relative_path + filename + ".pr"
-        os.makedirs(os.path.dirname(relative_path), exist_ok=True)
+    def save(self, filename, relative_path=RESULTS):
+        filepath = relative_path+"bnn/"+filename+".pr"
+        os.makedirs(os.path.dirname(relative_path+"bnn/"), exist_ok=True)
         print("\nSaving params: ", filepath)
         pyro.get_param_store().save(filepath)
 
-    def load(self, filename, relative_path=RESULTS+"bnn/"):
-        filepath = relative_path+filename+".pr"
+    def load(self, filename, relative_path=TRAINED_MODELS):
+        filepath = relative_path+"bnn/"+filename+".pr"
         print("\nLoading params: ", filepath)
         pyro.get_param_store().load(filepath)
 
-    def evaluate_test(self, test_loader):
-        self.eval()
+    def evaluate(self, test_loader):
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
-            pred = self.forward(images.to(self.device).view(-1, 784), n_samples=1)
+            pred = self.forward(images.to(self.device).view(-1, self.input_size))
             total += labels.size(0)
-            correct += (pred.argmax(-1) == labels.to(self.device)).sum().item()
-        print(f"\nTest accuracy: {correct / total * 100:.5f}")
+            correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
+        accuracy = 100 * correct / total
+        print(f"\nTest accuracy: {accuracy:.5f}")

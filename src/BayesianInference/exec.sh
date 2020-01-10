@@ -19,19 +19,13 @@
 SCRIPT="vi_bnn"
 DATASET_NAME="mnist"
 N_SAMPLES="10000"
-LR="0.002"
+LR="0.0001"
 EPOCHS="30"
 DEVICE="cpu"
-SEED=0
 
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
 #DATASET_NAME="mnist"
-#LR="0.002"
-#EPOCHS="30"
-#DEVICE="cpu"
-#N_SAMPLES="10000"
-#SEED=0
 
 ###########
 # execute #
@@ -58,7 +52,7 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_${SCRIPT}_out.txt"
 
 ## run script
 if [ $SCRIPT = "vi_bnn" ]; then
-  python3 "BayesianInference/vi_bnn.py" $DATASET_NAME $N_SAMPLES $LR $EPOCHS $DEVICE $SEED > $OUT
+  python3 "BayesianInference/vi_bnn.py" $DATASET_NAME $N_SAMPLES $LR $EPOCHS $DEVICE > $OUT
 #elif [ $SCRIPT = "hm_bnn" ]; then
 fi
 
