@@ -4,12 +4,9 @@ from directories import *
 import pyro
 from BayesianInference.hidden_bnn import BNN
 from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO, EmpiricalMarginal
-from pyro import poutine
 from utils import *
 import pyro.optim as pyroopt
-from pyro.optim import PyroOptim
 import random
-import torch
 from BayesianInference.adversarial_attacks import *
 from BayesianInference.pyro_utils import data_loaders
 

@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch.distributions import Uniform
-import copy
+
 
 def fgsm_attack(image, epsilon, data_grad):
     # Collect the element-wise sign of the data gradient
@@ -102,6 +102,7 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
     print("\nAttack epsilon = {}\t Accuracy = {} / {} = {}".format(epsilon, correct, len(data_loader), accuracy))
     return accuracy, adv_examples
 
+
 def expected_loss_gradient(model, n_samples, image, label, mode):
     image.requires_grad = True
     loss_gradient = 0.0
@@ -129,6 +130,7 @@ def expected_loss_gradient(model, n_samples, image, label, mode):
     exp_loss_gradient = loss_gradient / n_samples
     print(f"mean = {loss_gradient[0].mean().item():.3f} \t var = {loss_gradient[0].var().item():.3f}")
     return exp_loss_gradient
+
 
 def expected_loss_gradients(model, n_samples, data_loader, device="cpu", mode=None):
     print("\nExpected loss gradients:")

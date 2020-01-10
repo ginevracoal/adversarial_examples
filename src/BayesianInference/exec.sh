@@ -16,20 +16,20 @@
 #######################################
 
 # === vi_bnn === #
-SCRIPT="vi_bnn"
-DATASET_NAME="mnist"
-N_SAMPLES="10000"
-LR="0.0001"
-EPOCHS="30"
-DEVICE="cpu"
+#SCRIPT="vi_bnn"
+#DATASET_NAME="mnist"
+#N_SAMPLES="10000"
+#LR="0.0001"
+#EPOCHS="30"
+#DEVICE="cpu"
 
 # === hidden_vi_bnn === #
 SCRIPT="hidden_vi_bnn"
 DATASET_NAME="mnist"
 N_INPUTS="10000"
-N_SAMPLES="1000"
+N_SAMPLES="10000"
 EPOCHS="30"
-LR="0.01"
+LR="0.0001"
 DEVICE="cpu"
 
 # === hmc_bnn === #

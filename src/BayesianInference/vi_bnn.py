@@ -19,7 +19,7 @@ class VI_BNN(BNN):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device)
 
-    def infer_parameters(self, train_loader, lr, n_epochs):
+    def infer_parameters(self, train_loader, lr=0.001, n_epochs=30):
         print("\nSVI inference.")
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
         optim = pyroopt.Adam({"lr": lr})

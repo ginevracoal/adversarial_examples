@@ -67,9 +67,9 @@ class BNN(nn.Module):
         lifted_reg_model = lifted_module()
         with pyro.plate("map", len(inputs)):
             # run the regressor forward conditioned on data
-            # log_softmax = nn.Softmax(dim=1)
-            # logits = log_softmax(lifted_reg_model(flat_inputs))
-            logits = lifted_reg_model(flat_inputs)
+            log_softmax = nn.Softmax(dim=1)
+            logits = log_softmax(lifted_reg_model(flat_inputs))
+            # logits = lifted_reg_model(flat_inputs)
             # condition on the observed data
             cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)
             return cond_model
@@ -122,7 +122,7 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         return lifted_module()
 
-    def infer_parameters(self, train_loader, lr, n_epochs):
+    def infer_parameters(self, train_loader):
         raise NotImplementedError
 
     def predict(self, inputs, n_samples=100):
