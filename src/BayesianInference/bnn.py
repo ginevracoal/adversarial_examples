@@ -122,17 +122,6 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         return lifted_module()
 
-    def infer_parameters(self, train_loader):
-        raise NotImplementedError
-
-    def predict(self, inputs, n_samples=100):
-        sampled_models = [self.guide(None, None) for _ in range(len(inputs))]
-        one_hot_predictions = [model(inputs).data for model in sampled_models]
-        mean = torch.mean(torch.stack(one_hot_predictions), 0)
-        std = torch.std(torch.stack(one_hot_predictions), 0)
-        predicted_classes = mean.argmax(-1)
-        return predicted_classes
-
     def save(self, filename, relative_path=RESULTS):
         filepath = relative_path+"bnn/"+filename+".pr"
         os.makedirs(os.path.dirname(relative_path+"bnn/"), exist_ok=True)
@@ -144,11 +133,18 @@ class BNN(nn.Module):
         print("\nLoading params: ", filepath)
         pyro.get_param_store().load(filepath)
 
-    def evaluate(self, test_loader):
+    def predict(self, sampled_models, inputs):
+        one_hot_predictions = [model(inputs).data for model in sampled_models]
+        mean = torch.mean(torch.stack(one_hot_predictions), 0)
+        std = torch.std(torch.stack(one_hot_predictions), 0)
+        predicted_classes = mean.argmax(-1)
+        return predicted_classes
+
+    def evaluate(self, sampled_models, test_loader):
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
-            pred = self.predict(images.to(self.device).view(-1, self.input_size))
+            pred = self.predict(sampled_models=sampled_models, inputs=images.to(self.device).view(-1, self.input_size))
             total += labels.size(0)
             correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
         accuracy = 100 * correct / total

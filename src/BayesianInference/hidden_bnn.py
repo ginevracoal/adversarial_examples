@@ -13,15 +13,15 @@ import os
 class NN(nn.Module):
     def __init__(self, input_size, hidden_size, n_classes=10):
         super(NN, self).__init__()
-        self.model = nn.Sequential(nn.Dropout(p=0.2),
+        self.model = nn.Sequential(#nn.Dropout(p=0.2),
                                 nn.Linear(input_size, hidden_size),
-                                nn.Dropout(p=0.5),
+                                # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, hidden_size),
-                                nn.Dropout(p=0.5),
+                                # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, hidden_size),
-                                nn.Dropout(p=0.5),
+                                # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, n_classes),
                                 nn.LogSoftmax(dim=-1))
@@ -30,30 +30,30 @@ class NN(nn.Module):
         return self.model(inputs)
 
 
-class BNN(nn.Module):
+class HiddenBNN(nn.Module):
     def __init__(self, input_size, device):
-        super(BNN, self).__init__()
+        super(HiddenBNN, self).__init__()
         self.device = device
-        self.hidden_size = 512
+        self.hidden_size = 1024
         self.input_size = input_size
         self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes)
 
     def model(self, inputs, labels=None, kl_factor=1.0):
-        size = inputs.size(0)
-        flat_inputs = inputs.view(-1, self.input_size)
+        batch_size = inputs.size(0)
+        flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         # Set-up parameters for the distribution of weights for each layer `a<n>`
-        a1_mean = torch.zeros(self.input_size, self.hidden_size)
-        a1_scale = torch.ones(self.input_size, self.hidden_size)
+        a1_mean = torch.zeros(self.input_size, self.hidden_size).to(self.device)
+        a1_scale = torch.ones(self.input_size, self.hidden_size).to(self.device)
         # a1_dropout = torch.tensor(0.25)
-        a2_mean = torch.zeros(self.hidden_size+1, self.n_classes)
-        a2_scale = torch.ones(self.hidden_size+1, self.hidden_size)
+        a2_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
+        a2_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
         # a2_dropout = torch.tensor(1.0)
-        a3_mean = torch.zeros(self.hidden_size+1, self.n_classes)
-        a3_scale = torch.ones(self.hidden_size+1, self.hidden_size)
+        a3_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
+        a3_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
         # a3_dropout = torch.tensor(1.0)
-        a4_mean = torch.zeros(self.hidden_size+1, self.n_classes)
-        a4_scale = torch.ones(self.hidden_size+1, self.n_classes)
-        with pyro.plate('data', size=size):
+        a4_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
+        a4_scale = torch.ones(self.hidden_size+1, self.n_classes).to(self.device)
+        with pyro.plate('data', size=batch_size):
             # sample conditionally independent hidden layers
             h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale, #a1_dropout*a1_scale,
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
@@ -66,12 +66,12 @@ class BNN(nn.Module):
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
 
-            cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels)
+            cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
             return cond_model
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
-        size = inputs.size(0)
-        flat_inputs = inputs.view(-1, self.input_size)
+        batch_size = inputs.size(0)
+        flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
         a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
                               constraint=constraints.greater_than(0.01)).to(self.device)
@@ -91,7 +91,7 @@ class BNN(nn.Module):
         a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.hidden_size+1, self.n_classes),
                                constraint=constraints.greater_than(0.01)).to(self.device)
 
-        with pyro.plate('data', size=size):
+        with pyro.plate('data', size=batch_size):
             h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,#a1_dropout * a1_scale,
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,#a2_dropout * a2_scale
@@ -110,15 +110,15 @@ class BNN(nn.Module):
             res.append(guide_trace.nodes['logits']['value'])
         return torch.stack(res, dim=0)
 
-    def evaluate(self, test_loader):
+    def evaluate(self, test_loader, n_samples):
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
             total += labels.size(0)
-            pred = self.forward(images.to(self.device), n_samples=1).mean(0).argmax(-1)
+            pred = self.forward(images.to(self.device), n_samples=n_samples).mean(0).argmax(-1)
             correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
-        accuracy = correct / total * 100
-        print(f"\nAccuracy: {accuracy:.2f}")
+        accuracy = 100 * correct / total
+        print(f"\n === Accuracy on {n_samples} sampled models = {accuracy:.2f}")
 
     def save(self, filename, relative_path=RESULTS):
         filepath = relative_path+"bnn/"+filename+".pr"

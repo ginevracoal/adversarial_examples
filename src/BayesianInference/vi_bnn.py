@@ -40,7 +40,9 @@ class VI_BNN(BNN):
                                 labels=labels.to(self.device))
                 total_loss += loss / len(train_loader.dataset)
                 total += labels.size(0)
-                pred = self.predict(images.to(self.device).view(-1,self.input_size))
+                sampled_model = self.guide(None, None)
+                pred = self.predict(sampled_models=[sampled_model],
+                                    inputs=images.to(self.device).view(-1,self.input_size))
                 correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
                 accuracy = 100 * correct / total
                 # print(pyro.get_param_store().get_param("fc1w_mu"))
@@ -52,12 +54,15 @@ class VI_BNN(BNN):
         print("\nlearned params =", list(pyro.get_param_store().get_all_param_names()))
         return {'loss':loss_list, 'accuracy':accuracy_list}
 
+    def sample_models(self, n_samples):
+        sampled_models = [self.guide(None, None) for _ in range(n_samples)]
+        return sampled_models
 
 def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
     random.seed(seed)
     batch_size = 128
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_samples=n_samples)
+        data_loaders(dataset_name=dataset_name, batch_size=batch_size, n_inputs=n_samples)
     filename = "vi_" + str(dataset_name) + "_samples=" + str(n_samples) + "_lr=" + str(lr) + "_epochs=" + str(
                n_epochs)
 
@@ -72,19 +77,20 @@ def main(dataset_name, n_samples, lr, n_epochs, device, seed=0):
     bayesnn.load(filename=filename, relative_path=RESULTS)
 
     ## === evaluate ===
-    bayesnn.evaluate(test_loader=test_loader)
+    sampled_models = bayesnn.sample_models(n_samples)
+    bayesnn.evaluate(test_loader=test_loader, sampled_models=sampled_models)
 
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset_name, batch_size=1, n_samples=n_samples)
+        data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_samples)
 
     # attack_nn(model=bayesnn.guide(None, None), data_loader=test_loader)
 
     # attack_bnn(model=bayesnn, n_samples=3, data_loader=test_loader)
 
-    expected_loss_gradients(model=bayesnn, n_samples=2, data_loader=test_loader)
+    expected_loss_gradients(model=bayesnn, n_samples=2, data_loader=test_loader, device=device)
 
 
-
+# todo use parser
 if __name__ == "__main__":
     try:
         dataset_name = sys.argv[1]
