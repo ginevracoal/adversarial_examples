@@ -3,7 +3,7 @@ import os
 from torch import nn
 import torch
 import pyro
-from pyro.distributions import OneHotCategorical, Normal
+from pyro.distributions import OneHotCategorical, Normal, Categorical
 from pyro.nn import PyroModule
 
 
@@ -41,11 +41,13 @@ class BNN(nn.Module):
         self.input_size = input_size
 
     def model(self, inputs, labels=None):
-        flat_inputs = inputs.view(-1, self.input_size)
+        batch_size = inputs.size(0)
+        flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         net = self.net
 
         fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight)).independent(2)
         fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias)).independent(1)
+        # print("fc1w_prior weights [:10] = ", fc1w_prior)
 
         fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight)).independent(2)
         fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias)).independent(1)
@@ -65,18 +67,19 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         # sample a regressor (which also samples w and b)
         lifted_reg_model = lifted_module()
-        with pyro.plate("map", len(inputs)):
+        with pyro.plate("data", batch_size):
             # run the regressor forward conditioned on data
             log_softmax = nn.Softmax(dim=1)
             logits = log_softmax(lifted_reg_model(flat_inputs))
-            # logits = lifted_reg_model(flat_inputs)
             # condition on the observed data
+            # print(logits)
             cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)
-            return cond_model
+            return logits
 
     def guide(self, inputs, labels=None):
         net = self.net
         softplus = torch.nn.Softplus()
+        # flat_inputs = inputs.to(self.device).view(-1, self.input_size)
 
         # First layer weights
         fc1w_mu_param = pyro.param("fc1w_mu", torch.randn_like(net.fc1.weight))
@@ -112,7 +115,7 @@ class BNN(nn.Module):
         # Output layer bias
         outb_mu_param = pyro.param("outb_mu", torch.randn_like(net.out.bias))
         outb_sigma_param = softplus(pyro.param("outb_sigma", torch.randn_like(net.out.bias)))
-        outb_prior = Normal(loc=outb_mu_param, scale=outb_sigma_param)
+        outb_prior = pyro.sample("logits", Normal(loc=outb_mu_param, scale=outb_sigma_param))
 
         priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
                   'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
@@ -122,30 +125,13 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         return lifted_module()
 
-    def save(self, filename, relative_path=RESULTS):
-        filepath = relative_path+"bnn/"+filename+".pr"
-        os.makedirs(os.path.dirname(relative_path+"bnn/"), exist_ok=True)
-        print("\nSaving params: ", filepath)
-        pyro.get_param_store().save(filepath)
 
-    def load(self, filename, relative_path=TRAINED_MODELS):
-        filepath = relative_path+"bnn/"+filename+".pr"
-        print("\nLoading params: ", filepath)
-        pyro.get_param_store().load(filepath)
-
-    def predict(self, sampled_models, inputs):
-        one_hot_predictions = [model(inputs).data for model in sampled_models]
-        mean = torch.mean(torch.stack(one_hot_predictions), 0)
-        std = torch.std(torch.stack(one_hot_predictions), 0)
-        predicted_classes = mean.argmax(-1)
-        return predicted_classes
-
-    def evaluate(self, sampled_models, test_loader):
-        total = 0.0
-        correct = 0.0
-        for images, labels in test_loader:
-            pred = self.predict(sampled_models=sampled_models, inputs=images.to(self.device).view(-1, self.input_size))
-            total += labels.size(0)
-            correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
-        accuracy = 100 * correct / total
-        print(f"\nTest accuracy: {accuracy:.5f}")
+    # def evaluate(self, sampled_models, test_loader):
+    #     total = 0.0
+    #     correct = 0.0
+    #     for images, labels in test_loader:
+    #         pred = self.predict(sampled_models=sampled_models, inputs=images.to(self.device).view(-1, self.input_size))
+    #         total += labels.size(0)
+    #         correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
+    #     accuracy = 100 * correct / total
+    #     print(f"\nTest accuracy: {accuracy:.5f}")

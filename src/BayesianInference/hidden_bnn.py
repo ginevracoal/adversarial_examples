@@ -8,11 +8,15 @@ import torch.nn.functional as nnf
 import pyro.distributions as dist
 from torch.distributions import constraints
 import os
+import numpy as np
+
+softplus = torch.nn.Softplus()
 
 
 class NN(nn.Module):
     def __init__(self, input_size, hidden_size, n_classes=10):
         super(NN, self).__init__()
+        self.n_classes = n_classes
         self.model = nn.Sequential(#nn.Dropout(p=0.2),
                                 nn.Linear(input_size, hidden_size),
                                 # nn.Dropout(p=0.5),
@@ -34,7 +38,8 @@ class HiddenBNN(nn.Module):
     def __init__(self, input_size, device):
         super(HiddenBNN, self).__init__()
         self.device = device
-        self.hidden_size = 1024
+        self.n_classes = 10
+        self.hidden_size = 512
         self.input_size = input_size
         self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes)
 
@@ -57,6 +62,7 @@ class HiddenBNN(nn.Module):
             # sample conditionally independent hidden layers
             h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale, #a1_dropout*a1_scale,
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            # print("h1 weights = ", h1)
             h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale, #a2_dropout*a2_scale
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale, #a3_dropout*a3_scale
@@ -65,7 +71,7 @@ class HiddenBNN(nn.Module):
                                                            non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
-
+            # print(logits)
             cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
             return cond_model
 
@@ -94,6 +100,8 @@ class HiddenBNN(nn.Module):
         with pyro.plate('data', size=batch_size):
             h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,#a1_dropout * a1_scale,
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            # print("h1 weights [:10] = ", h1[0][:10])
+
             h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,#a2_dropout * a2_scale
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale,#a3_dropout * a3_scale,
@@ -105,6 +113,9 @@ class HiddenBNN(nn.Module):
 
     def forward(self, inputs, n_samples):
         res = []
+        # print("loaded a1 mean weights: ",pyro.get_param_store()["a1_mean"])
+        # print("a1_mean", pyro.get_param_store()["a1_mean"])
+        # print("a2_scale",pyro.get_param_store()["a2_scale"])
         for _ in range(n_samples):
             guide_trace = poutine.trace(self.guide).get_trace(inputs)
             res.append(guide_trace.nodes['logits']['value'])
@@ -115,8 +126,10 @@ class HiddenBNN(nn.Module):
         correct = 0.0
         for images, labels in test_loader:
             total += labels.size(0)
-            pred = self.forward(images.to(self.device), n_samples=n_samples).mean(0).argmax(-1)
-            correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
+            predictions = self.forward(images.to(self.device), n_samples=n_samples)
+            pred = predictions.mean(0).argmax(-1)
+            correct += (pred == labels.to(self.device).argmax(-1)).sum().item()
+            # print(predictions, "\npred=", pred, "\tlabel=", labels.to(self.device).argmax(-1))
         accuracy = 100 * correct / total
         print(f"\n === Accuracy on {n_samples} sampled models = {accuracy:.2f}")
 
