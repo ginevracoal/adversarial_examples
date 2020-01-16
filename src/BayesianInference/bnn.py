@@ -11,20 +11,20 @@ class NN(nn.Module):
     def __init__(self, input_size, hidden_size, n_classes):
         super(NN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.drop1 = nn.Dropout(p=0.2)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.drop2 = nn.Dropout(p=0.2)
-        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        # self.drop1 = nn.Dropout(p=0.2)
+        # self.fc2 = nn.Linear(hidden_size, hidden_size)
+        # self.drop2 = nn.Dropout(p=0.2)
+        # self.fc3 = nn.Linear(hidden_size, hidden_size)
         self.out = nn.Linear(hidden_size, n_classes)
 
     def forward(self, x):
         output = self.fc1(x)
-        output = self.drop1(output)
-        output = torch.relu(output)
-        output = self.fc2(output)
-        output = self.drop2(output)
-        output = torch.relu(output)
-        output = self.fc3(output)
+        # output = self.drop1(output)
+        # output = torch.relu(output)
+        # output = self.fc2(output)
+        # output = self.drop2(output)
+        # output = torch.relu(output)
+        # output = self.fc3(output)
         output = torch.relu(output)
         output = self.out(output)
         output = torch.sigmoid(output)
@@ -47,20 +47,20 @@ class BNN(nn.Module):
 
         fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight)).independent(2)
         fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias)).independent(1)
-        # print("fc1w_prior weights [:10] = ", fc1w_prior)
+        # print("fc1w_prior weights [:10] = ", net.fc1.weight)
 
-        fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight)).independent(2)
-        fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias)).independent(1)
+        # fc2w_prior = Normal(loc=torch.zeros_like(net.fc2.weight), scale=torch.ones_like(net.fc2.weight)).independent(2)
+        # fc2b_prior = Normal(loc=torch.zeros_like(net.fc2.bias), scale=torch.ones_like(net.fc2.bias)).independent(1)
 
-        fc3w_prior = Normal(loc=torch.zeros_like(net.fc3.weight), scale=torch.ones_like(net.fc3.weight)).independent(2)
-        fc3b_prior = Normal(loc=torch.zeros_like(net.fc3.bias), scale=torch.ones_like(net.fc3.bias)).independent(1)
+        # fc3w_prior = Normal(loc=torch.zeros_like(net.fc3.weight), scale=torch.ones_like(net.fc3.weight)).independent(2)
+        # fc3b_prior = Normal(loc=torch.zeros_like(net.fc3.bias), scale=torch.ones_like(net.fc3.bias)).independent(1)
 
         outw_prior = Normal(loc=torch.zeros_like(net.out.weight), scale=torch.ones_like(net.out.weight)).independent(2)
         outb_prior = Normal(loc=torch.zeros_like(net.out.bias), scale=torch.ones_like(net.out.bias)).independent(1)
 
         priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
-                  'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
-                  'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
+                  # 'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
+                  # 'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
                   'out.weight': outw_prior, 'out.bias': outb_prior}
 
         # lift module parameters to random variables sampled from the priors
@@ -85,28 +85,29 @@ class BNN(nn.Module):
         fc1w_mu_param = pyro.param("fc1w_mu", torch.randn_like(net.fc1.weight))
         fc1w_sigma_param = softplus(pyro.param("fc1w_sigma", torch.randn_like(net.fc1.weight)))
         fc1w_prior = Normal(loc=fc1w_mu_param, scale=fc1w_sigma_param)
+        # print("fc1w_sigma_param[:10]", fc1w_sigma_param[:10])
         # First layer bias
         fc1b_mu_param = pyro.param("fc1b_mu", torch.randn_like(net.fc1.bias))
         fc1b_sigma_param = softplus(pyro.param("fc1b_sigma", torch.randn_like(net.fc1.bias)))
         fc1b_prior = Normal(loc=fc1b_mu_param, scale=fc1b_sigma_param)
 
-        # Second layer weights
-        fc2w_mu_param = pyro.param("fc2w_mu", torch.randn_like(net.fc2.weight))
-        fc2w_sigma_param = softplus(pyro.param("fc2w_sigma", torch.randn_like(net.fc2.weight)))
-        fc2w_prior = Normal(loc=fc2w_mu_param, scale=fc2w_sigma_param)
-        # Second layer bias
-        fc2b_mu_param = pyro.param("fc2b_mu", torch.randn_like(net.fc2.bias))
-        fc2b_sigma_param = softplus(pyro.param("fc2b_sigma", torch.randn_like(net.fc2.bias)))
-        fc2b_prior = Normal(loc=fc2b_mu_param, scale=fc2b_sigma_param)
-
-        # Third layer weights
-        fc3w_mu_param = pyro.param("fc3w_mu", torch.randn_like(net.fc3.weight))
-        fc3w_sigma_param = softplus(pyro.param("fc3w_sigma", torch.randn_like(net.fc3.weight)))
-        fc3w_prior = Normal(loc=fc3w_mu_param, scale=fc3w_sigma_param)
-        # Third layer bias
-        fc3b_mu_param = pyro.param("fc3b_mu", torch.randn_like(net.fc3.bias))
-        fc3b_sigma_param = softplus(pyro.param("fc3b_sigma", torch.randn_like(net.fc3.bias)))
-        fc3b_prior = Normal(loc=fc3b_mu_param, scale=fc3b_sigma_param)
+        # # Second layer weights
+        # fc2w_mu_param = pyro.param("fc2w_mu", torch.randn_like(net.fc2.weight))
+        # fc2w_sigma_param = softplus(pyro.param("fc2w_sigma", torch.randn_like(net.fc2.weight)))
+        # fc2w_prior = Normal(loc=fc2w_mu_param, scale=fc2w_sigma_param)
+        # # Second layer bias
+        # fc2b_mu_param = pyro.param("fc2b_mu", torch.randn_like(net.fc2.bias))
+        # fc2b_sigma_param = softplus(pyro.param("fc2b_sigma", torch.randn_like(net.fc2.bias)))
+        # fc2b_prior = Normal(loc=fc2b_mu_param, scale=fc2b_sigma_param)
+        #
+        # # Third layer weights
+        # fc3w_mu_param = pyro.param("fc3w_mu", torch.randn_like(net.fc3.weight))
+        # fc3w_sigma_param = softplus(pyro.param("fc3w_sigma", torch.randn_like(net.fc3.weight)))
+        # fc3w_prior = Normal(loc=fc3w_mu_param, scale=fc3w_sigma_param)
+        # # Third layer bias
+        # fc3b_mu_param = pyro.param("fc3b_mu", torch.randn_like(net.fc3.bias))
+        # fc3b_sigma_param = softplus(pyro.param("fc3b_sigma", torch.randn_like(net.fc3.bias)))
+        # fc3b_prior = Normal(loc=fc3b_mu_param, scale=fc3b_sigma_param)
 
         # Output layer weights
         outw_mu_param = pyro.param("outw_mu", torch.randn_like(net.out.weight))
@@ -118,8 +119,8 @@ class BNN(nn.Module):
         outb_prior = pyro.sample("logits", Normal(loc=outb_mu_param, scale=outb_sigma_param))
 
         priors = {'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
-                  'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
-                  'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
+                  # 'fc2.weight': fc2w_prior, 'fc2.bias': fc2b_prior,
+                  # 'fc3.weight': fc3w_prior, 'fc3.bias': fc3b_prior,
                   'out.weight': outw_prior, 'out.bias': outb_prior}
 
         lifted_module = pyro.random_module("module", net, priors)
