@@ -3,16 +3,14 @@ sys.path.append(".")
 from directories import *
 import pyro
 from BayesianInference.hidden_bnn import HiddenBNN
-from pyro.infer import SVI, TraceMeanField_ELBO, Trace_ELBO, EmpiricalMarginal
+from pyro.infer import SVI, Trace_ELBO
 from utils import *
 import pyro.optim as pyroopt
-import random
 from BayesianInference.adversarial_attacks import *
 from BayesianInference.pyro_utils import data_loaders
 import time
-from utils import execution_time
+# from utils import execution_time
 import argparse
-from pyro.infer import Predictive
 
 
 class VI_BNN(HiddenBNN):
@@ -25,7 +23,7 @@ class VI_BNN(HiddenBNN):
         print("\nSVI inference.")
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
         optim = pyroopt.Adam({"lr": lr})#, "betas": (0.95, 0.999)})
-        elbo = TraceMeanField_ELBO()
+        elbo = Trace_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
         loss_list = []
@@ -69,29 +67,39 @@ def test_conjecture(dataset_name, n_samples, n_inputs, device):
     random.seed(0)
 
     # load bayesian model
-    _, _, data_format, input_shape = data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=1)
+    _, test_loader, data_format, input_shape = data_loaders(dataset_name=dataset_name,
+                                                            batch_size=n_inputs, n_inputs=n_inputs)
     pyro.clear_param_store()
-    bayesnn = VI_BNN(input_shape=input_shape, device=device)
+    posteriors_list = []
     if dataset_name == "mnist":
-        # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200"
-        # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400"
-        # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100"
-        # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80"
-        trained_model = "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100"
-        bayesnn.load(filename=trained_model, relative_path=TRAINED_MODELS)
+        trained_models = [
+            # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200", # dropout
+            # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400", # dropout
+            "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",
+            "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",
+            "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",
+        ]
+    else:
+        return AssertionError("wrong dataset name")
 
-    # evaluate on test samples
-    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=n_inputs, n_inputs=n_inputs)
-    bayesnn.evaluate(test_loader=test_loader, n_samples=n_samples)
-    
+    for model in trained_models:
+        bayesnn = VI_BNN(input_shape=input_shape, device=device)
+        bayesnn.load(filename=model, relative_path=TRAINED_MODELS)
+        posteriors_list.append(bayesnn)
+        bayesnn.evaluate(test_loader=test_loader, n_samples=n_samples)
+
     # compute expected loss gradients
     _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_inputs)
-    exp_loss_gradients = expected_loss_gradients(model=bayesnn, n_samples=n_samples, data_loader=test_loader,
+    exp_loss_gradients = expected_loss_gradients(posteriors_list=posteriors_list,
+                                                 n_samples=n_samples,
+                                                 data_loader=test_loader,
                                                  device="cuda", mode="hidden")
 
-    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_samples=" + str(n_samples)
+    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_samples=" + str(n_samples) \
+               + "_posteriors=" + str(len(posteriors_list))
     plot_heatmap(columns=exp_loss_gradients, path=RESULTS + "bnn/", filename=filename + "_heatmap.png",
-                 xlab="pixel idx", ylab="image idx", title="Expected loss gradients on {} samples".format(n_samples))
+                 xlab="pixel idx", ylab="image idx",
+                 title="Expected loss gradients on {} samples from {} posteriors".format(n_samples, len(posteriors_list)))
 
 
 def infer_parameters(dataset_name, n_inputs, lr, n_epochs, device, n_samples):
@@ -112,11 +120,12 @@ def infer_parameters(dataset_name, n_inputs, lr, n_epochs, device, n_samples):
 
 
 def main(args):
-    #
-    # infer_parameters(dataset_name=args.dataset, n_inputs=args.inputs, n_samples=args.samples,
-    #                  lr=args.lr, n_epochs=args.epochs, device=args.device)
 
-    test_conjecture(dataset_name=args.dataset, n_samples=args.samples, n_inputs=args.inputs, device=args.device)
+    infer_parameters(dataset_name=args.dataset, n_inputs=args.inputs, n_samples=args.samples,
+                     lr=args.lr, n_epochs=args.epochs, device=args.device)
+
+    # test_conjecture(dataset_name=args.dataset, n_samples=args.samples, n_inputs=args.inputs,
+    #                 device=args.device)
 
     # n_samples_list=[10, 50, 100]
     # for n_samples in n_samples_list:

@@ -108,27 +108,30 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
     print("\nAttack epsilon = {}\t Accuracy = {} / {} = {}".format(epsilon, correct, len(data_loader), accuracy))
     return accuracy, adv_examples
 
-def expected_loss_gradient(model, n_samples, image, label, device, mode):
+def expected_loss_gradient(posteriors_list, n_samples, image, label, device, mode):
     random.seed(123)
     loss_gradients = []
     for i in range(n_samples):
         x = copy.deepcopy(image)
         x.requires_grad = True
         if mode == "hidden":
-            raw_output = model.forward(x, n_samples=1).to(device).mean(0)#.argmax(-1)
-            output = F.normalize(raw_output, p=2, dim=1)
-            # output = raw_output.div(torch.abs(raw_output).max()-torch.abs(raw_output).min())
-            loss = torch.nn.CrossEntropyLoss()(output, label)
-            # loss = F.cross_entropy(output, label)
-            loss.backward(retain_graph=False)
-            loss_gradient = copy.deepcopy(x.grad.data[0])
-            loss_gradients.append(loss_gradient)
+            for posterior in posteriors_list:
+                raw_output = posterior.forward(x, n_samples=1).to(device).mean(0)#.argmax(-1)
+                # print(raw_output)
+                output = F.normalize(raw_output, p=2, dim=1)
+                # print(output)
+                # output = raw_output.div(torch.abs(raw_output).max()-torch.abs(raw_output).min())
+                loss = torch.nn.CrossEntropyLoss()(output, label)
+                # loss = F.cross_entropy(output, label)
+                loss.backward(retain_graph=False)
+                loss_gradient = copy.deepcopy(x.grad.data[0])
+                loss_gradients.append(loss_gradient)
 
-            # print("raw_output = ", raw_output.cpu().detach().numpy())
-            # print("normalized_output = ", output.cpu().detach().numpy())
-            # print("loss = ", loss.item())
-            # print("loss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy())
-            model.zero_grad()
+                # print("\nraw_output = ", raw_output.cpu().detach().numpy())
+                # print("normalized_output = ", output.cpu().detach().numpy())
+                # print("loss = ", loss.item())
+                # print("loss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy())
+                posterior.zero_grad()
             # exit()
         else:
             sampled_model = model.guide(None)
@@ -142,7 +145,7 @@ def expected_loss_gradient(model, n_samples, image, label, device, mode):
             loss_gradients.append(loss_gradient)
         del x
 
-    exp_loss_gradient = torch.sum(torch.stack(loss_gradients), dim=0)/n_samples
+    exp_loss_gradient = torch.sum(torch.stack(loss_gradients), dim=0)/(n_samples*len(posteriors_list))
 
     # covariance_eigendec(torch.stack(loss_gradients).t().cpu().detach().numpy())
 
@@ -152,8 +155,9 @@ def expected_loss_gradient(model, n_samples, image, label, device, mode):
     return exp_loss_gradient.cpu().detach().numpy().flatten()
 
 
-def expected_loss_gradients(model, n_samples, data_loader, device, mode="hidden"):
-    print(f"\n === Expected loss gradients on {n_samples} sampled models and {len(data_loader)} inputs:")
+def expected_loss_gradients(posteriors_list, n_samples, data_loader, device, mode="hidden"):
+    print(f"\n === Expected loss gradients on {n_samples} models from {len(posteriors_list)} posteriors"
+          f" and {len(data_loader)} input images:")
     expected_loss_gradients = []
 
     for image, label in data_loader:
@@ -163,10 +167,12 @@ def expected_loss_gradients(model, n_samples, data_loader, device, mode="hidden"
         input_size = image.size(1) * image.size(2) * image.size(3)
         label = label.to(device).argmax(-1).to(device)
         image = image.to(device).view(-1, input_size).to(device)
-        expected_loss_gradients.append(expected_loss_gradient(model, n_samples, image, label, mode=mode, device="cuda"))
+        expected_loss_gradients.append(expected_loss_gradient(posteriors_list, n_samples, image, label, mode=mode,
+                                                              device=device))
 
     np_exp_loss_gradients = np.array(expected_loss_gradients)
-    filename = "expLossGradients_samples="+str(n_samples)+"_inputs="+str(len(np_exp_loss_gradients))
+    filename = "expLossGradients_samples="+str(n_samples)+"_inputs="+str(len(np_exp_loss_gradients))\
+               +"_posteriors="+str(len(posteriors_list))
     save_to_pickle(np_exp_loss_gradients, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
     return np_exp_loss_gradients
 
