@@ -26,19 +26,19 @@
 # === hidden_vi_bnn === #
 SCRIPT="hidden_vi_bnn"
 DATASET_NAME="mnist"
-N_INPUTS="60000"
+N_INPUTS="10000"
 N_SAMPLES="10"
-EPOCHS="400"
-LR="0.002"
+EPOCHS="200"
+LR="0.0002"
 DEVICE="cuda"
 
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
 #DATASET_NAME="mnist"
-#N_INPUTS="1000"
+#N_INPUTS="10000"
 #WARMUP="10"
-#N_CHAINS="6"
-#N_SAMPLES="10"
+#N_CHAINS="4"
+#N_SAMPLES="1000"
 #DEVICE="cpu"
 #N_STEPS="100"
 
@@ -70,9 +70,9 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_${SCRIPT}_out.txt"
 if [ $SCRIPT = "vi_bnn" ]; then
   python3 "BayesianInference/vi_bnn.py" $DATASET_NAME $LR $EPOCHS $DEVICE &> $OUT
 elif [ $SCRIPT = "hidden_vi_bnn" ]; then
-  python3 "BayesianInference/hidden_vi_bnn.py" --samples=$N_SAMPLES --dataset_name=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
+  python3 "BayesianInference/hidden_vi_bnn.py" --samples=$N_SAMPLES --dataset=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
 elif [ $SCRIPT = "hmc_bnn" ]; then
-  python3 "BayesianInference/hmc_bnn.py" --dataset_name=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE --steps=$N_STEPS &> $OUT
+  python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE --steps=$N_STEPS &> $OUT
 fi
 
 ## deactivate environment

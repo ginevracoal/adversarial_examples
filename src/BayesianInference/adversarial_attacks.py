@@ -6,6 +6,7 @@ from utils import *
 from directories import *
 import random
 import copy
+import torch.nn.functional as nnf
 
 
 def fgsm_attack(image, epsilon, data_grad):
@@ -107,42 +108,51 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
     print("\nAttack epsilon = {}\t Accuracy = {} / {} = {}".format(epsilon, correct, len(data_loader), accuracy))
     return accuracy, adv_examples
 
-def expected_loss_gradient(model, n_samples, image, label, mode, device):
+def expected_loss_gradient(model, n_samples, image, label, device, mode):
     random.seed(123)
     loss_gradients = []
     for i in range(n_samples):
         x = copy.deepcopy(image)
         x.requires_grad = True
         if mode == "hidden":
-            raw_output = model.forward(x, n_samples=1).mean(0).to(device)
-            raw_output = F.normalize(raw_output, p=2, dim=1)
-            # print("\nraw_output = ", raw_output[0])#.sum(axis=0))
-            loss = F.cross_entropy(raw_output, label)
-            # print("\nloss = ", loss)
+            raw_output = model.forward(x, n_samples=1).to(device).mean(0)#.argmax(-1)
+            output = F.normalize(raw_output, p=2, dim=1)
+            # output = raw_output.div(torch.abs(raw_output).max()-torch.abs(raw_output).min())
+            loss = torch.nn.CrossEntropyLoss()(output, label)
+            # loss = F.cross_entropy(output, label)
             loss.backward(retain_graph=False)
             loss_gradient = copy.deepcopy(x.grad.data[0])
             loss_gradients.append(loss_gradient)
-            # print("\n loss_gradient = ", loss_gradient[:10])
-        del x
-        # else:
-        #     sampled_model = model.guide(None)
-        #     output = sampled_model(image)
-        #     loss = F.cross_entropy(output, label)
-        #     # zero gradients
-        #     sampled_model.zero_grad()
-        #     # compute gradients
-        #     loss.backward(retain_graph=True)
-        #     loss_gradient = copy.deepcopy(x.grad.data[0])
-        #     loss_gradients.append(loss_gradient)
 
-    exp_loss_gradient = np.array(loss_gradients).sum()/n_samples
-    # exp_loss_gradient = loss_gradient
-    # print(exp_loss_gradient)
-    print(f"min = {exp_loss_gradient.min().item():.8f} \t max = {exp_loss_gradient.max().item():.8f} \t"
-          f"mean = {exp_loss_gradient.mean().item():.8f} \t var = {exp_loss_gradient.var().item():.8f}")
+            # print("raw_output = ", raw_output.cpu().detach().numpy())
+            # print("normalized_output = ", output.cpu().detach().numpy())
+            # print("loss = ", loss.item())
+            # print("loss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy())
+            model.zero_grad()
+            # exit()
+        else:
+            sampled_model = model.guide(None)
+            output = sampled_model(image)
+            loss = F.cross_entropy(output, label)
+            # zero gradients
+            sampled_model.zero_grad()
+            # compute gradients
+            loss.backward(retain_graph=False)
+            loss_gradient = copy.deepcopy(x.grad.data[0])
+            loss_gradients.append(loss_gradient)
+        del x
+
+    exp_loss_gradient = torch.sum(torch.stack(loss_gradients), dim=0)/n_samples
+
+    # covariance_eigendec(torch.stack(loss_gradients).t().cpu().detach().numpy())
+
+    print(f"min = {exp_loss_gradient.min().item():.8f} \t mean = {exp_loss_gradient.mean().item():.8f} "
+          f"\t max = {exp_loss_gradient.max().item():.8f} ")
+
     return exp_loss_gradient.cpu().detach().numpy().flatten()
 
-def expected_loss_gradients(model, n_samples, data_loader, device, mode=None):
+
+def expected_loss_gradients(model, n_samples, data_loader, device, mode="hidden"):
     print(f"\n === Expected loss gradients on {n_samples} sampled models and {len(data_loader)} inputs:")
     expected_loss_gradients = []
 
@@ -160,15 +170,18 @@ def expected_loss_gradients(model, n_samples, data_loader, device, mode=None):
     save_to_pickle(np_exp_loss_gradients, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
     return np_exp_loss_gradients
 
-def plot_expectation_over_images(dataset_name, n_inputs, n_samples_list):
+
+def plot_expectation_over_images(dataset_name, n_inputs, n_samples_list, rel_path=RESULTS):
+
     avg_loss_gradients = []
     for n_samples in n_samples_list:
         filename = "expLossGradients_samples="+str(n_samples)+"_inputs="+str(n_inputs)
-        expected_loss_gradients = load_from_pickle(path=RESULTS+"bnn/"+filename+".pkl")
+        expected_loss_gradients = load_from_pickle(path=rel_path+"bnn/"+filename+".pkl")
         avg_loss_gradient = np.mean(expected_loss_gradients, axis=0)/n_inputs
         avg_loss_gradients.append(avg_loss_gradient)
-    # print(np.array(avg_loss_gradients)[:,:10])
+        print("\nn_samples={} \navg_loss_gradient[:10]={}".format(n_samples,avg_loss_gradient[:10]))
+
     filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs)
     plot_heatmap(columns=avg_loss_gradients, path=RESULTS + "bnn/", filename=filename+"_heatmap.png",
-                 xlab="pixel idx", ylab="n. posterior samples",
+                 xlab="pixel idx", ylab="n. posterior samples", yticks=n_samples_list,
                  title="Expected loss gradients over {} images".format(n_inputs))

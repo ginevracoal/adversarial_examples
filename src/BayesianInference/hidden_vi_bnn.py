@@ -76,14 +76,16 @@ def test_conjecture(dataset_name, n_samples, n_inputs, device):
         # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200"
         # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400"
         # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100"
-        trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80"
+        # trained_model = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80"
+        trained_model = "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100"
         bayesnn.load(filename=trained_model, relative_path=TRAINED_MODELS)
 
     # evaluate on test samples
-    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=100, n_inputs=n_inputs)
+    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=n_inputs, n_inputs=n_inputs)
     bayesnn.evaluate(test_loader=test_loader, n_samples=n_samples)
-    exit()
+    
     # compute expected loss gradients
+    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_inputs)
     exp_loss_gradients = expected_loss_gradients(model=bayesnn, n_samples=n_samples, data_loader=test_loader,
                                                  device="cuda", mode="hidden")
 
@@ -93,13 +95,14 @@ def test_conjecture(dataset_name, n_samples, n_inputs, device):
 
 
 def infer_parameters(dataset_name, n_inputs, lr, n_epochs, device, n_samples):
+    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + \
+                    "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
+    print("\nInferring params for ", filename)
     random.seed(0)
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=dataset_name, batch_size=128, n_inputs=n_inputs)
     pyro.clear_param_store()
     bayesnn = VI_BNN(input_shape=input_shape, device=device)
-    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + \
-                    "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
     start = time.time()
     dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr, n_samples=1)
     execution_time(start=start, end=time.time())
@@ -110,14 +113,16 @@ def infer_parameters(dataset_name, n_inputs, lr, n_epochs, device, n_samples):
 
 def main(args):
     #
-    infer_parameters(dataset_name=args.dataset_name, n_inputs=args.inputs, n_samples=args.samples,
-                     lr=args.lr, n_epochs=args.epochs, device=args.device)
+    # infer_parameters(dataset_name=args.dataset, n_inputs=args.inputs, n_samples=args.samples,
+    #                  lr=args.lr, n_epochs=args.epochs, device=args.device)
 
-    test_conjecture(dataset_name=args.dataset_name, n_samples=args.samples,
-                    n_inputs=args.inputs, device=args.device)
+    test_conjecture(dataset_name=args.dataset, n_samples=args.samples, n_inputs=args.inputs, device=args.device)
 
-    # plot_expectation_over_images(dataset_name=args.dataset_name, n_inputs=args.inputs,
-    #                              n_samples_list=[10, 50, 100])
+    # n_samples_list=[10, 50, 100]
+    # for n_samples in n_samples_list:
+    #     test_conjecture(dataset_name=args.dataset, n_samples=n_samples, n_inputs=args.inputs, device=args.device)
+
+    # plot_expectation_over_images(dataset_name=args.dataset, n_inputs=args.inputs, n_samples_list=n_samples_list)
 
 
 if __name__ == "__main__":
@@ -127,8 +132,8 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--inputs", nargs="?", default=10, type=int)
     parser.add_argument("--epochs", nargs='?', default=10, type=int)
     parser.add_argument("--samples", nargs='?', default=3, type=int)
-    parser.add_argument("--dataset_name", nargs='?', default="mnist", type=str)
+    parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
     parser.add_argument("--lr", nargs='?', default=0.002, type=float)
-    parser.add_argument("--device", default='cpu', type=str, help='use "cpu" or "cuda".')
+    parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
 
     main(args=parser.parse_args())
