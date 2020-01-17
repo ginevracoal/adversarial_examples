@@ -29,6 +29,8 @@ class NN(nn.Module):
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, n_classes),
                                 nn.LogSoftmax(dim=-1))
+                                # nn.Softmax(dim=-1))
+                                # nn.Sigmoid())
 
     def forward(self, inputs):
         return self.model(inputs)
@@ -69,18 +71,22 @@ class HiddenBNN(nn.Module):
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
                                                            non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
+                                                           # non_linearity=lambda x: nnf.softmax(x, dim=-1),
+                                                           # non_linearity=lambda x: torch.sigmoid(x),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
-            # print(logits)
+            # print("logits[0] =",logits[0])
             cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
-            return cond_model
+            return logits
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
+
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
         a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
                               constraint=constraints.greater_than(0.01)).to(self.device)
+        # print(a1_scale)
         # a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
         #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
         a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
@@ -108,8 +114,11 @@ class HiddenBNN(nn.Module):
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
                                                            non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
+                                                           # non_linearity=lambda x: torch.sigmoid(x),
+                                                           # non_linearity=lambda x: nnf.softmax(x, dim=-1),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
+            # print("logits =",logits)
 
     def forward(self, inputs, n_samples):
         res = []
@@ -143,3 +152,4 @@ class HiddenBNN(nn.Module):
         filepath = relative_path+"bnn/"+filename+".pr"
         print("\nLoading params: ", filepath)
         pyro.get_param_store().load(filepath)
+        return self

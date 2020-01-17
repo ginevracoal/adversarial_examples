@@ -27,7 +27,8 @@ class NN(nn.Module):
         # output = self.fc3(output)
         output = torch.relu(output)
         output = self.out(output)
-        output = torch.sigmoid(output)
+        # output = torch.sigmoid(output)
+        output = torch.log_softmax(output, dim=1)
         return output
 
 
@@ -67,10 +68,14 @@ class BNN(nn.Module):
         lifted_module = pyro.random_module("module", net, priors)
         # sample a regressor (which also samples w and b)
         lifted_reg_model = lifted_module()
+
         with pyro.plate("data", batch_size):
             # run the regressor forward conditioned on data
             log_softmax = nn.Softmax(dim=1)
             logits = log_softmax(lifted_reg_model(flat_inputs))
+
+            # output = lifted_reg_model(flat_inputs)
+
             # condition on the observed data
             # print(logits)
             cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels)

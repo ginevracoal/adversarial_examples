@@ -3,7 +3,7 @@ sys.path.append(".")
 from directories import *
 import pyro
 from BayesianInference.hidden_bnn import HiddenBNN
-from pyro.infer import SVI, Trace_ELBO
+from pyro.infer import SVI, Trace_ELBO, TraceMeanField_ELBO
 from utils import *
 import pyro.optim as pyroopt
 from BayesianInference.adversarial_attacks import *
@@ -14,20 +14,29 @@ import argparse
 
 
 class VI_BNN(HiddenBNN):
-    def __init__(self, input_shape, device):
+    def __init__(self, dataset_name, input_shape, device):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
         self.n_classes = 10
+        self.dataset_name = dataset_name
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device)
 
-    def infer_parameters(self, train_loader, lr, n_epochs, n_samples):
-        print("\nSVI inference.")
+    def get_filename(self, n_inputs, lr, n_epochs):
+        return "hidden_vi_" + str(self.dataset_name) + "_inputs=" + str(n_inputs) + \
+                "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
+
+    def infer_parameters(self, train_loader, lr, n_epochs):
+        random.seed(0)
+
+        filename = self.get_filename(n_inputs=len(train_loader.dataset), lr=lr, n_epochs=n_epochs)
+        print("\nSVI inference for ", filename)
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
-        optim = pyroopt.Adam({"lr": lr})#, "betas": (0.95, 0.999)})
-        elbo = Trace_ELBO()
+        optim = pyroopt.Adam({"lr": lr})
+        elbo = TraceMeanField_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
         loss_list = []
         accuracy_list = []
+        start = time.time()
         for i in range(n_epochs):
             accuracy = 0
             total_loss = 0.0
@@ -50,9 +59,12 @@ class VI_BNN(HiddenBNN):
             print(f"[Epoch {i + 1}]\t loss: {total_loss:.2f} \t accuracy: {accuracy:.2f}")
             loss_list.append(total_loss)
             accuracy_list.append(accuracy)
+        execution_time(start=start, end=time.time())
 
         print("\nlearned params =", list(pyro.get_param_store().get_all_param_names()))
-        return {'loss':loss_list, 'accuracy':accuracy_list}
+        self.save(filename=filename)
+
+        plot_loss_accuracy({'loss':loss_list, 'accuracy':accuracy_list}, path=RESULTS + "bnn/" + filename + ".png")
 
     # def predict(self, inputs, n_samples):
     #     predictive = Predictive(self.model, guide=self.guide, num_samples=n_samples)
@@ -61,75 +73,66 @@ class VI_BNN(HiddenBNN):
     #                    if k != "obs"}
     #     return svi_samples
 
+    def load_posteriors(self, posteriors_names, relative_path=TRAINED_MODELS):
+        posteriors_list = []
+
+        for posterior in posteriors_names:
+            posterior = self.load(filename=posterior, relative_path=relative_path)
+            posteriors_list.append(posterior)
+
+        return posteriors_list
+
+
+
 # === MAIN EXECUTIONS ===
 
-def test_conjecture(dataset_name, n_samples, n_inputs, device):
+
+
+def test_conjecture(posteriors_list, data_loader, dataset_name, n_samples, n_inputs, device):
     random.seed(0)
-
-    # load bayesian model
-    _, test_loader, data_format, input_shape = data_loaders(dataset_name=dataset_name,
-                                                            batch_size=n_inputs, n_inputs=n_inputs)
     pyro.clear_param_store()
-    posteriors_list = []
-    if dataset_name == "mnist":
-        trained_models = [
-            # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200", # dropout
-            # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400", # dropout
-            "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",
-            "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",
-            "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",
-        ]
-    else:
-        return AssertionError("wrong dataset name")
 
-    for model in trained_models:
-        bayesnn = VI_BNN(input_shape=input_shape, device=device)
-        bayesnn.load(filename=model, relative_path=TRAINED_MODELS)
-        posteriors_list.append(bayesnn)
-        bayesnn.evaluate(test_loader=test_loader, n_samples=n_samples)
-
-    # compute expected loss gradients
-    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_inputs)
-    exp_loss_gradients = expected_loss_gradients(posteriors_list=posteriors_list,
+    loss_gradients = expected_loss_gradients(posteriors_list=posteriors_list,
                                                  n_samples=n_samples,
-                                                 data_loader=test_loader,
-                                                 device="cuda", mode="hidden")
+                                                 data_loader=data_loader,
+                                                 device=device, mode="vi")
 
     filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_samples=" + str(n_samples) \
                + "_posteriors=" + str(len(posteriors_list))
-    plot_heatmap(columns=exp_loss_gradients, path=RESULTS + "bnn/", filename=filename + "_heatmap.png",
+
+    plot_heatmap(columns=loss_gradients, path=RESULTS + "bnn/", filename=filename + "_heatmap.png",
                  xlab="pixel idx", ylab="image idx",
-                 title="Expected loss gradients on {} samples from {} posteriors".format(n_samples, len(posteriors_list)))
-
-
-def infer_parameters(dataset_name, n_inputs, lr, n_epochs, device, n_samples):
-    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + \
-                    "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
-    print("\nInferring params for ", filename)
-    random.seed(0)
-    train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset_name, batch_size=128, n_inputs=n_inputs)
-    pyro.clear_param_store()
-    bayesnn = VI_BNN(input_shape=input_shape, device=device)
-    start = time.time()
-    dict = bayesnn.infer_parameters(train_loader=train_loader, n_epochs=n_epochs, lr=lr, n_samples=1)
-    execution_time(start=start, end=time.time())
-    plot_loss_accuracy(dict, path=RESULTS+"bnn/"+filename+".png")
-    bayesnn.save(filename=filename)
-    bayesnn.evaluate(test_loader=test_loader, n_samples=n_samples)
+                 title=f"Expected loss gradients - {n_samples} samples x {len(posteriors_list)} posteriors")
 
 
 def main(args):
 
-    infer_parameters(dataset_name=args.dataset, n_inputs=args.inputs, n_samples=args.samples,
-                     lr=args.lr, n_epochs=args.epochs, device=args.device)
+    batch_size=10
+    train_loader, _, data_format, input_shape = \
+        data_loaders(dataset_name=args.dataset, batch_size=batch_size, n_inputs=args.inputs)
+    pyro.clear_param_store()
+    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset)
 
-    # test_conjecture(dataset_name=args.dataset, n_samples=args.samples, n_inputs=args.inputs,
-    #                 device=args.device)
+    # bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs)
 
-    # n_samples_list=[10, 50, 100]
-    # for n_samples in n_samples_list:
-    #     test_conjecture(dataset_name=args.dataset, n_samples=n_samples, n_inputs=args.inputs, device=args.device)
+    posteriors = [
+        # bayesnn
+        # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200", # dropout + log softmax
+        # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400", # dropout + log softmax
+        # "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",  # log softmax
+        # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",  # log softmax
+        # "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",  # log softmax
+        "hidden_vi_mnist_inputs=100_lr=0.02_epochs=50"
+    ]
+
+    posteriors = bayesnn.load_posteriors(posteriors_names=posteriors, relative_path=RESULTS)
+
+    bayesnn.evaluate(test_loader=train_loader, n_samples=args.samples)
+
+    # attack_network(dataset_name=args.dataset, n_inputs=args.inputs, device=args.device, n_samples=args.samples)
+
+    test_conjecture(posteriors_list=posteriors, data_loader=train_loader, n_samples=args.samples,
+                    n_inputs=args.inputs, device=args.device, dataset_name=args.dataset)
 
     # plot_expectation_over_images(dataset_name=args.dataset, n_inputs=args.inputs, n_samples_list=n_samples_list)
 

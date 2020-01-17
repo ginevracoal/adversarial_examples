@@ -26,21 +26,20 @@
 # === hidden_vi_bnn === #
 SCRIPT="hidden_vi_bnn"
 DATASET_NAME="mnist"
-N_INPUTS="10000"
+N_INPUTS="60000"
 N_SAMPLES="10"
-EPOCHS="200"
-LR="0.0002"
+EPOCHS="100"
+LR="0.002"
 DEVICE="cuda"
 
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
 #DATASET_NAME="mnist"
 #N_INPUTS="10000"
-#WARMUP="10"
-#N_CHAINS="4"
-#N_SAMPLES="1000"
+#WARMUP="2000"
+#N_CHAINS="5"
+#N_SAMPLES="20"
 #DEVICE="cpu"
-#N_STEPS="100"
 
 
 ###########
@@ -72,7 +71,7 @@ if [ $SCRIPT = "vi_bnn" ]; then
 elif [ $SCRIPT = "hidden_vi_bnn" ]; then
   python3 "BayesianInference/hidden_vi_bnn.py" --samples=$N_SAMPLES --dataset=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
 elif [ $SCRIPT = "hmc_bnn" ]; then
-  python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE --steps=$N_STEPS &> $OUT
+  python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE &> $OUT
 fi
 
 ## deactivate environment

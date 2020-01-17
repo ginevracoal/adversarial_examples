@@ -62,16 +62,18 @@ def attack_nn(model, data_loader, method="fgsm", device="cpu"):
     return accuracy, adv_examples
 
 
-def fgsm_bayesian_attack(model, n_samples, image, label, epsilon):
+def fgsm_bayesian_attack(model, n_samples, image, label, epsilon, device):
     image.requires_grad = True
     sum_sign_data_grad = 0.0
-    for _ in range(n_samples):
-        sampled_model = model.guide(None, None)
-        output = sampled_model(image)
-
+    for i in range(n_samples):
+        # sampled_model = model.guide(None, None)
+        # output = sampled_model(image)
+        output = model.forward(image.to(device), n_samples=1).mean(0)#.argmax(-1)
+        # print(output)
+        # exit()
         loss = F.cross_entropy(output, label)
         # zero gradients
-        sampled_model.zero_grad()
+        model.zero_grad()
         # compute gradients
         loss.backward(retain_graph=True)
         image_grad = image.grad.data
@@ -98,7 +100,7 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
         label = label.to(device).argmax(-1)
         image = image.to(device).view(-1, input_shape)
 
-        perturbed_image = fgsm_bayesian_attack(model, n_samples, image, label, epsilon)
+        perturbed_image = fgsm_bayesian_attack(model, n_samples, image, label, epsilon, device=device)
         prediction = model.forward(perturbed_image)
         if prediction.item() == label.item():
             correct += 1
@@ -108,72 +110,83 @@ def attack_bnn(model, n_samples, data_loader, method="fgsm", device="cpu"):
     print("\nAttack epsilon = {}\t Accuracy = {} / {} = {}".format(epsilon, correct, len(data_loader), accuracy))
     return accuracy, adv_examples
 
+def categorical_cross_entropy(y_pred, y_true):
+    # y_pred = predicted probability vector
+    y_pred = torch.clamp(y_pred, 1e-9, 1 - 1e-9)
+    return -(y_true * torch.log(y_pred)).sum(dim=1).mean()
+
 def expected_loss_gradient(posteriors_list, n_samples, image, label, device, mode):
     random.seed(123)
     loss_gradients = []
-    for i in range(n_samples):
-        x = copy.deepcopy(image)
-        x.requires_grad = True
-        if mode == "hidden":
-            for posterior in posteriors_list:
-                raw_output = posterior.forward(x, n_samples=1).to(device).mean(0)#.argmax(-1)
-                # print(raw_output)
-                output = F.normalize(raw_output, p=2, dim=1)
-                # print(output)
-                # output = raw_output.div(torch.abs(raw_output).max()-torch.abs(raw_output).min())
-                loss = torch.nn.CrossEntropyLoss()(output, label)
-                # loss = F.cross_entropy(output, label)
-                loss.backward(retain_graph=False)
-                loss_gradient = copy.deepcopy(x.grad.data[0])
-                loss_gradients.append(loss_gradient)
 
-                # print("\nraw_output = ", raw_output.cpu().detach().numpy())
-                # print("normalized_output = ", output.cpu().detach().numpy())
-                # print("loss = ", loss.item())
-                # print("loss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy())
-                posterior.zero_grad()
-            # exit()
-        else:
-            sampled_model = model.guide(None)
-            output = sampled_model(image)
-            loss = F.cross_entropy(output, label)
-            # zero gradients
-            sampled_model.zero_grad()
-            # compute gradients
-            loss.backward(retain_graph=False)
+    for posterior in posteriors_list:
+        for i in range(n_samples):
+            x = copy.deepcopy(image)
+            x.requires_grad = True
+            # print("\ntrue label =", label.item())
+            if mode == "vi":
+                # here posterior is a bayesnn object which performs random sampling from posterior on forward calls
+                output = posterior.forward(inputs=x, n_samples=1).to(device).exp()
+                # print("\noutput = ", output.cpu().detach().numpy())
+            elif mode == "hmc":
+                sampled_model = posterior.posterior_samples[i]
+                output = posterior.predict(inputs=x, posterior_samples=[sampled_model])
+            else:
+                raise ValueError("wrong inference mode")
+
+            output = output.mean(0)
+
+            # print("\noutput = ", output.cpu().detach().numpy())
+            # print("\ncheck prob distribution:", output.sum(dim=1).item())#==1.0)
+
+            # loss = torch.nn.CrossEntropyLoss()(output, label)
+            # loss = F.cross_entropy(output, label)
+            # loss = torch.nn.NLLLoss()(output.exp(), label)
+            loss = categorical_cross_entropy(y_pred=output, y_true=label)
+
+            loss.backward()
             loss_gradient = copy.deepcopy(x.grad.data[0])
             loss_gradients.append(loss_gradient)
-        del x
+            # print("\nloss = ", loss.item())
+            # print("loss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy()) # len = 784
+            # exit()
+
+            posterior.zero_grad()
+            del x
 
     exp_loss_gradient = torch.sum(torch.stack(loss_gradients), dim=0)/(n_samples*len(posteriors_list))
-
-    # covariance_eigendec(torch.stack(loss_gradients).t().cpu().detach().numpy())
-
-    print(f"min = {exp_loss_gradient.min().item():.8f} \t mean = {exp_loss_gradient.mean().item():.8f} "
-          f"\t max = {exp_loss_gradient.max().item():.8f} ")
+    print("exp_loss_gradient[:5] =", exp_loss_gradient[:5])
 
     return exp_loss_gradient.cpu().detach().numpy().flatten()
 
 
-def expected_loss_gradients(posteriors_list, n_samples, data_loader, device, mode="hidden"):
+def expected_loss_gradients(posteriors_list, n_samples, data_loader, device, mode):
     print(f"\n === Expected loss gradients on {n_samples} models from {len(posteriors_list)} posteriors"
           f" and {len(data_loader)} input images:")
     expected_loss_gradients = []
 
-    for image, label in data_loader:
-        if image.size(0) != 1:
-            raise ValueError("data_loader batch_size should be 1.")
-
-        input_size = image.size(1) * image.size(2) * image.size(3)
-        label = label.to(device).argmax(-1).to(device)
-        image = image.to(device).view(-1, input_size).to(device)
-        expected_loss_gradients.append(expected_loss_gradient(posteriors_list, n_samples, image, label, mode=mode,
-                                                              device=device))
+    for images, labels in data_loader:
+        for i in range(len(images)):
+            image = images[i]
+            label = labels[i]
+            # if image.size(0) != 1:
+            #     raise ValueError("data_loader batch_size should be 1.")
+            input_size = image.size(0) * image.size(1) * image.size(2)
+            label = label.to(device).argmax(-1).to(device)
+            image = image.to(device).view(-1, input_size).to(device)
+            expected_loss_gradients.append(expected_loss_gradient(posteriors_list, n_samples, image, label, mode=mode,
+                                                                  device=device))
 
     np_exp_loss_gradients = np.array(expected_loss_gradients)
+
+    # summary statistics along input points
+    mean_over_inputs = np.mean(np_exp_loss_gradients, axis=0) # len = 784
+    std_over_inputs = np.std(np_exp_loss_gradients, axis=0) # len = 784
+    print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20]} \n\nstd_over_inputs[:20] = {std_over_inputs[:20]} \t")
+
     filename = "expLossGradients_samples="+str(n_samples)+"_inputs="+str(len(np_exp_loss_gradients))\
                +"_posteriors="+str(len(posteriors_list))
-    save_to_pickle(np_exp_loss_gradients, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
+    # save_to_pickle(np_exp_loss_gradients, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
     return np_exp_loss_gradients
 
 
