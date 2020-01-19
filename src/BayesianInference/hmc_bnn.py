@@ -12,6 +12,7 @@ from pyro import poutine
 import numpy as np
 from utils import execution_time
 from BayesianInference.adversarial_attacks import expected_loss_gradients
+from BayesianInference.hidden_vi_bnn import test_conjecture
 
 
 class HMC_BNN(BNN):
@@ -29,6 +30,8 @@ class HMC_BNN(BNN):
         self.filepath = "bnn/"
 
     def run_chains(self, train_loader, num_steps=4, step_size=0.0855):
+        random.seed(0)
+
         pyro.clear_param_store()
         print("\nHMC inference for ", self.filename)
 
@@ -64,19 +67,19 @@ class HMC_BNN(BNN):
         n_posterior_samples = self.n_samples*self.n_chains
 
         # todo: old, bug on saving
-        # posterior_samples_dict = mcmc.get_samples(num_samples=n_posterior_samples)
+        posterior_samples_dict = mcmc.get_samples(num_samples=n_posterior_samples)
+        posterior_samples_list = [{k: v[i] for k, v in posterior_samples_dict.items()}
+                                  for i in range(n_posterior_samples)]
         # # print(posterior_samples_dict["module$$$out.weight"].shape)
         # # print(posterior_samples_dict["module$$$out.weight"][:][:10])
-        # posterior_samples_list = [{k: v[i] for k, v in posterior_samples_dict.items()}
-        #                           for i in range(n_posterior_samples)]
 
         # todo qua fa un sampling con ripetizione, non va bene
-        posterior_samples_list = []
-        for i in range(n_posterior_samples):
-            posterior_sample = mcmc.get_samples(num_samples=1)
-            # print(posterior_sample["module$$$out.weight"].shape)
-            # print(posterior_sample["module$$$out.weight"][:10])
-            posterior_samples_list.append(posterior_sample)
+        # posterior_samples_list = []
+        # for i in range(n_posterior_samples):
+        #     posterior_sample = mcmc.get_samples(num_samples=1)
+        #     # print(posterior_sample["module$$$out.weight"].shape)
+        #     # print(posterior_sample["module$$$out.weight"][:10])
+        #     posterior_samples_list.append(posterior_sample)
 
         return np.array(posterior_samples_list)
 
@@ -100,14 +103,14 @@ class HMC_BNN(BNN):
 
     def predict(self, inputs, posterior_samples):
         preds = []
-        for posterior_sample in posterior_samples:
-            model_weights = posterior_sample.items()
+        for posterior in posterior_samples:
+            model_weights = posterior.items()
             trace = poutine.trace(poutine.condition(self.model, model_weights)).get_trace(inputs.to(self.device))
             preds.append(trace.nodes['_RETURN']['value'])
-        # print(preds[0]) # predictions dal primo sample sui 10 input
-        pred = torch.stack(preds)
-        # print(pred.argmax(dim=2)[0])
-        return pred
+
+        preds = torch.stack(preds)
+        avg_preds = preds.mean(0)
+        return avg_preds
 
     def save(self, posterior_samples, relative_path=RESULTS):
         print("\nSaving posterior samples to:", relative_path+self.filepath+self.filename+".npy")
@@ -124,82 +127,38 @@ class HMC_BNN(BNN):
         total = 0.0
         correct = 0.0
         for images, labels in test_loader:
-            samples_predictions = self.predict(inputs=images.to(self.device).view(-1, self.input_size),
-                                  posterior_samples=posterior_samples)
-            # print(samples_predictions.shape)
-            # print(samples_predictions.mean(0).shape)
-            # print(samples_predictions.mean(0))
-            prediction = samples_predictions.mean(0).argmax(-1)
-            print("\npredictions[:10] =", prediction[:10])
+            predictions=self.predict(inputs=images.to(self.device).view(-1, self.input_size),
+                                                        posterior_samples=posterior_samples).argmax(dim=1)
+            print("\npredictions[:10] =", predictions[:10])
             print("labels[:10]      =", labels.argmax(-1)[:10])
             total += labels.size(0)
             # print("labels.size(0) =", labels.size(0))
-            correct += (prediction == labels.argmax(-1).to(self.device)).sum().item()
+            correct += (predictions == labels.argmax(-1).to(self.device)).sum().item()
         accuracy = 100 * correct / total
         print(f"\n === Accuracy on {len(posterior_samples)} sampled models = {accuracy:.2f}")
 
 
-def test_conjecture(sampled_models, bayesnn):#dataset_name, n_samples, n_inputs, device):
-    random.seed(0)
-
-    # # load bayesian model
-    # _, test_loader, data_format, input_shape = data_loaders(dataset_name=dataset_name,
-    #                                                         batch_size=n_inputs, n_inputs=n_inputs)
-    # pyro.clear_param_store()
-    #
-    # posteriors_list = []
-    # if dataset_name == "mnist":
-    #     relative_path=TRAINED_MODELS
-    #     trained_models = [
-    #         # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200", # dropout + log softmax
-    #         # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400", # dropout + log softmax
-    #         "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100", # log softmax
-    #         "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80", # log softmax
-    #         "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", # log softmax
-    #     ]
-    # else:
-    #     return AssertionError("wrong dataset name")
-    #
-    # # relative_path=RESULTS
-    # # trained_models = [
-    # #         "hidden_vi_mnist_inputs=10_lr=0.002_epochs=10",
-    # # ]
-
-    # compute expected loss gradients
-    _, test_loader, _, _ = data_loaders(dataset_name=dataset_name, batch_size=1, n_inputs=n_inputs)
-    exp_loss_gradients = expected_loss_gradients(posteriors_list=sampled_models,
-                                                 n_samples=n_samples,
-                                                 data_loader=test_loader,
-                                                 device="cuda", mode="hidden")
-
-    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_samples=" + str(n_samples) \
-               + "_posteriors=" + str(len(posteriors_list))
-    plot_heatmap(columns=exp_loss_gradients, path=RESULTS + "bnn/", filename=filename + "_heatmap.png",
-                 xlab="pixel idx", ylab="image idx",
-                 title="Expected loss gradients on {} samples from {} posteriors".format(n_samples, len(posteriors_list)))
-
 def main(args):
-    random.seed(234)
+    random.seed(0)
     train_loader, _, _, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=1, n_inputs=args.inputs)
+        data_loaders(dataset_name=args.dataset, batch_size=10, n_inputs=args.inputs)
 
     bayesnn = HMC_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset, n_chains=args.chains,
                       warmup=args.warmup, n_samples=args.samples, n_inputs=args.inputs)
     sampled_models = bayesnn.run_chains(train_loader=train_loader)
+
+    # todo risolvere il problema del salvataggio
     # bayesnn.save(posterior_samples=sampled_models)
     # sampled_models = bayesnn.load(relative_path=RESULTS)
 
-    # bayesnn.evaluate(test_loader=train_loader, posterior_samples=sampled_models)
-    # _, test_loader, _, _ = data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=10000)
-    # bayesnn.evaluate(test_loader=test_loader, posterior_samples=sampled_models)
+    bayesnn.evaluate(test_loader=train_loader, posterior_samples=sampled_models)
 
-    # test_conjecture(dataset_name=args.dataset, n_samples=args.samples, n_inputs=args.inputs,
-    #                 device=args.device)
+    n_samples_list = [1,5,10]#,30,50] # max = args.samples*args.chains
 
-    exp_loss_gradients = expected_loss_gradients(posteriors_list=[bayesnn],
-                                                 n_samples=args.samples*args.chains,
-                                                 data_loader=train_loader,
-                                                 device="cuda", mode="hmc")
+    for n_samples in n_samples_list:
+        test_conjecture(posteriors=sampled_models[:n_samples], data_loader=train_loader, n_samples=n_samples,
+                        n_inputs=args.inputs, device="cuda", dataset_name=args.dataset, mode="hmc",
+                        baseclass=bayesnn)
 
 
 if __name__ == "__main__":

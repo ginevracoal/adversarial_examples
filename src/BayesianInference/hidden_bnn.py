@@ -130,10 +130,10 @@ class HiddenBNN(nn.Module):
             res.append(guide_trace.nodes['logits']['value'])
         return torch.stack(res, dim=0)
 
-    def evaluate(self, test_loader, n_samples):
+    def evaluate(self, data_loader, n_samples):
         total = 0.0
         correct = 0.0
-        for images, labels in test_loader:
+        for images, labels in data_loader:
             total += labels.size(0)
             predictions = self.forward(images.to(self.device), n_samples=n_samples)
             pred = predictions.mean(0).argmax(-1)

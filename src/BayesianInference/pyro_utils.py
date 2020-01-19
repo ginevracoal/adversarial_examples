@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import random
 
 def data_loaders(dataset_name, batch_size, n_inputs):
-    random.seed(154)
+    random.seed(0)
     x_train, y_train, x_test, y_test, input_shape, num_classes, data_format = \
         load_dataset(dataset_name=dataset_name, n_samples=n_inputs, test=False)
 

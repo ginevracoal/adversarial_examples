@@ -31,7 +31,7 @@ class VI_BNN(HiddenBNN):
         print("\nSVI inference for ", filename)
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
         optim = pyroopt.Adam({"lr": lr})
-        elbo = TraceMeanField_ELBO()
+        elbo = Trace_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
         loss_list = []
@@ -87,54 +87,83 @@ class VI_BNN(HiddenBNN):
 # === MAIN EXECUTIONS ===
 
 
-
-def test_conjecture(posteriors_list, data_loader, dataset_name, n_samples, n_inputs, device):
+def test_conjecture(posteriors, data_loader, dataset_name, n_samples, n_inputs, device, mode, baseclass=None):
     random.seed(0)
     pyro.clear_param_store()
 
-    loss_gradients = expected_loss_gradients(posteriors_list=posteriors_list,
+    loss_gradients = expected_loss_gradients(posteriors=posteriors, baseclass=baseclass,
                                                  n_samples=n_samples,
                                                  data_loader=data_loader,
-                                                 device=device, mode="vi")
+                                                 device=device, mode=mode)
 
-    filename = "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + "_samples=" + str(n_samples) \
-               + "_posteriors=" + str(len(posteriors_list))
+    filename = "expLossGradients_inputs=" + str(len(data_loader.dataset)) \
+               + "_samples=" + str(len(posteriors) * n_samples) + "_mode=" + str(mode) + ".pkl"
+
+    # loss_gradients = load_from_pickle(RESULTS + "bnn/"+ filename+".pkl").cpu().detach().numpy()
 
     plot_heatmap(columns=loss_gradients, path=RESULTS + "bnn/", filename=filename + "_heatmap.png",
                  xlab="pixel idx", ylab="image idx",
-                 title=f"Expected loss gradients - {n_samples} samples x {len(posteriors_list)} posteriors")
+                 title=f"Expected loss gradients on {n_samples*len(posteriors)} posterior samples")
+
+
+def ensemble_evaluation(posteriors, data_loader, n_samples, device):
+    total = 0.0
+    correct = 0.0
+    for images, labels in data_loader:
+        total += labels.size(0)
+        predictions = []
+        for posterior in posteriors:
+            post_predictions = posterior.forward(images.to(device), n_samples=n_samples)
+            predictions.append(post_predictions.mean(0))
+        predictions = torch.stack(predictions)
+        ensemble_prediction = predictions.mean(0).argmax(-1)
+        correct += (ensemble_prediction == labels.to(device).argmax(-1)).sum().item()
+    # print("\npreds[:10]=", ensemble_prediction[:10],"\nlabels[:10]=", labels[:10].to(device).argmax(-1))
+    accuracy = 100 * correct / total
+    print(f"\n === Ensemble accuracy on {n_samples} sampled models from {len(posteriors)} posteriors = {accuracy:.2f}")
 
 
 def main(args):
 
     batch_size=10
-    train_loader, _, data_format, input_shape = \
+    train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=args.dataset, batch_size=batch_size, n_inputs=args.inputs)
     pyro.clear_param_store()
     bayesnn = VI_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset)
 
     # bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs)
+    # bayesnn.evaluate(data_loader=train_loader, n_samples=args.samples)
 
-    posteriors = [
+    posteriors_names = [
         # bayesnn
         # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200", # dropout + log softmax
         # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=400", # dropout + log softmax
-        # "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",  # log softmax
-        # "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",  # log softmax
-        # "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",  # log softmax
-        "hidden_vi_mnist_inputs=100_lr=0.02_epochs=50"
+        "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",  # log softmax
+        "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",  # log softmax
+        "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",  # log softmax
+        "hidden_vi_mnist_inputs=1000_lr=0.002_epochs=200" # log softmax
     ]
 
-    posteriors = bayesnn.load_posteriors(posteriors_names=posteriors, relative_path=RESULTS)
-
-    bayesnn.evaluate(test_loader=train_loader, n_samples=args.samples)
+    posteriors = bayesnn.load_posteriors(posteriors_names=posteriors_names, relative_path=TRAINED_MODELS)
 
     # attack_network(dataset_name=args.dataset, n_inputs=args.inputs, device=args.device, n_samples=args.samples)
 
-    test_conjecture(posteriors_list=posteriors, data_loader=train_loader, n_samples=args.samples,
-                    n_inputs=args.inputs, device=args.device, dataset_name=args.dataset)
+    # ensemble_evaluation(posteriors=posteriors, data_loader=train_loader, n_samples=args.samples, device=args.device)
+
+    # test_conjecture(posteriors_list=posteriors, data_loader=train_loader, n_samples=args.samples,
+    #                 n_inputs=args.inputs, device=args.device, dataset_name=args.dataset)
+
+    n_samples_list=[1]#,5,10,30,50]
+
+    for n_samples in n_samples_list:
+        test_conjecture(posteriors=posteriors, data_loader=test_loader, n_samples=n_samples,
+                        n_inputs=args.inputs, device=args.device, dataset_name=args.dataset, mode="vi")
 
     # plot_expectation_over_images(dataset_name=args.dataset, n_inputs=args.inputs, n_samples_list=n_samples_list)
+    plot_exp_loss_gradients_norms(dataset_name=args.dataset, n_inputs=args.inputs, n_samples_list=n_samples_list,
+                                  n_posteriors=len(posteriors))
+    # plot_partial_derivatives(dataset_name=args.dataset, n_inputs=args.inputs, n_samples_list=n_samples_list,
+    #                          n_posteriors=len(posteriors))
 
 
 if __name__ == "__main__":
