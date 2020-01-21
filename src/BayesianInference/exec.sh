@@ -28,7 +28,7 @@ SCRIPT="hidden_vi_bnn"
 DATASET_NAME="mnist"
 N_INPUTS="1000"
 N_SAMPLES="5"
-EPOCHS="400"
+EPOCHS="200"
 LR="0.002"
 DEVICE="cuda"
 

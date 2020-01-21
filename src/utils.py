@@ -6,12 +6,21 @@ import pickle as pkl
 import time
 import os
 import matplotlib.pyplot as plt
+import seaborn as sns
 import math
 import tensorflow as tf
 import torch
 from directories import *
+from pandas import DataFrame
 
 TEST_SIZE = 20
+
+
+def execution_time(start, end):
+    hours, rem = divmod(end - start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print("\nExecution time = {:0>2}:{:0>2}:{:0>2}".format(int(hours), int(minutes), int(seconds)))
+
 
 ######################
 # data preprocessing #
@@ -166,7 +175,7 @@ def save_to_pickle(data, relative_path, filename):
     """ saves data to pickle """
 
     filepath = relative_path + filename
-    print("Saving pickle: ", filepath)
+    print("\nSaving pickle: ", filepath)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'wb') as f:
         pkl.dump(data, f)
@@ -179,7 +188,7 @@ def unpickle(file):
     return data
 
 
-def load_from_pickle(path, test):
+def load_from_pickle(path, test=False):
     """ loads data from pickle containing: x_test, y_test."""
     print("\nLoading from pickle: ",path)
     with open(path, 'rb') as f:
@@ -195,42 +204,20 @@ def load_from_pickle(path, test):
 # plot utils #
 ##############
 
-def plot_loss_accuracy(dict, path):
-    import matplotlib.pyplot as plt
-    fig, (ax1, ax2) = plt.subplots(2, figsize=(12,8))
-    ax1.plot(dict['loss'])
-    ax1.set_title("loss")
-    ax2.plot(dict['accuracy'])
-    ax2.set_title("accuracy")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fig.savefig(path)
+def covariance_eigendec(np_matrix):
+    print("\nmatrix[rows=vars, cols=obs] = \n", np_matrix)
+    C = np.cov(np_matrix)
+    print("\ncovariance matrix = \n", C)
 
-def plot_images(image_data_list, cmap=None, test=False, labels=None):
-    """
-    Plots the first `n_images` images of each element in image_data_list, on different rows.
+    eVe, eVa = np.linalg.eig(C)
 
-    :param image_data_list: list of sets of images to plot
-    :param cmap: colormap  = gray or None
-    :param test: if True it does not hang on the image
-    """
-
-    n_images = 3
-    fig, axs = plt.subplots(nrows=len(image_data_list), ncols=n_images, figsize=(n_images, 1.5*len(image_data_list)))
-    # fig.suptitle("CIFAR10 projection", fontsize=20, y=0.95)
-    if image_data_list[0].shape[3] == 1:
-        cmap = "gray"
-
-    for group in range(len(image_data_list)):
-        for im_idx in range(n_images):
-            axs[group, im_idx].imshow(np.squeeze(image_data_list[group][im_idx]), cmap=cmap)
-            if labels:
-                axs[group, 1].set_title(labels[group])
-
-    if test is False:
-        # If not in testing mode, block imshow.
-        plt.show(block=False)
-        input("Press ENTER to exit")
-        exit()
+    plt.scatter(np_matrix[:, 0], np_matrix[:, 1])
+    for e, v in zip(eVe, eVa.T):
+        plt.plot([0, 3 * np.sqrt(e) * v[0]], [0, 3 * np.sqrt(e) * v[1]], 'k-', lw=2)
+    plt.title('Transformed Data')
+    plt.axis('equal')
+    os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
+    plt.savefig(RESULTS+"covariance.png")
 
 
 def rgb2gray(rgb):
@@ -336,4 +323,42 @@ def _set_session(device, n_jobs):
     # print("check cuda: ", tf.test.is_built_with_cuda())
     # print("check gpu: ", tf.test.is_gpu_available())
     return sess
+
+# Plot utils
+
+def plot_heatmap(columns, path, filename, xlab=None, ylab=None, title=None, yticks=None):
+    columns = np.array(columns)
+    # print(columns.shape)
+    fig, ax = plt.subplots(figsize=(15, 6), dpi=400)
+    sns.heatmap(columns, ax=ax)
+    if xlab:
+        ax.set_xlabel(xlab)
+    if ylab:
+        ax.set_ylabel(ylab)
+    if title:
+        ax.set_title(title)
+    if yticks:
+        ax.set_yticklabels(yticks)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path+filename)
+
+
+def plot_loss_accuracy(dict, path):
+    fig, (ax1, ax2) = plt.subplots(2, figsize=(12,8))
+    ax1.plot(dict['loss'])
+    ax1.set_title("loss")
+    ax2.plot(dict['accuracy'])
+    ax2.set_title("accuracy")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path)
+
+
+def violin_plot(data, path, filename, xlab=None, ylab=None, title=None, yticks=None):
+    fig, axes = plt.subplots(figsize=(15, 6))
+    # sns.set(style="whitegrid")
+    sns.violinplot(data=data, ax=axes, orient='v')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path + filename)
+
+
 

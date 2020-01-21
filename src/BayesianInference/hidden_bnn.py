@@ -9,8 +9,13 @@ import pyro.distributions as dist
 from torch.distributions import constraints
 import os
 import numpy as np
+import random
+
 
 softplus = torch.nn.Softplus()
+dim = -1
+
+DEBUG=False
 
 
 class NN(nn.Module):
@@ -20,16 +25,16 @@ class NN(nn.Module):
         self.model = nn.Sequential(#nn.Dropout(p=0.2),
                                 nn.Linear(input_size, hidden_size),
                                 # nn.Dropout(p=0.5),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, hidden_size),
+                                # nn.LeakyReLU(),
+                                # nn.Linear(hidden_size, hidden_size),
                                 # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, hidden_size),
                                 # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, n_classes),
-                                nn.LogSoftmax(dim=-1))
-                                # nn.Softmax(dim=-1))
+                                nn.LogSoftmax(dim=dim))
+                                # nn.Softmax(dim=dim))
                                 # nn.Sigmoid())
 
     def forward(self, inputs):
@@ -55,8 +60,8 @@ class HiddenBNN(nn.Module):
         a2_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
         a2_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
         # a2_dropout = torch.tensor(1.0)
-        a3_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
-        a3_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
+        # a3_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
+        # a3_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
         # a3_dropout = torch.tensor(1.0)
         a4_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
         a4_scale = torch.ones(self.hidden_size+1, self.n_classes).to(self.device)
@@ -67,16 +72,16 @@ class HiddenBNN(nn.Module):
             # print("h1 weights = ", h1)
             h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale, #a2_dropout*a2_scale
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale, #a3_dropout*a3_scale
-                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-            logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
-                                                           # non_linearity=lambda x: nnf.softmax(x, dim=-1),
-                                                           # non_linearity=lambda x: torch.sigmoid(x),
+            # h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale, #a3_dropout*a3_scale
+            #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            # logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
+            logits = pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
+                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=dim),
+                                                           # non_linearity=lambda x: nnf.softmax(x, dim=dim),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
-            # print("logits[0] =",logits[0])
-            cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
+
+            pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
             return logits
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
@@ -94,9 +99,9 @@ class HiddenBNN(nn.Module):
                               constraint=constraints.greater_than(0.01)).to(self.device)
         # a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
         #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
-        a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
-        a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
-                              constraint=constraints.greater_than(0.01)).to(self.device)
+        # a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
+        # a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
+        #                       constraint=constraints.greater_than(0.01)).to(self.device)
         # a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
         #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
         a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.hidden_size+1, self.n_classes)).to(self.device)
@@ -110,25 +115,29 @@ class HiddenBNN(nn.Module):
 
             h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,#a2_dropout * a2_scale
                                                    non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-            h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale,#a3_dropout * a3_scale,
-                                                   non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-            logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=-1),
-                                                           # non_linearity=lambda x: torch.sigmoid(x),
-                                                           # non_linearity=lambda x: nnf.softmax(x, dim=-1),
+            # h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale,#a3_dropout * a3_scale,
+            #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+            # logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
+            logits = pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
+                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=dim),
+                                                           # non_linearity=lambda x: nnf.softmax(x, dim=dim),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
-            # print("logits =",logits)
+            # print("logits =",logits.shape)
+            # print(logits[0].exp())
+            # print(logits[0].exp().sum())
 
     def forward(self, inputs, n_samples):
+        random.seed(0)
         res = []
-        # print("loaded a1 mean weights: ",pyro.get_param_store()["a1_mean"])
-        # print("a1_mean", pyro.get_param_store()["a1_mean"])
-        # print("a2_scale",pyro.get_param_store()["a2_scale"])
+        if DEBUG:
+            print("a1_mean", pyro.get_param_store()["a1_mean"])
+            print("a2_scale",pyro.get_param_store()["a2_scale"])
         for _ in range(n_samples):
             guide_trace = poutine.trace(self.guide).get_trace(inputs)
             res.append(guide_trace.nodes['logits']['value'])
-        return torch.stack(res, dim=0)
+        res = torch.stack(res, dim=0)
+        return res
 
     def evaluate(self, data_loader, n_samples):
         total = 0.0
@@ -137,10 +146,15 @@ class HiddenBNN(nn.Module):
             total += labels.size(0)
             predictions = self.forward(images.to(self.device), n_samples=n_samples)
             pred = predictions.mean(0).argmax(-1)
-            correct += (pred == labels.to(self.device).argmax(-1)).sum().item()
-            # print(predictions, "\npred=", pred, "\tlabel=", labels.to(self.device).argmax(-1))
+            labels = labels.to(self.device).argmax(-1)
+            correct += (pred == labels).sum().item()
+
+            if DEBUG:
+                print("\npred[:5]=", pred[:5], "\tlabels[:5]=", labels[:5])
+
         accuracy = 100 * correct / total
         print(f"\n === Accuracy on {n_samples} sampled models = {accuracy:.2f}")
+        return accuracy
 
     def save(self, filename, relative_path=RESULTS):
         filepath = relative_path+"bnn/"+filename+".pr"
