@@ -1,4 +1,7 @@
 import sys
+
+from BayesianInference.pyro_utils import slice_data_loader
+
 sys.path.append(".")
 from directories import *
 import os
@@ -15,42 +18,48 @@ import matplotlib.colors as mc
 
 
 def distplot_avg_gradients_over_inputs(filename):
-    loss_gradients = load_from_pickle(path=RESULTS+"bnn/"+filename)
+    loss_gradients = load_from_pickle(path=RESULTS+"bnn/"+filename+".pkl")
 
     plt.subplots(figsize=(10, 6), dpi=200)
     sns.set_palette("RdBu")
-    for n_inputs_idx in range(len(loss_gradients)):
-        # take the maximum number of samples
-        sns.distplot(loss_gradients[n_inputs_idx][-1]["avg_loss_gradient"],  hist=False, rug=True,
-                     kde_kws={'shade': True, 'linewidth': 2}, label=loss_gradients[n_inputs_idx][-1]["n_samples"])
+    for n_samples_idx in range(len(loss_gradients[0])):
+        gradients = loss_gradients[-1][n_samples_idx]
+    # for n_inputs_idx in range(len(loss_gradients)):
+    #     gradients = loss_gradients[n_inputs_idx][-1]
+    #     print(gradients["avg_loss_gradient"])
+        ax = sns.distplot(gradients["avg_loss_gradient"],  hist=False, rug=True,
+                     kde_kws={'shade': True, 'linewidth': 2}, kde=True,
+                     label=gradients["n_samples"])
+        ax.set_yscale('log')
 
-    # plt.title('Density Plot with Rug Plot for Alaska Airlines')
-    plt.ylabel('Density')
+    plt.ylabel('log(Density)')
 
     plt.legend()
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
     plt.savefig(RESULTS + "distPlot_avgOverImages.png")
 
 
-def plot_gradients_increasing_inputs(posterior, n_samples, device, dataset_name="mnist", mode="vi"):
-    random.seed(0)
-    posterior = copy.deepcopy(posterior)
+def plot_gradients_increasing_inputs(posterior, n_samples_list, n_inputs_list, device, data_loader, mode="vi"):
 
-    loss_gradients_increasing_inputs = []
-    for n_inputs in [10, 20, 30]:
-        train_loader, _, _, _ = data_loaders(dataset_name=dataset_name, batch_size=128, n_inputs=n_inputs, shuffle=True)
-        posterior.evaluate(data_loader=train_loader, n_samples=n_samples)
-        loss_gradients = expected_loss_gradients(posterior=posterior, n_samples=n_samples, data_loader=train_loader,
-                                                device=device, mode=mode)
-        last_gradients = loss_gradients[len(loss_gradients)-8:len(loss_gradients)]
-        reshaped_gradients = [{"image":image.reshape([28,28,1])} for image in last_gradients]
-        loss_gradients_increasing_inputs.append(reshaped_gradients)
-    images = np.array(loss_gradients_increasing_inputs)
-    plot_images_grid(images, path=RESULTS, filename="mnist_lossGradients_increasingInputs.png")
+    for n_samples in n_samples_list:
+        random.seed(0)
+        posterior = copy.deepcopy(posterior)
+
+        loss_gradients_increasing_inputs = []
+        for n_inputs in n_inputs_list:
+            data_loader_slice = slice_data_loader(data_loader, slice_size=n_inputs)
+            # posterior.evaluate(data_loader=data_loader_slice, n_samples=n_samples)
+            loss_gradients = expected_loss_gradients(posterior=posterior, n_samples=n_samples,
+                                                     data_loader=data_loader_slice, device=device, mode=mode)
+            last_gradients = loss_gradients[len(loss_gradients)-8:len(loss_gradients)]
+            reshaped_gradients = [{"image":image.reshape([28,28,1])} for image in last_gradients]
+            loss_gradients_increasing_inputs.append(reshaped_gradients)
+        images = np.array(loss_gradients_increasing_inputs)
+        plot_images_grid(images, path=RESULTS, filename="mnist_lossGradients_inputs="+str(n_inputs_list)+".png")
 
 
-def plot_avg_over_images_grid(filename="avgOverImages.pkl"):
-    images = load_from_pickle(path=RESULTS+"bnn/"+filename)
+def plot_avg_over_images_grid(filename):
+    images = load_from_pickle(path=RESULTS+"bnn/"+filename+".pkl")
     # print(images.shape)
     fig, axs = plt.subplots(nrows=images.shape[0], ncols=images.shape[1], figsize=(15,10))
 
@@ -84,7 +93,6 @@ def plot_expectation_over_images(dataset_name, n_inputs, n_samples_list, rel_pat
 
 def plot_gradients_on_single_image(data_loader, posterior, n_samples_list, device, dataset_name="mnist"):
     random.seed(0)
-    # pyro.clear_param_store()
     posterior = copy.deepcopy(posterior)
     accuracy_over_samples = [posterior.evaluate(data_loader=data_loader, n_samples=n_samples)
                              for n_samples in n_samples_list]
@@ -107,7 +115,7 @@ def plot_gradients_on_single_image(data_loader, posterior, n_samples_list, devic
     filename = "loss_gradients_singleImage_increasingSamples_"+str(dataset_name)+".png"
     plot_images_grid(loss_gradients, path=RESULTS, filename=filename)
 
-def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, pnorm=2):
+def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, model_idx, filename, pnorm=2):
     exp_loss_gradients_norms = []
     for idx, n_samples in enumerate(n_samples_list):
         # print(exp_loss_gradients[idx].shape)
@@ -115,15 +123,36 @@ def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, 
         norms = [np.linalg.norm(x=gradient, ord=pnorm).item() for gradient in exp_loss_gradients[idx]]
         exp_loss_gradients_norms.append(norms)
 
-    print("exp_loss_gradients_norms.shape =", np.array(exp_loss_gradients_norms).shape)
+    print("\nexp_loss_gradients_norms.shape =", np.array(exp_loss_gradients_norms).shape)
     yticks = [n_samples for n_samples in n_samples_list]
+
     plot_heatmap(columns=exp_loss_gradients_norms, path=RESULTS,
-                 filename="exp_loss_gradients_norms_inputs=" + str(n_inputs) + "_pnorm=" + str(pnorm) + "_heatmap.png",
+                 filename=filename+"_pnorm=" + str(pnorm) + "_norms_model="+str(model_idx)+".png",
                  xlab="image idx", ylab="n. posterior samples", yticks=yticks,
                  title="Expected loss gradients norms on {} images ".format(n_inputs))
 
+    def distplot(gradients_norms_samples, n_samples_list):
+        n_inputs = len(gradients_norms_samples[0])
+        plt.subplots(figsize=(10, 6), dpi=200)
+        sns.set_palette("RdBu")
+        for idx, n_samples in enumerate(n_samples_list):
+            gradients_norms = gradients_norms_samples[idx]
+            ax = sns.distplot(gradients_norms, hist=False, rug=True,
+                              kde_kws={'shade': True, 'linewidth': 2},# kde=True,
+                              label=str(n_samples))
+            # ax.set_xscale('log')
+            plt.ylabel('Density')
+            plt.xlabel('norm')
+            plt.title(f"Expected loss gradients norms on {n_inputs} inputs")
 
-def plot_partial_derivatives(dataset_name, n_inputs, n_samples_list, n_posteriors=1, rel_path=RESULTS):
+            plt.legend(title="n_samples")
+            os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
+            plt.savefig(RESULTS+"expLossGradients_norms_distplot_inputs="+str(n_inputs)+"model="+str(model_idx)+".png")
+
+    distplot(exp_loss_gradients_norms, n_samples_list)
+
+
+def catplot_partial_derivatives(filename, n_inputs, n_samples_list, rel_path=RESULTS):
     import pandas as pd
     import seaborn as sns
     import matplotlib.pyplot as plt
@@ -131,21 +160,19 @@ def plot_partial_derivatives(dataset_name, n_inputs, n_samples_list, n_posterior
     exp_loss_grad = []
     n_samples_column = []
     for i, n_samples in enumerate(n_samples_list):
-        filename = "expLossGradients_samples=" + str(n_samples) + "_inputs=" + str(n_inputs) \
-                   + "_posteriors=" + str(n_posteriors) + ".pkl"
-        loss_gradients = load_from_pickle(path=rel_path + "bnn/" + filename)
-        avg_partial_derivatives = loss_gradients.mean(0).log().cpu().detach().numpy()  # .log()
+        loss_gradients = load_from_pickle(path=rel_path + "bnn/" + filename+".pkl")
+        loss_gradients = torch.tensor(loss_gradients)
+        avg_partial_derivatives = loss_gradients.mean(0).log()#.cpu().detach().numpy()#log()
         # for j in range(loss_gradients.shape[0]): # images
         for k in range(len(avg_partial_derivatives)):  # partial derivatives
             exp_loss_grad.append(avg_partial_derivatives[k])
-            n_samples_column.append(n_samples * n_posteriors)
+            n_samples_column.append(n_samples)
 
     df = pd.DataFrame(data={"log(loss partial derivatives)": exp_loss_grad, "n_samples": n_samples_column})
     print(df.head())
     # print(df.describe(include='all'))
 
-    filename = "partial_derivatives_inputs=" + str(n_inputs) \
-               + "_posteriors=" + str(n_posteriors) + "_catplot.png"
+    filename = "partial_derivatives_inputs=" + str(n_inputs) + "_catplot.png"
 
     plot = sns.catplot(data=df, y="log(loss partial derivatives)", x="n_samples", kind="boxen")
     plot.fig.set_figheight(8)

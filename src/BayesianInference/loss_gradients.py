@@ -1,8 +1,9 @@
+import itertools
 import sys
 sys.path.append(".")
 from directories import *
 from utils import plot_heatmap
-from BayesianInference.pyro_utils import data_loaders
+from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 import torch
 import copy
 from utils import save_to_pickle
@@ -20,25 +21,25 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
     if mode == "vi":
         x = copy.deepcopy(image)
         x.requires_grad = True
-        posterior = copy.deepcopy(posterior)
-
+        posterior_copy = copy.deepcopy(posterior)
         # posterior is a bayesnn object which performs random sampling from n_samples posteriors on forward calls
-        log_output = posterior.forward(inputs=x, n_samples=n_samples).to(device)
+        log_output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
         avg_output = log_output.mean(0)
 
         if DEBUG:
             print("\ntrue label =", label.item())
-            print("\nlog_output[:5]=", log_output[:5].cpu().detach().numpy())
+            # print("\nlog_output[:5]=", log_output[:5].cpu().detach().numpy())
             print("\nlog_output shape=", log_output.shape)
             # print("\noutput=", output[:10].cpu().detach().numpy())
-            print("\navg_output[:5]=",avg_output[:5].cpu().detach().numpy())
-            print("\navg_output shape=",avg_output.shape)
-            print("\navg_output.exp() =", avg_output.exp())
-            print("\ncheck prob distribution:", avg_output.exp().sum(dim=1).item())
+            print("avg_output shape=",avg_output.shape)
+            print("avg_output[:5]=",avg_output[:5].cpu().detach().numpy())
+            # print("\navg_output.exp() =", avg_output.exp().cpu().detach().numpy())
+            print("check prob distribution:", avg_output.sum(dim=1).item())
+            # print("\ncheck prob distribution:", avg_output.exp().sum(dim=1).item())
 
-        # loss = categorical_cross_entropy(y_pred=avg_output, y_true=label) # use with softmax
-        # loss = torch.nn.CrossEntropyLoss()(avg_output, label)
-        loss = torch.nn.NLLLoss()(avg_output, label) # use with log softmax
+        ## loss = categorical_cross_entropy(y_pred=avg_output, y_true=label)  # use with softmax
+        loss = torch.nn.CrossEntropyLoss()(avg_output, label) # use with softmax
+        # loss = torch.nn.NLLLoss()(avg_output, label)  # use with log softmax
 
         loss.backward()
         loss_gradient = copy.deepcopy(x.grad.data[0])
@@ -46,7 +47,8 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
         if DEBUG:
             print("\nloss = ", loss.item())
             print("\nloss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy()) # len = 784
-        posterior.zero_grad()
+        posterior_copy.zero_grad()
+        del posterior_copy
         del x
 
     # elif mode == "hmc":
@@ -68,8 +70,8 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
     exp_loss_gradient = torch.stack(loss_gradients).mean(dim=0)
     # print("\nexp_loss_gradient[:20] =", exp_loss_gradient[:20])
 
-    print(f"mean_over_features = {exp_loss_gradient.mean(0).item()} "
-          f"\tstd_over_features = {exp_loss_gradient.std(0).item()}")
+    # print(f"mean_over_features = {exp_loss_gradient.mean(0).item()} "
+    #       f"\tstd_over_features = {exp_loss_gradient.std(0).item()}")
 
     return exp_loss_gradient
 
@@ -90,26 +92,34 @@ def expected_loss_gradients(posterior, n_samples, data_loader, device, mode, bas
     mean_over_inputs = exp_loss_gradients.mean(0)  # len = 784
     std_over_inputs = exp_loss_gradients.std(0)  # len = 784
 
-    print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20].cpu().detach().flatten()} "
-          f"\n\nstd_over_inputs[:20] = {std_over_inputs[:20].cpu().detach().flatten()}")
+    print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20].cpu().detach()} "
+          f"\n\nstd_over_inputs[:20] = {std_over_inputs[:20].cpu().detach()}")
+
     print(f"\nexp_mean = {exp_loss_gradients.mean()} \t exp_std = {exp_loss_gradients.std()}")
 
     return exp_loss_gradients.cpu().detach().numpy()
 
 
-def average_over_images(posterior, n_inputs_list, n_samples_list, device, dataset_name, filename, mode="vi"):
+def expected_loss_gradients_multiple_posteriors(posteriors_list, n_samples, data_loader, device, mode, baseclass=None):
+    for posterior in posteriors_list:
+        expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None)
+
+
+def average_over_images(posterior, n_inputs_list, n_samples_list, device, data_loader, filename, mode="vi"):
     avg_over_images = []
     for n_inputs in n_inputs_list:
+        data_loader_slice = slice_data_loader(data_loader=data_loader, slice_size=n_inputs)
+
         loss_gradients = []
-        train_loader = data_loaders(dataset_name=dataset_name, batch_size=128, n_inputs=n_inputs, shuffle=True)[0]
         for n_samples in n_samples_list:
-            accuracy = posterior.evaluate(data_loader=train_loader, n_samples=n_samples)
+            accuracy = posterior.evaluate(data_loader=data_loader_slice, n_samples=n_samples)
             loss_gradient = expected_loss_gradients(posterior=posterior,
                                                     n_samples=n_samples,
-                                                    data_loader=train_loader,
+                                                    data_loader=data_loader_slice,
                                                     device=device, mode=mode)
 
-            plot_heatmap(columns=loss_gradients, path=RESULTS + "bnn/", filename=filename + "_gradient_imageidx.png",
+            plot_heatmap(columns=loss_gradient, path=RESULTS + "bnn/",
+                         filename="lossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_heatmap.png",
                          xlab="pixel idx", ylab="image idx",
                          title=f"Loss gradients pixel components on {n_samples} sampled posteriors")
 
@@ -119,7 +129,7 @@ def average_over_images(posterior, n_inputs_list, n_samples_list, device, datase
         avg_over_images.append(loss_gradients)
 
     avg_over_images = np.array(avg_over_images)
-    save_to_pickle(data=avg_over_images, relative_path=RESULTS, filename=filename)
+    save_to_pickle(data=avg_over_images, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
 
 
 # === Loss functions ===

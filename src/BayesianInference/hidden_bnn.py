@@ -13,7 +13,6 @@ import random
 
 
 softplus = torch.nn.Softplus()
-dim = -1
 
 DEBUG=False
 
@@ -22,6 +21,7 @@ class NN(nn.Module):
     def __init__(self, input_size, hidden_size, n_classes=10):
         super(NN, self).__init__()
         self.n_classes = n_classes
+        self.dim = 1
         self.model = nn.Sequential(#nn.Dropout(p=0.2),
                                 nn.Linear(input_size, hidden_size),
                                 # nn.Dropout(p=0.5),
@@ -33,9 +33,8 @@ class NN(nn.Module):
                                 # nn.Dropout(p=0.5),
                                 nn.LeakyReLU(),
                                 nn.Linear(hidden_size, n_classes),
-                                nn.LogSoftmax(dim=dim))
-                                # nn.Softmax(dim=dim))
-                                # nn.Sigmoid())
+                                # nn.LogSoftmax(dim=self.dim))
+                                nn.Softmax(dim=self.dim))
 
     def forward(self, inputs):
         return self.model(inputs)
@@ -76,8 +75,8 @@ class HiddenBNN(nn.Module):
             #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             # logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
             logits = pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=dim),
-                                                           # non_linearity=lambda x: nnf.softmax(x, dim=dim),
+                                                           # non_linearity=lambda x: nnf.log_softmax(x, dim=self.net.dim),
+                                                           non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
 
@@ -119,8 +118,8 @@ class HiddenBNN(nn.Module):
             #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
             # logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
             logits = pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
-                                                           non_linearity=lambda x: nnf.log_softmax(x, dim=dim),
-                                                           # non_linearity=lambda x: nnf.softmax(x, dim=dim),
+                                                           # non_linearity=lambda x: nnf.log_softmax(x, dim=self.net.dim),
+                                                           non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
                                                            KL_factor=kl_factor,
                                                            include_hidden_bias=False))
             # print("logits =",logits.shape)
@@ -147,10 +146,12 @@ class HiddenBNN(nn.Module):
             predictions = self.forward(images.to(self.device), n_samples=n_samples)
             pred = predictions.mean(0).argmax(-1)
             labels = labels.to(self.device).argmax(-1)
-            correct += (pred == labels).sum().item()
 
             if DEBUG:
                 print("\npred[:5]=", pred[:5], "\tlabels[:5]=", labels[:5])
+
+            correct += (pred == labels).sum().item()
+
 
         accuracy = 100 * correct / total
         print(f"\n === Accuracy on {n_samples} sampled models = {accuracy:.2f}")

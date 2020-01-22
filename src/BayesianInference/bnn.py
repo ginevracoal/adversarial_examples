@@ -29,7 +29,8 @@ class NN(nn.Module):
         output = torch.relu(output)
         output = self.out(output)
         # output = torch.sigmoid(output)
-        output = nnf.log_softmax(output, dim=-1)
+        # output = nnf.log_softmax(output, dim=-1)
+        output = nnf.softmax(output, dim=1)
         return output
 
 
@@ -63,7 +64,7 @@ class BNN(nn.Module):
         outb_prior = pyro.sample('outb_prior', Normal(loc=outb_mean, scale=outb_scale).independent(1))
 
         out = nnf.leaky_relu(torch.matmul(flat_inputs,fc1w_prior) + fc1b_prior)
-        logits = nnf.log_softmax(torch.matmul(out,outw_prior) + outb_prior, dim=-1)
+        logits = nnf.softmax(torch.matmul(out,outw_prior) + outb_prior, dim=1)
 
         # DEBUG
         # print(flat_inputs.shape)
