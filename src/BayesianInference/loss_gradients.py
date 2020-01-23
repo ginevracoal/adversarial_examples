@@ -9,7 +9,7 @@ import copy
 from utils import save_to_pickle
 import numpy as np
 
-DEBUG=True
+DEBUG=False
 
 
 def expected_loss_gradient(posterior, n_samples, image, label, device, mode, baseclass=None):

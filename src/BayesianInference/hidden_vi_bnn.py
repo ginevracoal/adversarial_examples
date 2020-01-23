@@ -115,50 +115,71 @@ def main(args):
     bayesnn = VI_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset)
 
     # posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs)
-    # exit()
 
     # === load posterior ===
     relative_path = TRAINED_MODELS
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=100",  # log softmax #0
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=80",  # log softmax #1
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100",  # log softmax #2
-    # posterior_name = "hidden_vi_mnist_inputs=1000_lr=0.002_epochs=200" # log softmax #3
-    # ## dummy test, più layers
-    # posterior_name = "hidden_vi_mnist_inputs=10_lr=0.002_epochs=10" # modello al 20% sui primi 10 input #4
-    # posterior_name = "hidden_vi_mnist_inputs=10_lr=0.002_epochs=200" # modello al 60% sul train set #5
-    # posterior_name = "hidden_vi_mnist_inputs=10_lr=0.02_epochs=100" # modello al 100% sul train set #6
-    # # meno layers, log softmax + nllloss
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=200" # train acc 84.75
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.002_epochs=300" # train acc 88.19
-    # posterior_name = "hidden_vi_mnist_inputs=60000_lr=0.02_epochs=200" # train acc 95.05
-
-    relative_path=RESULTS
-    # posterior_name, idx = ("hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", 0) # todo copy to trained models
-    # posterior_name, idx = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", 1) #overfitta e manda tutto a zero
+    # posterior_name, idx = ("hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", 0)
+    # posterior_name, idx = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", 1)
     posterior_name, idx = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", 2)
-    # posterior_name = "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=200"
+
+    # relative_path=RESULTSW
 
     posterior = bayesnn.load_posterior(posterior_name=posterior_name, relative_path=relative_path)
     # posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
 
+    # === ATTACK ===
+    data = test_loader
+    n_samples_list = [1, 5, 10]
+    epsilon_list = [0.1, 0.3, 0.6]
+
+    plot_samples = []
+    plot_softmax_differences = []
+    plot_original_acc = []
+    plot_eps = []
+
+    for epsilon in epsilon_list:
+        print("\nepsilon =", epsilon, end="\n")
+
+        for n_attack_samples in n_samples_list:
+            original_acc = posterior.evaluate(data_loader=data, n_samples=n_attack_samples)
+
+            print("n_samples =", n_attack_samples, end="\t")
+            attack = attack_bnn(model=posterior, n_pred_samples=n_attack_samples,
+                                        n_attack_samples=n_attack_samples, data_loader=data, epsilon=epsilon,
+                                        method="fgsm", device=args.device)
+
+            for i in range(len(data.dataset)):
+                plot_softmax_differences.append(attack["pointwise_softmax_differences"][i])
+                plot_samples.append(n_attack_samples)
+                plot_eps.append(epsilon)
+                plot_original_acc.append(original_acc)
+
+
+    filename = "catplot_pointwise_softmax_differences_eps="+str(epsilon_list)\
+               +"_inputs="+str(args.inputs)+"_mode=vi_model="+str(idx)
+    import pandas
+    df = pandas.DataFrame(data={"n_samples": plot_samples, "softmax_difference_norms": plot_softmax_differences,
+                                "accuracy": plot_original_acc, "epsilon": plot_eps})
+    df.to_pickle(RESULTS+filename+".pkl")
+    catplot_pointwise_softmax_differences(dataframe=df, epsilon_list=epsilon_list,  filename=filename)
+    exit()
+
     # === TEST CONJECTURE ===
-    n_samples_list, n_inputs = ([10,30,60,100], 5)
-    # n_samples_list, n_inputs = ([5,10,30], 1000)
+    # n_samples_list, n_inputs = ([10,30,60,100], 100)
+    n_samples_list, n_inputs = ([5,10,30], 1000)
     filename="expLossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples_list)+"_mode=vi_model="+str(idx)
 
-    test_loader = data_loaders(dataset_name=args.dataset, batch_size=1, n_inputs=n_inputs, shuffle=True)[1]
-    exp_loss_gradients = test_conjecture(posterior=posterior, data_loader=test_loader, device=args.device,
-                                         n_samples_list=n_samples_list, n_inputs=n_inputs, mode="vi")
-    exit()
+    # test_loader = data_loaders(dataset_name=args.dataset, batch_size=1, n_inputs=n_inputs, shuffle=True)[1]
+    # exp_loss_gradients = test_conjecture(posterior=posterior, data_loader=test_loader, device=args.device,
+    #                                      n_samples_list=n_samples_list, n_inputs=n_inputs, mode="vi")
     # save_to_pickle(exp_loss_gradients, relative_path=RESULTS + "bnn/",filename=filename+".pkl")
 
-    exp_loss_gradients = load_from_pickle(RESULTS + "bnn/"+ filename+".pkl")
+    exp_loss_gradients = load_from_pickle(relative_path + "bnn/"+ filename+".pkl")
 
-    plot_exp_loss_gradients_norms(exp_loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
-                                  n_samples_list=n_samples_list, model_idx=idx, filename=filename)
-
+    # plot_exp_loss_gradients_norms(exp_loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
+    #                               n_samples_list=n_samples_list, model_idx=idx, filename=filename)
+    plot_gradients_on_images(loss_gradients=exp_loss_gradients, max_n_images=10, n_samples_list=n_samples_list, filename=filename)
     # catplot_partial_derivatives(filename=filename, n_inputs=n_inputs, n_samples_list=n_samples_list)
-
     exit()
     # ===== AVERAGE OVER IMAGES =====
     n_samples_list = [10,30,50,100]
@@ -169,13 +190,11 @@ def main(args):
                         data_loader=test_loader, filename=filename)
     plot_avg_over_images_grid(filename=filename)
     distplot_avg_gradients_over_inputs(filename=filename)
-    plot_gradients_on_single_image(posterior=posterior, n_samples_list=n_samples_list,
-                                   device=args.device, data_loader=test_loader)
+
     exit()
     plot_gradients_increasing_inputs(posterior=posterior, n_samples_list=n_samples_list, n_inputs_list=n_inputs_list,
                                      data_loader=test_loader, device=args.device)
 
-    # attack_network(dataset_name=args.dataset, n_inputs=args.inputs, device=args.device, n_samples=args.samples)
 
 
 if __name__ == "__main__":

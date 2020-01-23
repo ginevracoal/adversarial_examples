@@ -1,4 +1,7 @@
 import sys
+
+from pyro.infer import TracePredictive
+
 sys.path.append(".")
 import pyro
 from BayesianInference.bnn import BNN
@@ -10,6 +13,8 @@ from pyro import poutine
 from BayesianInference.plot_utils import *
 from utils import execution_time
 from BayesianInference.hidden_vi_bnn import test_conjecture
+from pyro.infer.mcmc.util import predictive
+from utils import save_to_pickle, load_from_pickle
 
 
 class HMC_BNN(BNN):
@@ -28,18 +33,18 @@ class HMC_BNN(BNN):
 
     def run_chains(self, train_loader, num_steps=1, step_size=0.0855):
         random.seed(0)
-
         pyro.clear_param_store()
-        print("\nHMC inference for ", self.filename)
+        print("\nHMC BNN:", self.filename)
 
         hmc_kernel = HMC(self.model, step_size=step_size, num_steps=num_steps)
+        mcmc = MCMC(kernel=hmc_kernel, num_samples=self.n_samples, warmup_steps=self.warmup, num_chains=self.n_chains)
 
         start = time.time()
-        mcmc = MCMC(kernel=hmc_kernel, num_samples=self.n_samples, warmup_steps=self.warmup, num_chains=self.n_chains)
         for images, labels in train_loader:
             mcmc.run(images.to(self.device), labels.to(self.device))
-        sampled_models = self.sample_models(mcmc=mcmc)
         execution_time(start=start, end=time.time())
+
+        sampled_models = self.sample_models(mcmc=mcmc)
 
         return sampled_models
 
@@ -49,30 +54,33 @@ class HMC_BNN(BNN):
         :param mcmc:
         :return:
         """
+        print("\nSampling weights.")
+        # print(mcmc._samples)
         n_posterior_samples = self.n_samples*self.n_chains
-        posterior_samples_dict = mcmc.get_samples(num_samples=n_posterior_samples)
+        posterior_samples_dict = mcmc.get_samples()#num_samples=n_posterior_samples).to("cuda")
         posterior_samples_list = [{k: v[i] for k, v in posterior_samples_dict.items()}
                                   for i in range(n_posterior_samples)]
 
         return np.array(posterior_samples_list)
 
-        # posterior_samples_dict = mcmc.get_samples(num_samples=500)
-        # # posterior_dist = {}
-        # # for k in posterior_samples_dict.keys():
-        # #     posterior_dist.update({k: posterior_samples_dict[str(k)].mean(0)})
-        # posterior_dist = {k: posterior_samples_dict[str(k)].mean(0) for k in posterior_samples_dict.keys()}
-        # # posterior_dist = np.mean(posterior_samples_list, axis=0)
-        # # print(posterior_dist)
-        # return posterior_dist # todo test on a single avg posterior
-
     def predict(self, inputs, posterior_samples):
+
         preds = []
         for posterior in posterior_samples:
-            posterior_weights = posterior.items()
+            posterior_weights = posterior.items() # pesi delle reti salvate
             guide_trace = poutine.trace(poutine.condition(self.model, posterior_weights)).get_trace(inputs.to(self.device))
-            preds.append(guide_trace.nodes['_RETURN']['value'].exp())
-
+            # print(guide_trace.nodes['fc1w_prior']['value'][0][:10])
+            preds.append(guide_trace.nodes['_RETURN']['value'])
         preds = torch.stack(preds, dim=0)  # shape = samples x inputs x classes
+        # print("\npreds.shape =", preds.shape)
+        # print("\npreds[0] =", preds[0])
+        return preds
+
+    def forward(self, inputs, posterior_samples):
+        random.seed(0)
+        # print(posterior_samples)
+        preds = predictive(self.model, posterior_samples, inputs, None)["obs"]
+        print(preds)
         return preds
 
     def save(self, posterior_samples, relative_path=RESULTS):
@@ -81,20 +89,36 @@ class HMC_BNN(BNN):
         np.save(file=relative_path+self.filepath+self.filename+".npy",
                 arr=posterior_samples)
 
+        # save_to_pickle(data=posterior_samples, relative_path=relative_path+self.filepath, filename=self.filename+".pkl")
+
     def load(self, relative_path=TRAINED_MODELS):
         print("\nLoading posterior samples from:", relative_path+self.filepath+self.filename+".npy")
         sampled_models = np.load(file=relative_path+self.filepath+self.filename+".npy")
+
+        # sampled_models = load_from_pickle(path=relative_path+self.filepath+self.filename+".pkl")
+
         return sampled_models
 
-    def evaluate(self, test_loader, posterior_samples, device):
+    def evaluate(self, data_loader, posterior_samples, device):
         total = 0.0
         correct = 0.0
-        for images, labels in test_loader:
-            images = images.to(device).view(-1, self.input_size)
+        for images, labels in data_loader:
+            images = images.view(-1, self.input_size).to(device)
             labels = labels.to(device)
-            # print(images[0][350:400])
-            output=self.predict(inputs=images, posterior_samples=posterior_samples).to(device).mean(0)
-            # print("\ncheck prob distributions:", output.sum(dim=1))
+
+            # if DEBUG:
+            #     print("\nfirst image:",images[0][350:400])
+
+            # outputs = []
+            # for _ in range(2):
+            #     outputs.append(self.predict(inputs=images, posterior_samples=posterior_samples).to(device).mean(0))
+            # outputs = torch.stack(outputs, dim=0)
+            # output = torch.tensor(outputs).mean(0)
+
+            output = self.predict(inputs=images, posterior_samples=posterior_samples).to(device).mean(0)
+
+            print("\noutput[0] =", output[0])
+            print("\ncheck prob distributions:", output.sum(dim=-1))
             predictions = output.argmax(dim=-1)
             print("\npredictions[:10] =", predictions[:10])
             print("labels[:10]      =", labels.argmax(-1)[:10])
@@ -107,22 +131,22 @@ class HMC_BNN(BNN):
 def main(args):
     random.seed(0)
     train_loader, _, _, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=100, n_inputs=args.inputs)
+        data_loaders(dataset_name=args.dataset, batch_size=10, n_inputs=args.inputs)
 
     bayesnn = HMC_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset, n_chains=args.chains,
                       warmup=args.warmup, n_samples=args.samples, n_inputs=args.inputs)
 
     sampled_models = bayesnn.run_chains(train_loader=train_loader)
-    bayesnn.save(posterior_samples=sampled_models)
-    sampled_models = bayesnn.load(relative_path=RESULTS)
+    # bayesnn.save(posterior_samples=sampled_models)
+    # sampled_models = bayesnn.load(relative_path=RESULTS)
 
-    bayesnn.evaluate(test_loader=train_loader, posterior_samples=sampled_models, device="cuda")
+    bayesnn.evaluate(data_loader=train_loader, posterior_samples=sampled_models, device="cuda")
     exit()
     # print(sampled_models)
-    for n_samples in [1, 5, 10]:
-        test_conjecture(posteriors=sampled_models, data_loader=train_loader, n_samples=n_samples,
-                        n_inputs=args.inputs, device="cuda", dataset_name=args.dataset, mode="hmc",
-                        baseclass=bayesnn)
+    # for n_samples in [1, 5, 10]:
+    #     test_conjecture(posteriors=sampled_models, data_loader=train_loader, n_samples=n_samples,
+    #                     n_inputs=args.inputs, device="cuda", dataset_name=args.dataset, mode="hmc",
+    #                     baseclass=bayesnn)
 
 
 if __name__ == "__main__":

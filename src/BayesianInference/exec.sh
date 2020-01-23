@@ -26,19 +26,19 @@
 # === hidden_vi_bnn === #
 SCRIPT="hidden_vi_bnn"
 DATASET_NAME="mnist"
-N_INPUTS="1000"
+N_INPUTS="100"
 N_SAMPLES="5"
-EPOCHS="200"
+EPOCHS="300"
 LR="0.002"
-DEVICE="cuda"
+DEVICE="cpu"
 
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
 #DATASET_NAME="mnist"
-#N_INPUTS="100"
-#WARMUP="10000"
-#N_CHAINS="5"
-#N_SAMPLES="20"
+#N_INPUTS="10000"
+#WARMUP="1000"
+#N_CHAINS="8"
+#N_SAMPLES="1"
 #DEVICE="cpu"
 
 

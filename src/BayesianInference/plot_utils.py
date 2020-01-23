@@ -91,29 +91,81 @@ def plot_expectation_over_images(dataset_name, n_inputs, n_samples_list, rel_pat
                  xlab="pixel idx", ylab="n. posterior samples", yticks=n_samples_list,
                  title="Expected loss gradients over {} images".format(n_inputs))
 
-def plot_gradients_on_single_image(data_loader, posterior, n_samples_list, device, dataset_name="mnist"):
-    random.seed(0)
-    posterior = copy.deepcopy(posterior)
-    accuracy_over_samples = [posterior.evaluate(data_loader=data_loader, n_samples=n_samples)
-                             for n_samples in n_samples_list]
+def plot_gradients_on_selected_images(loss_gradients, max_n_images, n_samples_list, filename, dataset_name="mnist"):
 
-    gradients_over_images = []
-    for images, labels in data_loader:
-        for i in range(len(images)-5,len(images)):
-            image = images[i]
-            label = labels[i]
-            gradients_over_samples = []
-            for idx, n_samples in enumerate(n_samples_list):
-                loss_gradient = expected_loss_gradient(posterior=posterior, n_samples=n_samples, image=image,
-                                                       label=label, device=device, mode="vi").cpu().detach()
-                gradients_over_samples.append({"image":np.array(loss_gradient).reshape([28,28,1]),"n_samples":n_samples,
-                                               "lab":label,"accuracy":accuracy_over_samples[idx]})
-                del loss_gradient
-            gradients_over_images.append(gradients_over_samples)
+    # images_idxs = random.sample(range(0, len(loss_gradients[0])), n_images)
+    n_images = min(len(loss_gradients[0]), max_n_images)
+    gradients_along_samples = []
+    for idx, n_samples in enumerate(n_samples_list):
+        loss_gradients_fixed_samples = loss_gradients[idx]
+        gradients_along_images = []
+        for idx in range(n_images):
+            selected_gradient = loss_gradients_fixed_samples[idx]
+            gradients_along_images.append({"image":np.array(selected_gradient).reshape([28,28,1]),
+                                           "n_samples":n_samples})
+        gradients_along_samples.append(gradients_along_images)
 
-    loss_gradients = np.array(gradients_over_images)
-    filename = "loss_gradients_singleImage_increasingSamples_"+str(dataset_name)+".png"
+    loss_gradients = np.array(gradients_along_samples)
+    filename = filename+"expLossGradients_onImages_increasingSamples_"+str(dataset_name)+".png"
     plot_images_grid(loss_gradients, path=RESULTS, filename=filename)
+
+def plot_gradients_on_images(loss_gradients, max_n_images, n_samples_list, filename, dataset_name="mnist"):
+    loss_gradients = np.transpose(loss_gradients, axes=(1,0,2))
+
+    vanishing_gradients_idxs = []
+    for image_idx, image_gradients in enumerate(loss_gradients):
+        gradient_norm = np.linalg.norm(image_gradients[0])
+        if gradient_norm != 0.0:
+            count_samples_idx = 0
+            for samples_idx, n_samples in enumerate(n_samples_list):
+                new_gradient_norm = np.linalg.norm(image_gradients[samples_idx])
+                if new_gradient_norm <= gradient_norm:
+                    print(new_gradient_norm)
+                    gradient_norm = copy.deepcopy(new_gradient_norm)
+                    count_samples_idx += 1
+            if count_samples_idx == len(n_samples_list):
+                vanishing_gradients_idxs.append(image_idx)
+                print("\n")
+
+    print("vanishing_gradients_idxs =", vanishing_gradients_idxs)
+    vanishing_gradients = np.transpose(loss_gradients[vanishing_gradients_idxs], axes=(1,0,2))
+    plot_gradients_on_selected_images(loss_gradients=vanishing_gradients, max_n_images=max_n_images,
+                                    n_samples_list=n_samples_list, dataset_name="mnist",
+                                      filename=filename+"_vanishing")
+
+    non_vanishing_gradients_idxs = []
+    for image_idx, image_gradients in enumerate(loss_gradients):
+        gradient_norm = np.linalg.norm(image_gradients[0])
+        if gradient_norm != 0.0:
+            count_samples_idx = 0
+            for samples_idx, n_samples in enumerate(n_samples_list):
+                new_gradient_norm = np.linalg.norm(image_gradients[samples_idx])
+                if new_gradient_norm >= gradient_norm:
+                    print(new_gradient_norm)
+                    gradient_norm = copy.deepcopy(new_gradient_norm)
+                    count_samples_idx += 1
+            if count_samples_idx == len(n_samples_list):
+                non_vanishing_gradients_idxs.append(image_idx)
+                print("\n")
+
+    print("non_vanishing_gradients_idxs =", non_vanishing_gradients_idxs)
+    non_vanishing_gradients = np.transpose(loss_gradients[non_vanishing_gradients_idxs], axes=(1,0,2))
+    plot_gradients_on_selected_images(loss_gradients=non_vanishing_gradients, max_n_images=max_n_images,
+                                      n_samples_list=n_samples_list, dataset_name="mnist",
+                                      filename=filename+"_nonVanishing")
+    # gradients_along_samples = []
+    # for idx, n_samples in enumerate(n_samples_list):
+    #     loss_gradients_fixed_samples = loss_gradients[idx]
+    #     gradients_along_images = []
+    #     for idx in images_idxs:
+    #         selected_gradient = loss_gradients_fixed_samples[idx]
+    #         gradients_along_images.append({"image":np.array(selected_gradient).reshape([28,28,1]),
+    #                                        "n_samples":n_samples})
+    #     gradients_along_samples.append(gradients_along_images)
+    #
+    # loss_gradients = np.array(gradients_along_samples)
+    # filename = "expLossGradients_onImages_increasingSamples_"+str(dataset_name)+".png"
+    # plot_images_grid(loss_gradients, path=RESULTS, filename=filename)
 
 def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, model_idx, filename, pnorm=2):
     exp_loss_gradients_norms = []
@@ -151,6 +203,23 @@ def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, 
 
     distplot(exp_loss_gradients_norms, n_samples_list)
 
+def catplot_pointwise_softmax_differences(dataframe, filename, epsilon_list):
+    import pandas as pd
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    fig, axs = plt.subplots(ncols=3, nrows=1)
+
+    for i, eps in enumerate(epsilon_list):
+        data = dataframe.loc[dataframe['epsilon'] == eps]
+        # print(data.head())
+        sns.catplot(data=data, y="softmax_difference_norms", x="n_samples", kind="boxen", ax=axs[i])
+
+    # plot.fig.set_figheight(6)
+    # plot.fig.set_figwidth(10)
+
+    os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
+    plt.savefig(RESULTS + filename+".png", dpi=200)
 
 def catplot_partial_derivatives(filename, n_inputs, n_samples_list, rel_path=RESULTS):
     import pandas as pd
@@ -206,7 +275,7 @@ def plot_images_grid(images, path, filename, cmap=None, row_labels=None, col_lab
             axs[row,col].tick_params(left="off", bottom="off", labelleft='off', labelbottom='off')
             # axs[-1,col].set_xlabel("samples={}, acc={}".format(images[-1][col]["n_samples"],
             #                                                    images[-1][col]["accuracy"]), fontsize=14)
-            # axs[-1,col].set_xlabel("samples={}".format(images[-1][col]["n_samples"]), fontsize=16)
+            axs[row,0].set_ylabel("samples={}".format(images[row][-1]["n_samples"]), fontsize=14)
 
     # images = images.reshape(images.shape[0]*images.shape[1], images.shape[2], images.shape[3], images.shape[4])
     # for idx, ax in enumerate(axs.flat):
