@@ -138,7 +138,7 @@ class HiddenBNN(nn.Module):
         res = torch.stack(res, dim=0)
         return res
 
-    def evaluate(self, data_loader, n_samples):
+    def evaluate(self, data_loader, n_samples, device="cpu"):
         total = 0.0
         correct = 0.0
         for images, labels in data_loader:

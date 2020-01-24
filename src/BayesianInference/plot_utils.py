@@ -17,7 +17,7 @@ from BayesianInference.loss_gradients import expected_loss_gradients, expected_l
 import matplotlib.colors as mc
 
 
-def distplot_avg_gradients_over_inputs(filename):
+def distplot_avg_gradients_over_inputs(filename, y_log_scale=False):
     loss_gradients = load_from_pickle(path=RESULTS+"bnn/"+filename+".pkl")
 
     plt.subplots(figsize=(10, 6), dpi=200)
@@ -30,13 +30,18 @@ def distplot_avg_gradients_over_inputs(filename):
         ax = sns.distplot(gradients["avg_loss_gradient"],  hist=False, rug=True,
                      kde_kws={'shade': True, 'linewidth': 2}, kde=True,
                      label=gradients["n_samples"])
-        ax.set_yscale('log')
 
-    plt.ylabel('log(Density)')
+        if y_log_scale:
+            ax.set_yscale('log')
+
+    if y_log_scale:
+        plt.ylabel('log(Density)')
+    else:
+        plt.ylabel('Density')
 
     plt.legend()
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
-    plt.savefig(RESULTS + "distPlot_avgOverImages.png")
+    plt.savefig(RESULTS + filename + "_avgOverImagesDistplot.png")
 
 
 def plot_gradients_increasing_inputs(posterior, n_samples_list, n_inputs_list, device, data_loader, mode="vi"):
@@ -67,14 +72,14 @@ def plot_avg_over_images_grid(filename):
         for row in range(images.shape[0]):
             im = axs[row, col].imshow(np.squeeze(images[row][col]["avg_loss_gradient"].reshape(28,28,1)),
                                       norm=mc.Normalize(vmin=0), cmap="gray")
-            axs[row, col].set_title("[{:.2f},{:.2f}]".format(np.min(images[row][col]["avg_loss_gradient"]),
+            axs[row, col].set_title("[{:.6f},{:.6f}]".format(np.min(images[row][col]["avg_loss_gradient"]),
                                                              np.max(images[row][col]["avg_loss_gradient"])))
             axs[row, col].tick_params(left="off", bottom="off", labelleft='off', labelbottom='off')
             axs[-1,col].set_xlabel("n_samples={}".format(images[-1][col]["n_samples"]), fontsize=14)
             axs[row,col].set_ylabel("n_inputs={}, acc={:.2f}".format(images[row][col]["n_inputs"],
                                                                  images[row][col]["accuracy"]), fontsize=14)
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
-    fig.savefig(RESULTS + "expectedLossGradients_avgOverImages.png")
+    fig.savefig(RESULTS + filename + "_avgOverImages.png")
 
 
 def plot_expectation_over_images(dataset_name, n_inputs, n_samples_list, rel_path=RESULTS):
@@ -203,23 +208,39 @@ def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, 
 
     distplot(exp_loss_gradients_norms, n_samples_list)
 
-def catplot_pointwise_softmax_differences(dataframe, filename, epsilon_list):
-    import pandas as pd
+
+def patch_violinplot():
+    from matplotlib.collections import PolyCollection
+    ax = plt.gca()
+    for art in ax.get_children():
+        if isinstance(art, PolyCollection):
+            art.set_edgecolor((0.3, 0.3, 0.3))
+
+def catplot_pointwise_softmax_differences(dataframe, filename, epsilon_list, n_samples_list):
     import seaborn as sns
     import matplotlib.pyplot as plt
+    # acc = dataframe.accuracy
+    # normed_acc = (acc - acc.min()) / (acc.max() - acc.min())
+    palette = sns.diverging_palette(255, 133, l=60, n=len(epsilon_list), center="dark")
+    plot = sns.catplot(data=dataframe, y="softmax_difference_norms", col="n_samples", sharey=False,
+                       x="epsilon", kind="violin", orient="v",
+                       palette=palette, #saturation=normed_acc.all(),
+                       )
+    plot.fig.set_figheight(6)
+    plot.fig.set_figwidth(12)
 
-    fig, axs = plt.subplots(ncols=3, nrows=1)
+    # plot.set(yscale="log")
+    plot.set_axis_labels("epsilon", "pointwise softmax difference norms")
 
-    for i, eps in enumerate(epsilon_list):
-        data = dataframe.loc[dataframe['epsilon'] == eps]
-        # print(data.head())
-        sns.catplot(data=data, y="softmax_difference_norms", x="n_samples", kind="boxen", ax=axs[i])
-
-    # plot.fig.set_figheight(6)
-    # plot.fig.set_figwidth(10)
+    axes = plot.axes.flatten()
+    for idx, ax in enumerate(axes):
+        df = dataframe[dataframe.n_samples==n_samples_list[idx]]
+        ax.set_title(f"n_samples = {n_samples_list[idx]} \navg accuracy = {np.mean(df.accuracy):.2f}")
+        ax.set(ylim=(0,np.max(df.softmax_difference_norms)))
+    patch_violinplot()
 
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
-    plt.savefig(RESULTS + filename+".png", dpi=200)
+    plot.savefig(RESULTS + filename+".png", dpi=200)
 
 def catplot_partial_derivatives(filename, n_inputs, n_samples_list, rel_path=RESULTS):
     import pandas as pd

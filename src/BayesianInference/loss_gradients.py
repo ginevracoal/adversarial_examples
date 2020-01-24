@@ -118,7 +118,7 @@ def average_over_images(posterior, n_inputs_list, n_samples_list, device, data_l
                                                     data_loader=data_loader_slice,
                                                     device=device, mode=mode)
 
-            plot_heatmap(columns=loss_gradient, path=RESULTS + "bnn/",
+            plot_heatmap(columns=loss_gradient, path=RESULTS,
                          filename="lossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_heatmap.png",
                          xlab="pixel idx", ylab="image idx",
                          title=f"Loss gradients pixel components on {n_samples} sampled posteriors")

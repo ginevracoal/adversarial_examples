@@ -35,15 +35,15 @@ class BNN(nn.Module):
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         # first layer
-        fc1w_mean = torch.zeros(self.input_size, self.hidden_size)
-        fc1w_scale = torch.ones(self.input_size, self.hidden_size)
-        fc1b_mean = torch.zeros(self.hidden_size)
-        fc1b_scale = torch.ones(self.hidden_size)
+        fc1w_mean = torch.zeros(self.input_size, self.hidden_size).to(self.device)
+        fc1w_scale = torch.ones(self.input_size, self.hidden_size).to(self.device)
+        fc1b_mean = torch.zeros(self.hidden_size).to(self.device)
+        fc1b_scale = torch.ones(self.hidden_size).to(self.device)
         # second layer
-        outw_mean = torch.zeros(self.hidden_size, self.n_classes)
-        outw_scale = torch.ones(self.hidden_size, self.n_classes)
-        outb_mean = torch.zeros(self.n_classes)
-        outb_scale = torch.ones(self.n_classes)
+        outw_mean = torch.zeros(self.hidden_size, self.n_classes).to(self.device)
+        outw_scale = torch.ones(self.hidden_size, self.n_classes).to(self.device)
+        outb_mean = torch.zeros(self.n_classes).to(self.device)
+        outb_scale = torch.ones(self.n_classes).to(self.device)
 
         # sample priors
         fc1w_prior = pyro.sample('fc1w_prior', Normal(loc=fc1w_mean, scale=fc1w_scale))#.independent(2))

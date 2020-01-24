@@ -8,8 +8,38 @@ import random
 import copy
 import torch.nn.functional as nnf
 from robustness_measures import softmax_robustness, softmax_difference
+import pandas
 
 DEBUG=False
+
+
+def pointwise_attacks(data_loader, epsilon_list, n_samples_list, posterior, device, filename):
+    data = data_loader
+    plot_samples = []
+    plot_softmax_differences = []
+    plot_original_acc = []
+    plot_eps = []
+
+    for epsilon in epsilon_list:
+        print("\nepsilon =", epsilon, end="\n")
+
+        for n_attack_samples in n_samples_list:
+            original_acc = posterior.evaluate(data_loader=data, n_samples=n_attack_samples, device=device)
+
+            print("n_samples =", n_attack_samples, end="\t")
+            attack = attack_bnn(model=posterior, n_pred_samples=n_attack_samples,
+                                        n_attack_samples=n_attack_samples, data_loader=data, epsilon=epsilon,
+                                        method="fgsm", device=device)
+
+            for i in range(len(data.dataset)):
+                plot_softmax_differences.append(attack["pointwise_softmax_differences"][i])
+                plot_samples.append(n_attack_samples)
+                plot_eps.append(epsilon)
+                plot_original_acc.append(original_acc)
+    df = pandas.DataFrame(data={"n_samples": plot_samples, "softmax_difference_norms": plot_softmax_differences,
+                                "accuracy": plot_original_acc, "epsilon": plot_eps})
+    df.to_pickle(RESULTS+"bnn/"+filename+".pkl")
+    return df
 
 
 def fgsm_attack(image, epsilon, data_grad):
@@ -73,7 +103,7 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
     # for i in range(n_samples):
         # sampled_model = model.guide(None, None)
         # output = sampled_model(image)
-    original_prediction = model.forward(image, n_samples=n_attack_samples).mean(0)  # .argmax(-1)
+    original_prediction = model.forward(image, n_samples=n_attack_samples).mean(0)
 
     loss = torch.nn.CrossEntropyLoss()(original_prediction, label) # use with softmax
 
