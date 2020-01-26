@@ -17,6 +17,23 @@ from BayesianInference.loss_gradients import expected_loss_gradients, expected_l
 import matplotlib.colors as mc
 
 
+def scatterplot_accuracy_robustness(accuracy, robustness, model_type, epsilon):
+    """
+    Scatterplot of accuracy (x axis) vs robustness (y axis) with categorical model_type.
+    """
+    plt.subplots(figsize=(10, 6), dpi=200)
+    sns.set_palette("RdBu")
+    for _ in range(len(accuracy)):
+        sns.scatterplot(x=accuracy, y=robustness, hue=model_type, style=epsilon)
+
+    plt.xlabel('Accuracy')
+    plt.ylabel('Robustness')
+    # todo add categorical model_type legend / color + symbols
+
+    plt.legend()
+    os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
+    plt.savefig(RESULTS + "_models=" +str(len(accuracy))+ "_scatterplot_accuracy_robustness.png")
+
 def distplot_avg_gradients_over_inputs(filename, y_log_scale=False):
     loss_gradients = load_from_pickle(path=RESULTS+"bnn/"+filename+".pkl")
 
@@ -172,6 +189,34 @@ def plot_gradients_on_images(loss_gradients, max_n_images, n_samples_list, filen
     # filename = "expLossGradients_onImages_increasingSamples_"+str(dataset_name)+".png"
     # plot_images_grid(loss_gradients, path=RESULTS, filename=filename)
 
+def distplot_pointwise_softmax_differences(pointwise_softmax_differences, n_inputs, n_samples_list, epsilon, model_idx):
+    palette = sns.diverging_palette(255, 133, l=60, n=len(n_samples_list), center="dark")
+    sns.set_palette(palette)
+
+
+    def distplot(df, epsilon):
+        # print(df)
+        # df = df[df["epsilon"]==epsilon]
+
+        plt.subplots(figsize=(10, 6), dpi=200)
+
+        for n_samples in n_samples_list:
+            ax = sns.distplot(df[df["n_samples"]==n_samples]["softmax_differences"], hist=False, rug=True,
+                              kde_kws={'shade': True, 'linewidth': 2},# kde=True,
+                              label=str(n_samples))
+        # ax.set_xscale('log')
+        plt.ylabel('Softmax difference norm density')
+        # plt.xlabel('norm')
+        # plt.title(f"Pointwise softmax differences: n_inputs = {n_inputs}, eps = {epsilon}")
+
+        plt.legend(title="n_samples")
+        os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
+        plt.savefig(RESULTS+"distplot_pointwise_softmax_differences_inputs="+str(n_inputs)\
+                    + "_samples="+str(n_samples_list)+"_eps=" + str(epsilon)+"_model="+str(model_idx)+".png")
+
+    # \navg accuracy = {np.mean(df.accuracy):.2f}"
+    distplot(pointwise_softmax_differences, epsilon)
+
 def plot_exp_loss_gradients_norms(exp_loss_gradients, n_inputs, n_samples_list, model_idx, filename, pnorm=2):
     exp_loss_gradients_norms = []
     for idx, n_samples in enumerate(n_samples_list):
@@ -222,22 +267,22 @@ def catplot_pointwise_softmax_differences(dataframe, filename, epsilon_list, n_s
     # acc = dataframe.accuracy
     # normed_acc = (acc - acc.min()) / (acc.max() - acc.min())
     palette = sns.diverging_palette(255, 133, l=60, n=len(epsilon_list), center="dark")
-    plot = sns.catplot(data=dataframe, y="softmax_difference_norms", col="n_samples", sharey=False,
-                       x="epsilon", kind="violin", orient="v",
+    plot = sns.catplot(data=dataframe, y="softmax_differences", col="n_samples", sharey=False,
+                       x="epsilon", kind="boxen", orient="v",
                        palette=palette, #saturation=normed_acc.all(),
                        )
     plot.fig.set_figheight(6)
     plot.fig.set_figwidth(12)
 
     # plot.set(yscale="log")
-    plot.set_axis_labels("epsilon", "pointwise softmax difference norms")
+    plot.set_axis_labels("epsilon", "pointwise softmax differences")
 
     axes = plot.axes.flatten()
     for idx, ax in enumerate(axes):
         df = dataframe[dataframe.n_samples==n_samples_list[idx]]
         ax.set_title(f"n_samples = {n_samples_list[idx]} \navg accuracy = {np.mean(df.accuracy):.2f}")
         ax.set(ylim=(0,np.max(df.softmax_difference_norms)))
-    patch_violinplot()
+    # patch_violinplot()
 
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
     plot.savefig(RESULTS + filename+".png", dpi=200)

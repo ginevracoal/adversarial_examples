@@ -9,28 +9,32 @@ import torch
 
 def softmax_difference(original_predictions, perturbations_predictions):
     """
-    Compute the expected l-inf norm of the difference between predictions and adversarial predictions. This is both a
-    global and point-wise robustness measure.
+    Compute the expected l-inf norm of the difference between predictions and adversarial predictions.
+    This is point-wise robustness measure.
     """
-    n_inputs = len(original_predictions)
 
     if len(original_predictions) != len(perturbations_predictions):
         raise ValueError("\nInput arrays should have the same length.")
 
-    # original_predictions = torch.stack(original_predictions)
-    # perturbations_predictions = torch.stack(perturbations_predictions)
+    original_predictions = torch.stack(original_predictions)
+    perturbations_predictions = torch.stack(perturbations_predictions)
 
-    norms = []
-    for idx in range(n_inputs):
-        # print(original_predictions.shape, original_predictions)
-        softmax_diff = original_predictions-perturbations_predictions
-        softmax_diff_norm = np.max(np.abs(softmax_diff))#.norm(p=float("inf"))
-        norms.append(softmax_diff_norm)
+    softmax_diff = original_predictions-perturbations_predictions
+    softmax_diff_norms = softmax_diff.abs().max(dim=-1)[0]
 
-    exp_softmax_diff = np.sum(norms)/n_inputs
-    return exp_softmax_diff.squeeze()
+    # print("\nsoftmax_diff_norms.shape =",softmax_diff_norms.shape)
+    return softmax_diff_norms#.cpu().detach().numpy()
 
-def softmax_robustness(original_predictions, perturbations_predictions):
+def softmax_robustness(original_outputs, adversarial_outputs):
+    """ This robustness measure is global and it is stricly dependent on the epsilon chosen for the perturbations."""
+
+    softmax_differences = softmax_difference(original_outputs, adversarial_outputs)
+    robustness = (torch.ones_like(softmax_differences)-softmax_differences).sum(dim=0)/len(original_outputs)
+    # print(softmax_differences)
+    print("softmax_robustness =", robustness.item())
+    return robustness.item()
+
+def old_softmax_robustness(original_predictions, perturbations_predictions):
     """
     This method computes the percentage of perturbed points whose change in classification differs from the original one
     by less than 50%, i.e. such that the l-infinite norm of the softmax difference between the original prediction and

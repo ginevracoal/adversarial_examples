@@ -15,22 +15,22 @@
 # settings -> comment unwanted lines! #
 #######################################
 
-# === vi_bnn === #
-#SCRIPT="vi_bnn"
-#DATASET_NAME="mnist"
-#N_SAMPLES="10000"
-#LR="0.0001"
-#EPOCHS="30"
-#DEVICE="cpu"
-
-# === hidden_vi_bnn === #
-SCRIPT="hidden_vi_bnn"
+# === hidden_bnn === #
+SCRIPT="hidden_bnn"
 DATASET_NAME="mnist"
-N_INPUTS="1000"
-N_SAMPLES="5"
-EPOCHS="300"
+N_INPUTS="30000"
+EPOCHS="200"
 LR="0.002"
 DEVICE="cpu"
+
+# === hidden_vi_bnn === #
+#SCRIPT="hidden_vi_bnn"
+#DATASET_NAME="mnist"
+#N_INPUTS="1000"
+#N_SAMPLES="5"
+#EPOCHS="100"
+#LR="0.00002"
+#DEVICE="cpu"
 
 # === hmc_bnn === #
 #SCRIPT="hmc_bnn"
@@ -66,8 +66,8 @@ mkdir -p $RESULTS
 OUT="${RESULTS}${TIME}_${DATASET_NAME}_${SCRIPT}_out.txt"
 
 ## run script
-if [ $SCRIPT = "vi_bnn" ]; then
-  python3 "BayesianInference/vi_bnn.py" $DATASET_NAME $LR $EPOCHS $DEVICE &> $OUT
+if [ $SCRIPT = "hidden_bnn" ]; then
+  python3 "BayesianInference/hidden_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
 elif [ $SCRIPT = "hidden_vi_bnn" ]; then
   python3 "BayesianInference/hidden_vi_bnn.py" --samples=$N_SAMPLES --dataset=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
 elif [ $SCRIPT = "hmc_bnn" ]; then

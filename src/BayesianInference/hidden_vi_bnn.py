@@ -17,19 +17,22 @@ DEBUG=False
 
 
 class VI_BNN(HiddenBNN):
-    def __init__(self, dataset_name, input_shape, device):
+    def __init__(self, dataset_name, input_shape, device, activation="softmax"):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
+        self.activation = activation
+        self.loss = "crossentropy" if activation == "softmax" else "nllloss"
+        self.hidden_size = 128#512 #if dataset_name == "mnist" else 1024
         self.n_classes = 10
+        super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=self.activation,
+                                     hidden_size=self.hidden_size, dataset_name="mnist")
         self.dataset_name = dataset_name
-        super(VI_BNN, self).__init__(input_size=self.input_size, device=device)
 
     def get_filename(self, n_inputs, lr, n_epochs):
         return "hidden_vi_" + str(self.dataset_name) + "_inputs=" + str(n_inputs) + \
                 "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
 
-    def infer_parameters(self, train_loader, lr, n_epochs):
-        random.seed(0)
-
+    def infer_parameters(self, train_loader, lr, n_epochs, seed=0):
+        random.seed(seed)
         filename = self.get_filename(n_inputs=len(train_loader.dataset), lr=lr, n_epochs=n_epochs)
         print("\nSVI BNN:", filename)
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
@@ -55,9 +58,16 @@ class VI_BNN(HiddenBNN):
                 total_loss += loss / len(train_loader.dataset)
                 total += labels.size(0)
                 # forward computes the average output on n_samples samples of the network
-                pred = self.forward(images.to(self.device), n_samples=1).mean(0).argmax(-1)
+                avg_pred = self.forward(images.to(self.device), n_samples=3).mean(0)
+                pred = avg_pred.argmax(-1)
                 correct += (pred == labels.argmax(-1).to(self.device)).sum().item()
                 accuracy = 100 * correct / total
+
+                if DEBUG:
+                    print(images.shape)
+                    print("\nimages.shape = ", images.view(-1, self.input_size).shape)
+                    print("\ncheck prob dist:", avg_pred.sum(1))
+                    exit()
 
             print(f"[Epoch {i + 1}]\t loss: {total_loss:.2f} \t accuracy: {accuracy:.2f}")
             loss_list.append(total_loss)
@@ -81,15 +91,13 @@ class VI_BNN(HiddenBNN):
     #                    if k != "obs"}
     #     return svi_samples
 
-    def load_posterior(self, posterior_name, relative_path=TRAINED_MODELS):
+    def load_posterior(self, posterior_name, activation="softmax", relative_path=TRAINED_MODELS):
         posterior = self.load(filename=posterior_name, relative_path=relative_path)
+        posterior.activation = activation
         return posterior
 
 
-
 # === MAIN EXECUTIONS ===
-
-
 
 def test_conjecture(posterior, data_loader, n_samples_list, n_inputs, device, mode, baseclass=None):
     random.seed(0)
@@ -110,58 +118,69 @@ def test_conjecture(posterior, data_loader, n_samples_list, n_inputs, device, mo
     return exp_loss_gradients_samples
 
 
-
 def main(args):
 
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
-    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset)
+        data_loaders(dataset_name=args.dataset, batch_size=32, n_inputs=args.inputs, shuffle=True)
 
-    # posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs)
+    # === initialize class ===
+    activation = args.activation  # eventually overwritten by loading
+    idx = 4
 
-    # === load posterior ===
-    relative_path = TRAINED_MODELS
-    # posterior_name, idx = ("hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", 0) # pochi training inputs
-    posterior_name, idx = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", 1) # overfitta
-    # posterior_name, idx = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", 2) # poche epoche
+    # posterior_name, idx, activation, relative_path = ("hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", 0, "softmax", TRAINED_MODELS) # pochi training inputs
+    # posterior_name, idx, activation, relative_path = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", 1, "softmax", TRAINED_MODELS) # overfitta
+    # posterior_name, idx, activation, relative_path  = ("hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", 2, "softmax", TRAINED_MODELS) # poche epoche
 
-    # relative_path=RESULTS
+    # posterior_name, idx, activation, relative_path = ("hidden_vi_cifar_inputs=10_lr=0.02_epochs=200", 3, "softmax", RESULTS)
 
-    posterior = bayesnn.load_posterior(posterior_name=posterior_name, relative_path=relative_path)
-    # posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
+
+    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset, activation=activation)
+
+
+    # === infer or load ===
+    posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs)
+
+    # posterior = bayesnn.load_posterior(posterior_name=posterior_name, relative_path=relative_path, activation=activation)
+    posterior.evaluate(data_loader=train_loader, n_samples=args.samples)
 
     # === ATTACK ===
-    n_samples_list = [1, 500, 1000]
+    n_samples_list = [10, 100, 500]
     epsilon_list = [0.1, 0.3, 0.6]
-    filename = "catplot_pointwise_softmax_differences_eps=" + str(epsilon_list) \
-               + "_inputs=" + str(args.inputs) + "_samples="+str(n_samples_list)+"_mode=vi_model=" + str(idx)
 
-    df = pointwise_attacks(data_loader=train_loader, epsilon_list=epsilon_list, n_samples_list=n_samples_list,
-                           posterior=posterior, device=args.device, filename=filename, mode="vi")
+    for epsilon in epsilon_list:
+        df = pointwise_bayesian_attacks(data_loader=train_loader, epsilon_list=epsilon_list,
+                                        n_samples_list=n_samples_list, posterior=posterior, device=args.device, idx=idx)
+        # df = pandas.read_pickle(path=RESULTS+"bnn/"+"pointwise_softmax_differences_eps=" + str(epsilon) \
+        #        + "_inputs=" + str(args.n_inputs) + "_samples="+str(n_samples_list)
+        #              +"_mode=vi_model=" + str(idx) + ".pkl")
+        distplot_pointwise_softmax_differences(pointwise_softmax_differences=df, n_inputs=args.inputs,
+                                           n_samples_list=n_samples_list, epsilon=epsilon,
+                                           model_idx=idx)
 
+    # df = pointwise_attacks(data_loader=train_loader, epsilon_list=epsilon_list, n_samples_list=n_samples_list,
+    #                        posterior=posterior, device=args.device, idx=idx)
     # df = pandas.read_pickle(path=RESULTS+"bnn/"+filename+".pkl")
-
-    catplot_pointwise_softmax_differences(dataframe=df, epsilon_list=epsilon_list,  filename=filename,
-                                          n_samples_list=n_samples_list)
+    # catplot_pointwise_softmax_differences(dataframe=df, epsilon_list=epsilon_list,  filename=filename,
+    #                                       n_samples_list=n_samples_list)
     exit()
 
     # === TEST CONJECTURE ===
-    # # n_samples_list, n_inputs = ([10,30,60,100], 100)
-    # n_samples_list, n_inputs = ([5,10,30], 1000)
-    # filename="expLossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples_list)+"_mode=vi_model="+str(idx)
-    #
-    # # test_loader = data_loaders(dataset_name=args.dataset, batch_size=1, n_inputs=n_inputs, shuffle=True)[1]
-    # # exp_loss_gradients = test_conjecture(posterior=posterior, data_loader=test_loader, device=args.device,
-    # #                                      n_samples_list=n_samples_list, n_inputs=n_inputs, mode="vi")
-    # # save_to_pickle(exp_loss_gradients, relative_path=RESULTS + "bnn/",filename=filename+".pkl")
-    #
-    # exp_loss_gradients = load_from_pickle(relative_path + "bnn/"+ filename+".pkl")
-    #
-    # # plot_exp_loss_gradients_norms(exp_loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
-    # #                               n_samples_list=n_samples_list, model_idx=idx, filename=filename)
+    # n_samples_list, n_inputs = ([10,30,60,100], 100)
+    n_samples_list, n_inputs = ([5,10,30], 1000)
+    filename="expLossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples_list)+"_mode=vi_model="+str(idx)
+
+    # test_loader = data_loaders(dataset_name=args.dataset, batch_size=1, n_inputs=n_inputs, shuffle=True)[1]
+    # exp_loss_gradients = test_conjecture(posterior=posterior, data_loader=test_loader, device=args.device,
+    #                                      n_samples_list=n_samples_list, n_inputs=n_inputs, mode="vi")
+    # save_to_pickle(exp_loss_gradients, relative_path=RESULTS + "bnn/",filename=filename+".pkl")
+
+    exp_loss_gradients = load_from_pickle(relative_path + "bnn/"+ filename+".pkl")
+
+    plot_exp_loss_gradients_norms(exp_loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
+                                  n_samples_list=n_samples_list, model_idx=idx, filename=filename)
     # plot_gradients_on_images(loss_gradients=exp_loss_gradients, max_n_images=10, n_samples_list=n_samples_list, filename=filename)
-    # # catplot_partial_derivatives(filename=filename, n_inputs=n_inputs, n_samples_list=n_samples_list)
-    # exit()
+    catplot_partial_derivatives(filename=filename, n_inputs=n_inputs, n_samples_list=n_samples_list)
+    exit()
 
     # ===== AVERAGE OVER IMAGES =====
     n_samples_list = [1, 50, 100]
@@ -187,6 +206,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", nargs='?', default=10, type=int)
     parser.add_argument("--samples", nargs='?', default=3, type=int)
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
+    parser.add_argument("--activation", nargs='?', default="softmax", type=str)
     parser.add_argument("--lr", nargs='?', default=0.002, type=float)
     parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
 

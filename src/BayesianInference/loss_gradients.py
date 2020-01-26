@@ -37,9 +37,13 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
             print("check prob distribution:", avg_output.sum(dim=1).item())
             # print("\ncheck prob distribution:", avg_output.exp().sum(dim=1).item())
 
-        ## loss = categorical_cross_entropy(y_pred=avg_output, y_true=label)  # use with softmax
-        loss = torch.nn.CrossEntropyLoss()(avg_output, label) # use with softmax
-        # loss = torch.nn.NLLLoss()(avg_output, label)  # use with log softmax
+        if posterior.loss == "crossentropy":
+            loss = torch.nn.CrossEntropyLoss()(avg_output, label)  # use with softmax
+        elif posterior.loss == "nllloss":
+            # loss = torch.nn.NLLLoss()(avg_output, label)  # use with log softmax
+            loss = torch.nn.CrossEntropyLoss()(avg_output.exp(), label)  # use with log softmax
+        else:
+            raise AttributeError("Wrong loss function.")
 
         loss.backward()
         loss_gradient = copy.deepcopy(x.grad.data[0])
