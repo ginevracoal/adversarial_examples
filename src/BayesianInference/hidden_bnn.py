@@ -21,7 +21,7 @@ from BayesianSGD.classifier import SGDClassifier
 from utils import execution_time
 
 from BayesianInference.adversarial_attacks import attack
-from BayesianInference.plot_utils import scatterplot_accuracy_robustness
+# from BayesianInference.plot_utils import scatterplot_accuracy_robustness
 from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 
 softplus = torch.nn.Softplus()
@@ -281,7 +281,7 @@ class HiddenBNN(nn.Module):
             total += labels.size(0)
             output = self.forward(images.to(self.device), n_samples=n_samples)
             outputs.append(output)
-            pred = outputs.mean(0).argmax(-1)
+            pred = output.mean(0).argmax(-1)
             labels = labels.to(self.device).argmax(-1)
 
             if DEBUG:
@@ -309,20 +309,22 @@ class HiddenBNN(nn.Module):
 
 def main(args):
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
+        data_loaders(dataset_name=args.dataset, batch_size=64, n_inputs=args.inputs, shuffle=True)
 
     epsilon_list = [0.1, 0.3, 0.6]
 
     plot_accuracy = []
     plot_robustness = []
     plot_eps = []
+    model_type = []
 
     for epsilon in epsilon_list:
         print("\n\nepsilon =", epsilon)
 
-        for inputs in [10, 20, 50, 100]:
-            train = slice_data_loader(train_loader, slice_size=inputs)
-            test = slice_data_loader(test_loader, slice_size=inputs)
+        for train_slice, test_slice in zip([10, 20, 50, 100]):
+
+            train = slice_data_loader(train_loader, slice_size=train_slice)
+            test = slice_data_loader(test_loader, slice_size=test_slice)
 
             for lr in [0.2, 0.02, 0.002]:
                 for epochs in [10, 20, 50, 100]:
@@ -330,37 +332,38 @@ def main(args):
                     input_size = input_shape[0]*input_shape[1]*input_shape[2]
                     net = NN(input_size=input_size, hidden_size=512, dataset_name=args.dataset, activation="softmax",
                              device=args.device)
-                    path = RESULTS +"nn/"
-                    filename = str(args.dataset)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(inputs)
+                    # path = RESULTS +"nn/"
+                    # filename = str(args.dataset)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(args.inputs)
 
                     # === train ===
                     net.train_classifier(epochs=epochs, lr=lr, train_loader=train, device=args.device,
                                                  input_size=input_size)
-                    os.makedirs(os.path.dirname(path), exist_ok=True)
-                    torch.save(net.model.state_dict(), path + filename + ".pt")
+                    # os.makedirs(os.path.dirname(path), exist_ok=True)
+                    # torch.save(net.model.state_dict(), path + filename + ".pt")
 
                     # === load ===
-                    net.model.load_state_dict(torch.load(path + filename + ".pt"))
+                    # net.model.load_state_dict(torch.load(path + filename + ".pt"))
 
                     # == evaluate ===
-                    acc = net.evaluate(test_loader=test,device=args.device)
+                    # acc = net.evaluate(test_loader=test,device=args.device)
 
                     # == attack ==
-
-                    filename = str(args.dataset)+"_nn_inputs="+str(inputs)+"_lr="+str(lr)+"_epsilon="+str(epsilon)\
-                               +"_epochs="+str(epochs)+"_attack.pkl"
-
-                    attack_dict = attack(model=net.model, data_loader=test_loader, epsilon=epsilon, device=args.device)
-                    save_to_pickle(relative_path=RESULTS + "nn/", filename=filename, data=attack_dict)
+                    attack_dict = attack(model=net.model, data_loader=test, epsilon=epsilon, device=args.device)
 
                     # attack_dict = load_from_pickle(path=RESULTS + "nn/"+filename)
                     plot_robustness.append(attack_dict["softmax_robustness"])
                     plot_accuracy.append(attack_dict["original_accuracy"])
-                    plot_eps.append(epsilon)
+                    plot_eps.append(attack_dict["epsilon"])
+                    model_type.append("nn")
+                    # todo loss gradient norms plot for BNNs
 
-                    # todo loss gradient norms plot
+    idx = 0
+    filename = str(args.dataset) + "_nn_attack"+str(idx)+".pkl"
+    data = {"accuracy":plot_accuracy, "softmax_robustness":plot_robustness,
+            "model_type":model_type, "epsilon":plot_eps}
 
-    model_type = np.repeat("nn", len(plot_accuracy))
+    save_to_pickle(relative_path=RESULTS + "nn/", filename=filename, data=data)
+
     scatterplot_accuracy_robustness(accuracy=plot_accuracy, robustness=plot_robustness, model_type=model_type,
                                     epsilon=plot_eps)
 
@@ -369,7 +372,7 @@ if __name__ == "__main__":
     assert pyro.__version__.startswith('1.1.0')
     parser = argparse.ArgumentParser(description="Basic Neural Network.")
 
-    parser.add_argument("-n", "--inputs", nargs="?", default=10, type=int)
+    parser.add_argument("-n", "--inputs", nargs="?", default=1000, type=int)
     parser.add_argument("--epochs", nargs='?', default=10, type=int)
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
     parser.add_argument("--activation", nargs='?', default="softmax", type=str)

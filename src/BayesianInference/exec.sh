@@ -16,17 +16,17 @@
 #######################################
 
 # === hidden_bnn === #
-SCRIPT="hidden_bnn"
-DATASET_NAME="mnist"
-N_INPUTS="30000"
-EPOCHS="200"
-LR="0.002"
-DEVICE="cpu"
+#SCRIPT="hidden_bnn"
+#DATASET_NAME="mnist"
+#N_INPUTS="30000"
+#EPOCHS="200"
+#LR="0.002"
+#DEVICE="cpu"
 
 # === hidden_vi_bnn === #
 #SCRIPT="hidden_vi_bnn"
 #DATASET_NAME="mnist"
-#N_INPUTS="1000"
+#N_INPUTS="100"
 #N_SAMPLES="5"
 #EPOCHS="100"
 #LR="0.00002"
@@ -41,6 +41,16 @@ DEVICE="cpu"
 #N_SAMPLES="1"
 #DEVICE="cpu"
 
+# === scatterplot == #
+#SCRIPT="scatterplot"
+#DEVICE="cpu"
+#DATASET_NAME="mnist"
+
+# === gridplot == #
+SCRIPT="gridplot"
+DEVICE="cpu"
+DATASET_NAME="mnist"
+INPUTS="100"
 
 ###########
 # execute #
@@ -72,6 +82,10 @@ elif [ $SCRIPT = "hidden_vi_bnn" ]; then
   python3 "BayesianInference/hidden_vi_bnn.py" --samples=$N_SAMPLES --dataset=$DATASET_NAME --inputs=$N_INPUTS --epochs=$EPOCHS --lr=$LR --device=$DEVICE &> $OUT
 elif [ $SCRIPT = "hmc_bnn" ]; then
   python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE &> $OUT
+elif [ $SCRIPT = "scatterplot" ]; then
+  python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --dataset=$DATASET_NAME --device=$DEVICE &> $OUT
+elif [ $SCRIPT = "gridplot" ]; then
+  python3 "BayesianInference/plots/gridplot_exp_loss_gradients_norms.py" --dataset=$DATASET_NAME --device=$DEVICE --inputs=$INPUTS &> $OUT
 fi
 
 ## deactivate environment

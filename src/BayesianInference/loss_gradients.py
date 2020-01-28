@@ -109,31 +109,6 @@ def expected_loss_gradients_multiple_posteriors(posteriors_list, n_samples, data
         expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None)
 
 
-def average_over_images(posterior, n_inputs_list, n_samples_list, device, data_loader, filename, mode="vi"):
-    avg_over_images = []
-    for n_inputs in n_inputs_list:
-        data_loader_slice = slice_data_loader(data_loader=data_loader, slice_size=n_inputs)
-
-        loss_gradients = []
-        for n_samples in n_samples_list:
-            accuracy = posterior.evaluate(data_loader=data_loader_slice, n_samples=n_samples)
-            loss_gradient = expected_loss_gradients(posterior=posterior,
-                                                    n_samples=n_samples,
-                                                    data_loader=data_loader_slice,
-                                                    device=device, mode=mode)
-
-            plot_heatmap(columns=loss_gradient, path=RESULTS,
-                         filename="lossGradients_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_heatmap.png",
-                         xlab="pixel idx", ylab="image idx",
-                         title=f"Loss gradients pixel components on {n_samples} sampled posteriors")
-
-            avg_loss_gradient = np.mean(np.array(loss_gradient), axis=0)
-            loss_gradients.append({"avg_loss_gradient":avg_loss_gradient, "n_samples":n_samples, "n_inputs":n_inputs,
-                                   "accuracy":accuracy})
-        avg_over_images.append(loss_gradients)
-
-    avg_over_images = np.array(avg_over_images)
-    save_to_pickle(data=avg_over_images, relative_path=RESULTS+"bnn/", filename=filename+".pkl")
 
 
 # === Loss functions ===

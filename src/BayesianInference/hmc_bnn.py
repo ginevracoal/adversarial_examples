@@ -1,20 +1,14 @@
 import sys
 sys.path.append(".")
 import argparse
-import random
 
 import pyro
-from pyro.infer import TracePredictive, EmpiricalMarginal
 from pyro.infer.mcmc import MCMC, HMC
-from pyro import poutine
 from pyro.infer.mcmc.util import predictive
 
-from utils import execution_time
-from utils import save_to_pickle, load_from_pickle
 from BayesianInference.bnn import BNN
 from BayesianInference.pyro_utils import data_loaders
-from BayesianInference.hidden_vi_bnn import test_conjecture
-from BayesianInference.plot_utils import *
+from BayesianInference.plots.plot_utils import *
 from BayesianInference.adversarial_attacks import *
 
 
@@ -55,9 +49,7 @@ class HMC_BNN(BNN):
         :return:
         """
         print("\nSampling weights.")
-        # print(mcmc._samples)
-        n_posterior_samples = self.n_samples*self.n_chains
-        posterior_samples_dict = mcmc.get_samples()#num_samples=n_posterior_samples).to("cuda")
+        posterior_samples_dict = mcmc.get_samples()
         # posterior_samples_list = [{k: v[i] for k, v in posterior_samples_dict.items()}
         #                           for i in range(n_posterior_samples)]
 
@@ -81,7 +73,10 @@ class HMC_BNN(BNN):
 
     def forward(self, inputs, n_samples):
         random.seed(0)
-        preds = predictive(self.model, self.posterior_samples[:n_samples], inputs, None)["obs"]
+        selected_samples = {}
+        for k, v in self.posterior_samples.items():
+            selected_samples.update({k: v[:n_samples]})
+        preds = predictive(self.model, selected_samples, inputs.to(self.device), None)["obs"]
         return preds
 
     def save(self, relative_path=RESULTS):
@@ -101,9 +96,9 @@ class HMC_BNN(BNN):
         return self
 
     def evaluate(self, data_loader, n_samples, device):
-        if n_samples > len(self.posterior_samples):
-            raise ValueError(f"\nYou can choose max {len(self.posterior_samples)} samples from this posterior.")
-
+        total_n_posterior_samples = len(self.posterior_samples["outb_prior"])
+        if n_samples > total_n_posterior_samples:
+            raise ValueError(f"\nYou can choose max {total_n_posterior_samples} samples from this posterior.")
         total = 0.0
         correct = 0.0
         for images, labels in data_loader:
@@ -111,24 +106,24 @@ class HMC_BNN(BNN):
             labels = labels.to(device)
             output = self.forward(inputs=images, n_samples=n_samples).to(device)
             output = output.mean(0)
+            predictions = output.argmax(dim=-1)
+            total += labels.size(0)
+            correct += (predictions == labels.argmax(-1)).sum().item()
 
             if DEBUG:
                 print("\noutput =", output)
                 print("\ncheck prob distributions:", output.sum(dim=-1))
+                print("\npredictions[:10] =", predictions[:10])
+                print("labels[:10]      =", labels.argmax(-1)[:10])
 
-            predictions = output.argmax(dim=-1)
-            print("\npredictions[:10] =", predictions[:10])
-            print("labels[:10]      =", labels.argmax(-1)[:10])
-            total += labels.size(0)
-            correct += (predictions == labels.argmax(-1)).sum().item()
         accuracy = 100 * correct / total
         print(f"\n === Accuracy on {n_samples} sampled models = {accuracy:.2f}")
 
 
 def main(args):
     random.seed(0)
-    train_loader, test_loader, _, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=args.inputs, n_inputs=args.inputs)
+    train_loader, test_loader, data_format, input_shape = \
+        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
     bayesnn = HMC_BNN(input_shape=input_shape, device=args.device, dataset_name=args.dataset, n_chains=args.chains,
                       warmup=args.warmup, n_samples=args.samples, n_inputs=args.inputs)
 
