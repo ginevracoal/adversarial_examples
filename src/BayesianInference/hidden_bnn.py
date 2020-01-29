@@ -5,6 +5,7 @@ import argparse
 
 import pyro
 from pyro import poutine
+from pyro.distributions import OneHotCategorical, Normal
 from torch.autograd import Variable
 import torch
 from torch import nn
@@ -21,7 +22,6 @@ from BayesianSGD.classifier import SGDClassifier
 from utils import execution_time
 
 from BayesianInference.adversarial_attacks import attack
-# from BayesianInference.plot_utils import scatterplot_accuracy_robustness
 from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 
 softplus = torch.nn.Softplus()
@@ -30,38 +30,50 @@ DEBUG=False
 
 
 class NN(nn.Module):
-    def __init__(self, input_size, hidden_size, dataset_name, device, activation="softmax", n_classes=10):
+    def __init__(self, input_size, hidden_size, architecture, device, activation="softmax", n_classes=10):
         super(NN, self).__init__()
         self.input_size = input_size
+        self.architecture = architecture
         self.n_classes = n_classes
         self.dim = -1
         self.device = device
-        if dataset_name == "mnist":
+
+        if self.architecture == "fully_connected":
             self.model = nn.Sequential(
-                                nn.Linear(self.input_size, hidden_size),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, hidden_size),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, n_classes),
-                                nn.Softmax(dim=self.dim) if activation == "softmax" else nn.LogSoftmax(dim=self.dim)).to(self.device)
-        else:
-            self.model = nn.Sequential(#nn.Dropout(p=0.2),
-                                nn.Linear(self.input_size, hidden_size),
-                                # nn.Dropout(p=0.5),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, hidden_size),
-                                # nn.Dropout(p=0.5),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, hidden_size),
-                                # nn.Dropout(p=0.5),
-                                nn.LeakyReLU(),
-                                nn.Linear(hidden_size, n_classes),
-                                nn.Softmax(dim=self.dim) if activation == "softmax" else nn.LogSoftmax(dim=self.dim)).to(self.device)
+                nn.Linear(self.input_size, hidden_size),
+                nn.LeakyReLU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.LeakyReLU(),
+                nn.Linear(hidden_size, n_classes),
+                nn.Softmax(dim=self.dim) if activation == "softmax" else nn.LogSoftmax(dim=self.dim)
+            ).to(self.device)
+
+        elif self.architecture == "convolutional":
+            self.conv1 = nn.Conv2d(1, 16, 1).to(self.device)
+            self.conv2 = nn.Conv2d(16, 32, 3).to(self.device)
+            self.dropout1 = nn.Dropout(0.25).to(self.device)
+            self.fc1 = nn.Linear(32*13*13, 16).to(self.device)
+            self.dropout2 = nn.Dropout(0.5).to(self.device)
+            self.out = nn.Linear(16, self.n_classes).to(self.device)
+
+        print(self)
+        print("\nTotal number of network weights =", sum(p.numel() for p in self.parameters()))
 
     def forward(self, inputs):
-        # print(self.model(inputs))
-        # inputs = inputs.to(self.device).view(-1, self.input_size)
-        return self.model(inputs.to(self.device))
+        if self.architecture == "fully_connected":
+            inputs = inputs.to(self.device).view(-1, self.input_size)
+            return self.model(inputs.to(self.device))
+        elif self.architecture == "convolutional":
+            inputs = inputs.permute(0,3,1,2).to(self.device)
+            output = nn.LeakyReLU()(self.conv1(inputs))
+            output = nn.LeakyReLU()(self.conv2(output))
+            output = nn.MaxPool2d((2,2))(output)
+            output = self.dropout1(output)
+            output = output.view(-1, output.size(1)*output.size(2)*output.size(3))
+            output = nn.LeakyReLU()(self.fc1(output))
+            output = self.dropout2(output)
+            output = self.out(output)
+            return output
 
     def train_classifier(self, epochs, lr, train_loader, device, input_size):
         criterion = nn.CrossEntropyLoss()
@@ -76,8 +88,8 @@ class NN(nn.Module):
             total = 0.0
 
             for images, labels in train_loader:
-                images = images.to(device).view(-1, self.input_size)
-                labels = labels.to(device).argmax(-1)  # .long()
+                images = images.to(device)#.view(-1, self.input_size)
+                labels = labels.to(device).argmax(-1)
                 total += labels.size(0)
 
                 optimizer.zero_grad()
@@ -92,12 +104,13 @@ class NN(nn.Module):
                 correct_predictions += (predictions == labels).sum()
                 accuracy = 100 * correct_predictions / len(train_loader.dataset)
 
-            # print("\noutputs: ", outputs)
-            # print("\nlabels: ", labels)
-            # print("\npredictions: ", predictions)
-            # print(list(self.model.parameters())[0].clone())
+                # print("\noutputs: ", outputs)
+                # print("\nlabels: ", labels)
+                # print("\npredictions: ", predictions)
+                # print(list(self.model.parameters())[0].clone())
+                # exit()
 
-            print(f"[Epoch {epoch + 1}]\t loss: {total_loss:.8f} \t accuracy: {accuracy:.2f}")
+            print(f"\n[Epoch {epoch + 1}]\t loss: {total_loss:.8f} \t accuracy: {accuracy:.2f}", end="\t")
 
         execution_time(start=start, end=time.time())
         # return model
@@ -126,10 +139,10 @@ class NN(nn.Module):
             return accuracy
 
 class HiddenBNN(nn.Module):
-    def __init__(self, input_size, device, activation, hidden_size, dataset_name):
+    def __init__(self, input_size, device, activation, hidden_size, architecture):
         super(HiddenBNN, self).__init__()
         self.device = device
-        self.dataset_name = dataset_name
+        self.architecture = architecture
         self.n_classes = 10
         self.hidden_size = hidden_size
         if activation == "softmax":
@@ -138,15 +151,15 @@ class HiddenBNN(nn.Module):
             self.activation_func = nnf.log_softmax
         self.input_size = input_size
         self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes,
-                      activation=activation, dataset_name=dataset_name, device=device)
-        print(self.net)
+                      activation=activation, architecture=architecture, device=device)
+        # print(self.net)
 
     def model(self, inputs, labels=None, kl_factor=1.0):
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
-        if self.dataset_name == "mnist":
+        if self.architecture == "fully_connected":
             # Set-up parameters for the distribution of weights for each layer `a<n>`
-            a1_mean = torch.zeros(self.input_size, self.hidden_size).to(self.device)
+            a1_mean = torch.zeros(self.input_size, 32*3).to(self.device)
             a1_scale = torch.ones(self.input_size, self.hidden_size).to(self.device)
             a2_mean = torch.zeros(self.hidden_size+1, self.n_classes).to(self.device)
             a2_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
@@ -164,46 +177,37 @@ class HiddenBNN(nn.Module):
                                                                include_hidden_bias=False))
                 pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
                 return logits
-        else:
-            # Set-up parameters for the distribution of weights for each layer `a<n>`
-            a1_mean = torch.zeros(self.input_size, self.hidden_size).to(self.device)
-            a1_scale = torch.ones(self.input_size, self.hidden_size).to(self.device)
-            # a1_dropout = torch.tensor(0.25)
-            a2_mean = torch.zeros(self.hidden_size + 1, self.hidden_size).to(self.device)
-            a2_scale = torch.ones(self.hidden_size + 1, self.hidden_size).to(self.device)
-            # a2_dropout = torch.tensor(1.0)
-            a3_mean = torch.zeros(self.hidden_size+1, self.hidden_size).to(self.device)
-            a3_scale = torch.ones(self.hidden_size+1, self.hidden_size).to(self.device)
-            # a3_dropout = torch.tensor(1.0)
-            a4_mean = torch.zeros(self.hidden_size + 1, self.hidden_size).to(self.device)
-            a4_scale = torch.ones(self.hidden_size + 1, self.hidden_size).to(self.device)
-            # a5_mean = torch.zeros(self.hidden_size + 1, self.n_classes).to(self.device)
-            # a5_scale = torch.ones(self.hidden_size + 1, self.hidden_size).to(self.device)
-            with pyro.plate('data', size=batch_size):
-                # sample conditionally independent hidden layers
-                h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,  # a1_dropout*a1_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                # print("h1", h1[:5], end="\t")
-                h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,  # a2_dropout*a2_scale
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale, #a3_dropout*a3_scale
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                # h4 = pyro.sample('h4', bnn.HiddenLayer(h3, a4_mean, a4_scale, #a3_dropout*a3_scale
-                #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                # logits = pyro.sample('logits', bnn.HiddenLayer(h4, a5_mean, a5_scale,
-                logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                non_linearity=lambda x: self.activation_func(x, dim=self.net.dim),
-                                                               KL_factor=kl_factor,
-                                                               include_hidden_bias=False))
+        elif self.architecture == "convolutional":
+            net = self.net
+            conv1w_prior = Normal(loc=torch.zeros_like(net.conv1.weight), scale=torch.ones_like(net.conv1.weight))
+            conv1b_prior = Normal(loc=torch.zeros_like(net.conv1.bias), scale=torch.ones_like(net.conv1.bias))
 
-                pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
-                return logits
+            conv2w_prior = Normal(loc=torch.zeros_like(net.conv2.weight), scale=torch.ones_like(net.conv2.weight))
+            conv2b_prior = Normal(loc=torch.zeros_like(net.conv2.bias), scale=torch.ones_like(net.conv2.bias))
+
+            fc1w_prior = Normal(loc=torch.zeros_like(net.fc1.weight), scale=torch.ones_like(net.fc1.weight))
+            fc1b_prior = Normal(loc=torch.zeros_like(net.fc1.bias), scale=torch.ones_like(net.fc1.bias))
+
+            outw_prior = Normal(loc=torch.zeros_like(net.out.weight), scale=torch.ones_like(net.out.weight))
+            outb_prior = Normal(loc=torch.zeros_like(net.out.bias), scale=torch.ones_like(net.out.bias))
+
+            priors = {'conv1.weight': conv1w_prior, 'conv1.bias': conv1b_prior,
+                      'conv2.weight': conv2w_prior, 'conv2.bias': conv2b_prior,
+                      'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
+                      'out.weight': outw_prior, 'out.bias': outb_prior}
+
+            lifted_module = pyro.random_module("module", net, priors)
+            lifted_reg_model = lifted_module()
+            outputs = lifted_reg_model(inputs.to(self.device))
+            logits = self.activation_func(outputs, dim=self.net.dim)
+            pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels.to(self.device))
+            return logits.to(self.device)
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
 
-        if self.dataset_name == "mnist":
+        if self.architecture == "fully_connected":
             a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
             a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
                                   constraint=constraints.greater_than(0.01)).to(self.device)
@@ -223,53 +227,80 @@ class HiddenBNN(nn.Module):
                                                       non_linearity=lambda x: self.activation_func(x, dim=self.net.dim),
                                                       KL_factor=kl_factor, include_hidden_bias=False))
 
-        else:
-            a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
-            a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
-                                  constraint=constraints.greater_than(0.01)).to(self.device)
-            # a1_dropout = pyro.param('a1_dropout', torch.tensor(0.25),
-            #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
-            a2_mean = pyro.param('a2_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
-            a2_scale = pyro.param('a2_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
-                                  constraint=constraints.greater_than(0.01)).to(self.device)
-            # a2_dropout = pyro.param('a2_dropout', torch.tensor(1.0),
-            #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
-            a3_mean = pyro.param('a3_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
-            a3_scale = pyro.param('a3_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
-                                  constraint=constraints.greater_than(0.01)).to(self.device)
-            # a3_dropout = pyro.param('a3_dropout', torch.tensor(1.0),
-            #                         constraint=constraints.interval(0.1, 1.0)).to(self.device)
-            a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.hidden_size+1, self.hidden_size)).to(self.device)
-            a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.hidden_size+1, self.hidden_size),
-                                   constraint=constraints.greater_than(0.01)).to(self.device)
-            # a5_mean = pyro.param('a5_mean', 0.01 * torch.randn(self.hidden_size + 1, self.n_classes)).to(self.device)
-            # a5_scale = pyro.param('a5_scale', 0.1 * torch.ones(self.hidden_size + 1, self.n_classes),
-            #                       constraint=constraints.greater_than(0.01)).to(self.device)
+        elif self.architecture == "convolutional":
+            net = self.net
+            # convolution layer weights
+            conv1w_mu = torch.randn_like(net.conv1.weight).to(self.device)
+            conv1w_sigma = torch.randn_like(net.conv1.weight).to(self.device)
+            conv1w_prior = Normal(loc=pyro.param("conv1w_mu", conv1w_mu),
+                                  scale=softplus(pyro.param("conv1w_sigma", conv1w_sigma)))
+            # First layer bias distribution priors
+            conv1b_mu = torch.randn_like(net.conv1.bias).to(self.device)
+            conv1b_sigma = torch.randn_like(net.conv1.bias).to(self.device)
+            conv1b_prior = Normal(loc=pyro.param("conv1b_mu", conv1b_mu),
+                                  scale=softplus(pyro.param("conv1b_sigma", conv1b_sigma)))
 
-            with pyro.plate('data', size=batch_size):
-                h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,#a1_dropout * a1_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,#a2_dropout * a2_scale
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                h3 = pyro.sample('h3', bnn.HiddenLayer(h2, a3_mean, a3_scale,#a3_dropout * a3_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                # h4 = pyro.sample('h4', bnn.HiddenLayer(h3, a4_mean, a4_scale,#a3_dropout * a3_scale,
-                #                                        non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
-                # logits = pyro.sample('logits', bnn.HiddenLayer(h4, a5_mean, a5_scale,
-                logits = pyro.sample('logits', bnn.HiddenLayer(h3, a4_mean, a4_scale,
-                                                               non_linearity=lambda x: self.activation_func(x, dim=self.net.dim),
-                                                               KL_factor=kl_factor,
-                                                               include_hidden_bias=False))
+            # convolution layer weights
+            conv2w_mu = torch.randn_like(net.conv2.weight).to(self.device)
+            conv2w_sigma = torch.randn_like(net.conv2.weight).to(self.device)
+            conv2w_prior = Normal(loc=pyro.param("conv2w_mu", conv2w_mu),
+                                  scale=softplus(pyro.param("conv2w_sigma", conv2w_sigma)))
+            # First layer bias distribution priors
+            conv2b_mu = torch.randn_like(net.conv2.bias).to(self.device)
+            conv2b_sigma = torch.randn_like(net.conv2.bias).to(self.device)
+            conv2b_prior = Normal(loc=pyro.param("conv2b_mu", conv2b_mu),
+                                  scale=softplus(pyro.param("conv2b_sigma", conv2b_sigma)))
+
+            # First layer weight distribution priors
+            fc1w_mu = torch.randn_like(net.fc1.weight).to(self.device)
+            fc1w_sigma = torch.randn_like(net.fc1.weight).to(self.device)
+            fc1w_prior = Normal(loc=pyro.param("fc1w_mu", fc1w_mu),
+                                scale=softplus(pyro.param("fc1w_sigma", fc1w_sigma)))
+            # First layer bias distribution priors
+            fc1b_mu = torch.randn_like(net.fc1.bias).to(self.device)
+            fc1b_sigma = torch.randn_like(net.fc1.bias).to(self.device)
+            fc1b_prior = Normal(loc=pyro.param("fc1b_mu", fc1b_mu),
+                                scale=softplus(pyro.param("fc1b_sigma", fc1b_sigma)))
+            # Output layer weight distribution priors
+            outw_mu = torch.randn_like(net.out.weight).to(self.device)
+            outw_sigma = torch.randn_like(net.out.weight).to(self.device)
+            outw_prior = Normal(loc=pyro.param("outw_mu", outw_mu),
+                                scale=softplus(pyro.param("outw_sigma", outw_sigma))).independent(1)
+            # Output layer bias distribution priors
+            outb_mu = torch.randn_like(net.out.bias).to(self.device)
+            outb_sigma = torch.randn_like(net.out.bias).to(self.device)
+            outb_prior = Normal(loc=pyro.param("outb_mu", outb_mu),
+                                scale=softplus(pyro.param("outb_sigma", outb_sigma)))
+
+            priors = {'conv1.weight': conv1w_prior, 'conv1.bias': conv1b_prior,
+                      'conv2.weight': conv2w_prior, 'conv2.bias': conv2b_prior,
+                      'fc1.weight': fc1w_prior, 'fc1.bias': fc1b_prior,
+                      'out.weight': outw_prior, 'out.bias': outb_prior}
+            lifted_module = pyro.random_module("module", net, priors)
+            lifted_reg_model = lifted_module()
+
+            logits = self.activation_func(lifted_reg_model(inputs.to(self.device)), dim=self.net.dim)
+            return logits.to(self.device)
+
 
     def forward(self, inputs, n_samples):
         random.seed(0)
         res = []
+
         if DEBUG:
-            print("a1_mean", pyro.get_param_store()["a1_mean"])
-            print("a2_scale",pyro.get_param_store()["a2_scale"])
+            if self.dataset_name == "mnist":
+                print("a1_mean", pyro.get_param_store()["a1_mean"])
+            else:
+                print("conv1w_mu",pyro.get_param_store()["conv1w_mu"].flatten())
+
         for _ in range(n_samples):
             guide_trace = poutine.trace(self.guide).get_trace(inputs)
-            res.append(guide_trace.nodes['logits']['value'])
+            # print(guide_trace.nodes)
+            # exit()
+            if self.architecture == "fully_connected":
+                res.append(guide_trace.nodes['logits']['value'])
+            elif self.architecture == "convolutional":
+                res.append(guide_trace.nodes['_RETURN']['value'])
         res = torch.stack(res, dim=0)
         return res
 
@@ -290,7 +321,7 @@ class HiddenBNN(nn.Module):
             correct += (pred == labels).sum().item()
 
         accuracy = 100 * correct / total
-        print(f"accuracy on {n_samples} samples = {accuracy:.2f}", end="\t")
+        print(f"accuracy on {n_samples} samples = {accuracy:.2f}")
 
         return {"accuracy": accuracy, "outputs":outputs}
 

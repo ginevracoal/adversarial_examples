@@ -184,6 +184,17 @@ def load_data():
     for file in os.listdir(path+"bnn/"):
         if file.endswith(".pkl"):
             dict = load_from_pickle(path=path+"bnn/"+file)
+            print(dict.keys())
+            robustness.append(dict["softmax_robustness"])
+            accuracy.append(dict["original_accuracy"])
+            epsilon.append(dict["epsilon"])
+            model_type.append("bnn")
+
+    path = "../data/exp_loss_gradients/"
+    for file in os.listdir(path):
+        if file.endswith(".pkl"):
+            dict = load_from_pickle(path=path+file)
+            print(dict.keys())
             robustness.append(dict["softmax_robustness"])
             accuracy.append(dict["original_accuracy"])
             epsilon.append(dict["epsilon"])
@@ -198,7 +209,7 @@ def scatterplot_accuracy_robustness(accuracy, robustness, model_type, epsilon):
     """
     sns.set()
     plt.subplots(figsize=(10, 6), dpi=150)
-    # sns.set_palette("YlGnBu")
+    sns.set_palette("YlGnBu",2)
 
     # size = ["$%s$" % x for x in epsilon]
     df = pd.DataFrame(data={"accuracy":accuracy,"robustness":robustness,"model":model_type,"epsilon":epsilon})
@@ -231,6 +242,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
-    parser.add_argument("--device", default='cpu', type=str, help='use "cpu" or "cuda".')
+    parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
 
     main(args=parser.parse_args())

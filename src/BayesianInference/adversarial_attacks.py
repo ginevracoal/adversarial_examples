@@ -6,40 +6,6 @@ from robustness_measures import softmax_robustness
 DEBUG=False
 
 
-# # todo refactor
-# def pointwise_bayesian_attacks(data_loader, epsilon_list, n_samples_list, posterior, device, idx):
-#     data = data_loader
-#     plot_samples = []
-#     plot_softmax_differences = []
-#     plot_original_acc = []
-#     plot_eps = []
-#
-#     for epsilon in epsilon_list:
-#         print("\n\nepsilon =", epsilon)
-#
-#         for n_attack_samples in n_samples_list:
-#             # print("n_samples =", n_attack_samples, end="\t")
-#             original_acc = posterior.evaluate(data_loader=data, n_samples=n_attack_samples, device=device)
-#             attacks = bayesian_attack(model=posterior, n_pred_samples=n_attack_samples,
-#                                       n_attack_samples=n_attack_samples, data_loader=data, epsilon=epsilon,
-#                                       device=device)
-#
-#             for i in range(len(data.dataset)):
-#                 plot_softmax_differences.append(attacks["pointwise_softmax_differences"][i])
-#                 plot_samples.append(n_attack_samples)
-#                 plot_eps.append(epsilon)
-#                 plot_original_acc.append(original_acc)
-#
-#         df = pandas.DataFrame(data={"n_samples": plot_samples, "softmax_differences": plot_softmax_differences,
-#                                     "accuracy": plot_original_acc})#, "epsilon": plot_eps})
-#         df.to_pickle(RESULTS + "bnn/" + "pointwise_softmax_differences_eps=" + str(epsilon) \
-#                + "_inputs=" + str(len(data_loader.dataset)) + "_samples="+str(n_samples_list)
-#                      +"_mode=vi_model=" + str(idx) + ".pkl")
-#         distplot_pointwise_softmax_differences(df, n_inputs=len(data_loader.dataset), n_samples_list=n_samples_list,
-#                                                epsilon=epsilon,
-#                                                model_idx=idx)
-
-
 def fgsm_attack(model, image, label, epsilon, device):
     """ Attack a NN model on the given image with an epsilon perturbation.
     :return {"attack","loss_gradient","original_prediction","adversarial_output"}
@@ -58,7 +24,7 @@ def fgsm_attack(model, image, label, epsilon, device):
 
     del model
 
-    return {"perturbed_image":perturbed_image, "original_image":image,
+    return {#"perturbed_image":perturbed_image, #"original_image":image,
             "loss_gradient":image_grad, "original_output":original_output, "adversarial_output":adversarial_output}
 
 def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, epsilon, device):
@@ -75,8 +41,8 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
         # Collect the element-wise sign of the data gradient
         sum_sign_data_grad = sum_sign_data_grad + image_grad.sign()
 
-    output = model.forward(image, n_samples=n_attack_samples).mean(0)
-    loss = torch.nn.CrossEntropyLoss()(output, label)
+    original_output = model.forward(image, n_samples=n_pred_samples).mean(0)
+    loss = torch.nn.CrossEntropyLoss()(original_output, label)
 
     model.zero_grad()
     loss.backward(retain_graph=True)
@@ -87,7 +53,6 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
     perturbed_image = image + epsilon * sum_sign_data_grad / n_attack_samples
     perturbed_image = torch.clamp(perturbed_image, 0, 1)
 
-    original_output = model.forward(image, n_samples=n_pred_samples).mean(0)
     adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0)
 
     if DEBUG:
@@ -98,8 +63,10 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
 
     del model
 
-    return {"original_image":image, "perturbed_image": perturbed_image,
-            "loss_gradient": sum_sign_data_grad/n_attack_samples,
+    loss_gradient = sum_sign_data_grad/n_attack_samples
+
+    return {#"original_image":image, "perturbed_image": perturbed_image,
+            "loss_gradient": loss_gradient,
             "original_output": original_output,"adversarial_output": adversarial_output,
             "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
 
@@ -126,13 +93,16 @@ def attack(model, data_loader, epsilon, device, method="fgsm"):
             label = label.to(device).argmax(-1).view(-1)
             image = image.to(device).view(-1, input_shape)
 
+            # attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
+            #                           label=label, epsilon=epsilon, device=device)
+            #
+            # # attacks.append(attack_dict["perturbed_image"])
+            # loss_gradients.append(attack_dict["loss_gradient"])
+            # original_outputs.append(attack_dict["original_output"])
+            # adversarial_outputs.append(attack_dict["adversarial_output"])
+
             attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
                                       label=label, epsilon=epsilon, device=device)
-
-            attacks.append(attack_dict["perturbed_image"])
-            loss_gradients.append(attack_dict["loss_gradient"])
-            original_outputs.append(attack_dict["original_output"])
-            adversarial_outputs.append(attack_dict["adversarial_output"])
 
             original_correct += ((attack_dict["original_output"].argmax(-1)==label).sum().item())
             adversarial_correct += ((attack_dict["adversarial_output"].argmax(-1)==label).sum().item())
@@ -143,11 +113,12 @@ def attack(model, data_loader, epsilon, device, method="fgsm"):
     softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
 
     return {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
-            "softmax_robustness": softmax_rob, "loss_gradients":loss_gradients, "attacks":attacks, "epsilon":epsilon}
+            "softmax_robustness": softmax_rob, "loss_gradients":loss_gradients, "epsilon":epsilon}
 
-def bayesian_attack(model, n_attack_samples, n_pred_samples, data_loader, epsilon, device, method="fgsm"):
+def bayesian_attack(model, n_attack_samples, n_pred_samples, data_loader, epsilon, device, filename,
+                    method="fgsm"):
 
-    print(f"\nFGSM bayesian attack\teps={epsilon}", end="\t")
+    print(f"\nFGSM bayesian attack\teps = {epsilon}\tattack_samples = {n_attack_samples}")
 
     attacks = []
     loss_gradients = []
@@ -170,7 +141,7 @@ def bayesian_attack(model, n_attack_samples, n_pred_samples, data_loader, epsilo
                                                n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
                                                label=label, epsilon=epsilon, device=device)
 
-            attacks.append(attack_dict["perturbed_image"])
+            # attacks.append(attack_dict["perturbed_image"])
             loss_gradients.append(attack_dict["loss_gradient"])
             original_outputs.append(attack_dict["original_output"])
             adversarial_outputs.append(attack_dict["adversarial_output"])
@@ -181,9 +152,14 @@ def bayesian_attack(model, n_attack_samples, n_pred_samples, data_loader, epsilo
     original_accuracy = 100 * original_correct / len(data_loader.dataset)
     adversarial_accuracy = 100 * adversarial_correct / len(data_loader.dataset)
 
-    print(f"orig_acc = {original_accuracy}\tadv_acc = {adversarial_accuracy}")
+    print(f"\norig_acc = {original_accuracy}\t\tadv_acc = {adversarial_accuracy}")
 
     softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
 
-    return {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
-            "softmax_robustness": softmax_rob, "loss_gradients":loss_gradients, "attacks":attacks,"epsilon":epsilon}
+    attack_dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
+                   "loss_gradients":loss_gradients, "softmax_robustness": softmax_rob, "epsilon":epsilon}
+
+    if filename != None:
+        save_to_pickle(relative_path=RESULTS + "bnn/", filename=filename, data=attack_dict)
+
+    return attack_dict

@@ -34,7 +34,7 @@ def softmax_robustness(original_outputs, adversarial_outputs):
     print("softmax_robustness =", robustness.item())
     return robustness.item()
 
-def old_softmax_robustness(original_predictions, perturbations_predictions):
+def softmax_robustness_ths(original_outputs, adversarial_outputs):
     """
     This method computes the percentage of perturbed points whose change in classification differs from the original one
     by less than 50%, i.e. such that the l-infinite norm of the softmax difference between the original prediction and
@@ -44,11 +44,11 @@ def old_softmax_robustness(original_predictions, perturbations_predictions):
     :param x2: input perturbations
     """
     count = 0
-    for i in range(len(original_predictions)):
-        if softmax_difference(original_predictions, perturbations_predictions) < 0.5:
+    for i in range(len(original_outputs)):
+        if softmax_difference(original_outputs, adversarial_outputs) < 0.5:
             count += 1
-    robustness = count / len(original_predictions) * 100
-    # print("Softmax robustness: ", robustness)
+    robustness = count / len(original_outputs)
+    print("Softmax robustness ths: ", robustness)
     return robustness
 
 

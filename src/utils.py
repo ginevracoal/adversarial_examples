@@ -1,7 +1,7 @@
 import numpy as np
 import keras
 from keras import backend as K
-from keras.datasets import mnist
+from keras.datasets import mnist, fashion_mnist
 import pickle as pkl
 import time
 import os
@@ -26,6 +26,41 @@ def execution_time(start, end):
 # data preprocessing #
 ######################
 
+def load_fashion_mnist(img_rows=28, img_cols=28, n_samples=None):
+    print("\nLoading fashion mnist.")
+
+    # the data, split between train and test sets
+    (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+
+    if K.image_data_format() == 'channels_first':
+        x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
+        x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
+        input_shape = (1, img_rows, img_cols)
+    else:
+        x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
+        x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
+        input_shape = (img_rows, img_cols, 1)
+
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
+    x_train /= 255
+    x_test /= 255
+
+    # convert class vectors to binary class matrices
+    y_train = keras.utils.to_categorical(y_train, 10)
+    y_test = keras.utils.to_categorical(y_test, 10)
+
+    if n_samples:
+        x_train = x_train[:n_samples]
+        y_train = y_train[:n_samples]
+        x_test = x_test[:n_samples]
+        y_test = y_test[:n_samples]
+
+    num_classes = 10
+    data_format = 'channels_last'
+
+    print('x_train shape:', x_train.shape, '\nx_test shape:', x_test.shape)
+    return x_train, y_train, x_test, y_test, input_shape, num_classes, data_format
 
 def preprocess_mnist(test, img_rows=28, img_cols=28, n_samples=None):
     """Preprocess mnist dataset for keras training
@@ -162,6 +197,8 @@ def load_dataset(dataset_name, test, data=DATA_PATH, n_samples=None):
         return preprocess_mnist(test=test, n_samples=n_samples)
     elif dataset_name == "cifar":
         return load_cifar(test=test, data=data, n_samples=n_samples)
+    elif dataset_name == "fashion_mnist":
+        return load_fashion_mnist(n_samples=n_samples)
     else:
         raise ValueError("\nWrong dataset name.")
 
