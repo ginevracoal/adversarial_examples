@@ -1,7 +1,8 @@
 import sys
 sys.path.append(".")
 from directories import *
-from utils import plot_heatmap
+
+from tqdm import tqdm
 from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 import torch
 from BayesianInference.hidden_vi_bnn import VI_BNN, hidden_vi_models
@@ -12,7 +13,11 @@ import argparse
 
 
 DEBUG=False
+DATA_PATH="../data/exp_loss_gradients/"
 
+
+def get_filename(dataset_name, n_inputs, n_samples, model_idx):
+    return str(dataset_name)+"_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_loss_grads_"+str(model_idx)+".pkl"
 
 def expected_loss_gradient(posterior, n_samples, image, label, device, mode, baseclass=None):
     loss_gradients = []
@@ -76,23 +81,21 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
     exp_loss_gradient = torch.stack(loss_gradients).mean(dim=0)
     # print("\nexp_loss_gradient[:20] =", exp_loss_gradient[:20])
 
-    print(f"mean_over_features = {exp_loss_gradient.mean(0).item()} "
-          f"\tstd_over_features = {exp_loss_gradient.std(0).item()}")
+    # print(f"mean_over_features = {exp_loss_gradient.mean(0).item()} "
+    #       f"\tstd_over_features = {exp_loss_gradient.std(0).item()}")
 
     return exp_loss_gradient
 
 
-def expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None):
+def expected_loss_gradients(posterior, n_samples, data_loader, dataset_name, device, mode, model_idx, baseclass=None):
     print(f"\n === Expected loss gradients on {n_samples} posteriors"
           f" and {len(data_loader.dataset)} input images:")
     exp_loss_gradients = []
 
     for images, labels in data_loader:
-        for i in range(len(images)):
-            image = images[i]
-            label = labels[i]
-            exp_loss_gradients.append(expected_loss_gradient(posterior=posterior, n_samples=n_samples, image=image,
-                                                            label=label, mode=mode, device=device))
+        for i in tqdm(range(len(images))):
+            exp_loss_gradients.append(expected_loss_gradient(posterior=posterior, n_samples=n_samples, image=images[i],
+                                                             label=labels[i], mode=mode, device=device))
 
     exp_loss_gradients = torch.stack(exp_loss_gradients)
     mean_over_inputs = exp_loss_gradients.mean(0)  # len = 784
@@ -100,15 +103,20 @@ def expected_loss_gradients(posterior, n_samples, data_loader, device, mode, bas
 
     print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20].cpu().detach()} "
           f"\n\nstd_over_inputs[:20] = {std_over_inputs[:20].cpu().detach()}")
+    print(f"\nexp_overall_mean = {exp_loss_gradients.mean()} \t exp_overall_std = {exp_loss_gradients.std()}")
 
-    print(f"\nexp_mean = {exp_loss_gradients.mean()} \t exp_std = {exp_loss_gradients.std()}")
+    exp_loss_gradients = exp_loss_gradients.cpu().detach().numpy()
 
-    return exp_loss_gradients.cpu().detach().numpy()
+    filename = get_filename(dataset_name=dataset_name, n_inputs=len(data_loader.dataset), n_samples=n_samples,
+                            model_idx=model_idx)
+    save_to_pickle(data=exp_loss_gradients, relative_path=RESULTS+str(dataset_name)+"/", filename=filename)
+    return exp_loss_gradients
 
 
 def expected_loss_gradients_multiple_posteriors(posteriors_list, n_samples, data_loader, device, mode, baseclass=None):
     for posterior in posteriors_list:
-        expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None)
+        expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None, mode=mode)
+
 
 def categorical_cross_entropy(y_pred, y_true):
     # y_pred = predicted probability vector
@@ -120,76 +128,97 @@ def categorical_cross_entropy(y_pred, y_true):
     return -(y_true * torch.log(y_pred)).sum(dim=1).mean()
 
 
-def load_loss_gradients(filename, relpath="../data/exp_loss_gradients/"):
-    """ Loads any pkl dictionary containing the key `loss_gradients`. """
-
-    attack_dict = load_from_pickle(relpath + filename)
-    loss_gradients = np.array([np.array(gradient) for gradient in attack_dict["loss_gradients"]])
-    loss_gradients = np.squeeze(loss_gradients)
-    # print("\nloss_gradients.shape = ", loss_gradients.shape)
-    return loss_gradients
+def load_loss_gradients(dataset_name, n_inputs, n_samples, model_idx, relpath=DATA_PATH):
+    filename = get_filename(dataset_name, n_inputs, n_samples, model_idx)
+    return load_from_pickle(path=relpath+str(dataset_name)+"/"+filename)
 
 
-def load_multiple_loss_gradients(dataset_name, n_inputs, eps, model_idx, relpath="../data/exp_loss_gradients/"):
+def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
+    if loss_gradients.shape[1] != len(n_samples_list):
+        raise ValueError("Second dimension should equal the length of `n_samples_list`")
 
-    exp_loss_gradients = []
+    vanishing_gradients_idxs = []
 
-    if n_inputs == 100 and dataset_name=="mnist" and model_idx in [0,1,2] and eps in [0.1,0.3,0.6]:
+    print("\nvanishing gradients norms:")
+    for image_idx, image_gradients in enumerate(loss_gradients):
+        # gradient_norm = np.linalg.norm(image_gradients[0])
+        gradient_norm = np.max(np.abs(image_gradients[0]))
+        if gradient_norm != 0.0:
+            count_samples_idx = 0
+            for samples_idx, n_samples in enumerate(n_samples_list):
+                # new_gradient_norm = np.linalg.norm(image_gradients[samples_idx])
+                new_gradient_norm = np.max(np.abs(image_gradients[samples_idx]))
+                if new_gradient_norm <= gradient_norm:
+                    print(new_gradient_norm, end="\t")
+                    gradient_norm = copy.deepcopy(new_gradient_norm)
+                    count_samples_idx += 1
+            if count_samples_idx == len(n_samples_list):
+                vanishing_gradients_idxs.append(image_idx)
+                print("\n")
 
-        n_samples_list = [1, 10, 50, 100]
-        for samples in n_samples_list:
-            filename = "mnist_inputs=100_epsilon="+str(eps)+"_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
-            exp_loss_gradients.append(load_loss_gradients(filename=filename, relpath=relpath))
+    print("\nvanishing_gradients_idxs = ", vanishing_gradients_idxs)
+    return vanishing_gradients_idxs
 
-    elif n_inputs == 10 and dataset_name=="mnist" and model_idx in [0,1,2]:
 
-        n_samples_list = [1, 10, 50, 100, 500]
-        for samples in [1, 10, 50, 100]:
-            filename = "mnist_inputs=100_epsilon=0.1_samples="+ str(samples)+ "_model=" + str(model_idx) + "_attack.pkl"
-            exp_loss_gradients.append(load_loss_gradients(filename=filename, relpath=relpath)[:10])
-        filename = "mnist_inputs=10_epsilon=0.1_samples=500_model=" + str(model_idx) + "_attack.pkl"
-        exp_loss_gradients.append(load_loss_gradients(filename=filename, relpath=relpath))
-
-    elif n_inputs == 1000 and dataset_name == "mnist" and model_idx == 2:
-
-        n_samples_list = [1, 10, 50, 100]
-        for samples in [1, 10]:
-            filename = "mnist_inputs=1000_epsilon=0.1_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
-            exp_loss_gradients.append(load_loss_gradients(filename=filename, relpath=relpath))
-        for samples in [50, 100]:
-            filename = "mnist_inputs=1000_samples="+str(samples)+"_model="+str(model_idx)+"_loss_gradients.pkl"
-            exp_loss_gradients.append(load_loss_gradients(filename=filename, relpath=relpath))
-    else:
-        raise AssertionError("loss gradients are not available for the chosen params.")
-
-    exp_loss_gradients = np.array(exp_loss_gradients)
-    print("exp_loss_gradients.shape =", exp_loss_gradients.shape)
-    return exp_loss_gradients, n_samples_list
-
+# # todo: soon deprecated
+# def load_multiple_loss_gradients_old(dataset_name, n_inputs, eps, model_idx, relpath=DATA_PATH):
+#
+#     exp_loss_gradients = []
+#
+#     if n_inputs == 100 and dataset_name=="mnist" and model_idx in [0,1,2] and eps in [0.1,0.3,0.6]:
+#
+#         n_samples_list = [1, 10, 50, 100]
+#         for samples in n_samples_list:
+#             filename = "mnist_inputs=100_epsilon="+str(eps)+"_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
+#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
+#
+#     elif n_inputs == 10 and dataset_name=="mnist" and model_idx in [0,1,2]:
+#
+#         n_samples_list = [1, 10, 50, 100, 500]
+#         for samples in [1, 10, 50, 100]:
+#             filename = "mnist_inputs=100_epsilon=0.1_samples="+ str(samples)+ "_model=" + str(model_idx) + "_attack.pkl"
+#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename)[:10])
+#         filename = "mnist_inputs=10_epsilon=0.1_samples=500_model=" + str(model_idx) + "_attack.pkl"
+#         exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
+#
+#     elif n_inputs == 1000 and dataset_name == "mnist" and model_idx == 2:
+#
+#         n_samples_list = [1, 10, 50, 100]
+#         for samples in [1, 10]:
+#             filename = "mnist_inputs=1000_epsilon=0.1_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
+#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
+#         for samples in [50, 100]:
+#             filename = "mnist_inputs=1000_samples="+str(samples)+"_model="+str(model_idx)+"_loss_gradients.pkl"
+#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
+#     else:
+#         raise AssertionError("loss gradients are not available for the chosen params.")
+#
+#     exp_loss_gradients = np.array(exp_loss_gradients)
+#     print("exp_loss_gradients.shape =", exp_loss_gradients.shape)
+#     return exp_loss_gradients, n_samples_list
+###############
 
 def main(args):
-    train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=36, n_inputs=args.inputs, shuffle=True)
 
-    model = hidden_vi_models[3]
-    n_samples_list = [1,10,50,100]
+    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 2, "mnist"
+    n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 5, "fashion_mnist"
 
+
+    model = hidden_vi_models[model_idx]
     for n_samples in n_samples_list:
+        train_loader, test_loader, data_format, input_shape = \
+            data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=n_inputs, shuffle=True)
+
         bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
                          activation=model["activation"])
         posterior = bayesnn.load_posterior(posterior_name=model["filename"],
                                            relative_path=TRAINED_MODELS,
                                            activation=model["activation"])
 
-        exp_loss_gradients = expected_loss_gradients(posterior=posterior, n_samples=n_samples,
-                                                     data_loader=train_loader, device=args.device, mode="vi")
+        expected_loss_gradients(posterior=posterior, n_samples=n_samples, dataset_name=dataset,
+                                model_idx=model["idx"], data_loader=test_loader, device=args.device, mode="vi")
 
-        filename = args.dataset + "_inputs=" + str(args.inputs) \
-                   + "_samples=" + str(n_samples) + "_model=" + str(model["idx"]) + "_loss_gradients.pkl"
-        loss_gradients_dict = {"loss_gradients": exp_loss_gradients}
-        save_to_pickle(data=loss_gradients_dict, relative_path=RESULTS + "bnn/", filename=filename)
-
-        del bayesnn, posterior, loss_gradients_dict
+        del bayesnn, posterior
 
 
 if __name__ == "__main__":
@@ -197,6 +226,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
     parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
-    parser.add_argument("--inputs", default=100, type=int)
+    parser.add_argument("--inputs", default=1000, type=int)
 
     main(args=parser.parse_args())

@@ -21,7 +21,7 @@ import random
 from BayesianSGD.classifier import SGDClassifier
 from utils import execution_time
 
-from BayesianInference.adversarial_attacks import attack
+# from BayesianInference.adversarial_attacks import attack
 from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 
 softplus = torch.nn.Softplus()
@@ -52,9 +52,9 @@ class NN(nn.Module):
             self.conv1 = nn.Conv2d(1, 16, 1).to(self.device)
             self.conv2 = nn.Conv2d(16, 32, 3).to(self.device)
             self.dropout1 = nn.Dropout(0.25).to(self.device)
-            self.fc1 = nn.Linear(32*13*13, 16).to(self.device)
+            self.fc1 = nn.Linear(32*13*13, 128).to(self.device)
             self.dropout2 = nn.Dropout(0.5).to(self.device)
-            self.out = nn.Linear(16, self.n_classes).to(self.device)
+            self.out = nn.Linear(128, self.n_classes).to(self.device)
 
         print(self)
         print("\nTotal number of network weights =", sum(p.numel() for p in self.parameters()))

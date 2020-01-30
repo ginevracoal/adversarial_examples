@@ -4,16 +4,12 @@ from directories import *
 import argparse
 import pyro
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
+import matplotlib
 from BayesianInference.adversarial_attacks import *
-from BayesianInference.pyro_utils import data_loaders, slice_data_loader
-from BayesianInference.hidden_bnn import NN
-from BayesianInference.loss_gradients import expected_loss_gradients, load_multiple_loss_gradients, load_loss_gradients
-from BayesianInference.hidden_vi_bnn import VI_BNN
-import matplotlib.colors as mc
+from BayesianInference.loss_gradients import load_loss_gradients
 
+
+DATA_PATH="../data/exp_loss_gradients/"
 
 # def load_data(eps, model_idx, n_samples_list, n_inputs):
 #
@@ -34,78 +30,92 @@ import matplotlib.colors as mc
 #     return pointwise_exp_loss_gradients
 
 
-def catplot_exp_loss_gradients(loss_gradients, n_inputs, n_samples_list, fig_idx):
-    # sns.set()
-    sns.set_palette("YlGnBu", len(n_samples_list))
+def catplot_exp_loss_gradients(loss_gradients, n_inputs, n_samples_list, dataset_name, model_idx):
 
     plot_loss_gradients = []
     plot_samples = []
 
-    print("\nloss_gradients.shape =", loss_gradients)
-    avg_loss_gradients = np.mean(loss_gradients, axis=1) # avg over inputs
-    # avg_loss_gradients = np.mean(loss_gradients, axis=2) # avg over components
-    print("\navg_loss_gradients.shape =", avg_loss_gradients.shape)
-
     for samples_idx, n_samples in enumerate(n_samples_list):
-        for gradient in avg_loss_gradients[samples_idx]:
-            plot_loss_gradients.append(gradient)
+        for gradient in loss_gradients[samples_idx]:
+            plot_loss_gradients.append(np.max(np.abs(gradient))+1)
             plot_samples.append(n_samples)
-
-    df = pd.DataFrame(data={"loss_gradients": plot_loss_gradients,
-                            "n_samples": plot_samples})
+    df = pd.DataFrame(data={"loss_gradients": plot_loss_gradients,"n_samples": plot_samples})
     print(df.head())
 
-    filename = "expLossGradients_inputs=" + str(n_inputs) + "_catplot_"+str(fig_idx)+".png"
+    matplotlib.rc('font', **{'weight': 'bold', 'size': 20})
+    plot = plt.figure(num=None, figsize=(14, 8), dpi=120, facecolor='w', edgecolor='k')
+    im = sns.boxenplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d",
+                       k_depth="trustworthy", outlier_prop=0.7)
+    im.set(yscale="log")
 
-    plot = sns.catplot(data=df, y="loss_gradients", x="n_samples", kind="boxen")
-    expr = r"$\langle\nabla_x L(x,w)\rangle_{(x,w)}$"
-    plot.set_ylabels(f"Exp. loss gradients  {expr}",fontsize=12)
-    plot.set_xlabels("n. posterior samples $w \sim p(w|D)$", fontsize=12)
-    # plot.fig.suptitle(f"Expected loss gradients avg. over {n_inputs} inputs")
+    if dataset_name == "mnist":
+        dataset_title = "MNIST"
+    elif dataset_name == "fashion_mnist":
+        dataset_title = "Fashion MNIST"
+    else:
+        dataset_title = str(dataset_name)
 
-    plot.fig.set_figheight(6)
-    plot.fig.set_figwidth(8)
+    # plt.title(f"Expectation of the Gradient on {n_inputs} images from {dataset_title} dataset")
+    plt.ylabel(r"Expected Gradients $l_\infty$-norm ($|\nabla L(x,w_i)|_\infty$)")
+    plt.xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)")
+
     os.makedirs(os.path.dirname(RESULTS+"catplots/"), exist_ok=True)
-    plot.savefig(RESULTS +"catplots/"+ filename, dpi=100)
+    filename = "expLossGradients_inputs=" + str(n_inputs) + "_catplot_"+str(dataset_name)+"_"+str(model_idx)+".png"
+    plot.savefig(RESULTS +"plots/"+ filename, dpi=150)
+
+
+
+def plot_loss_robustness(loss_gradients, n_samples_list):
+
+
+
+
 
 
 
 def main(args):
 
-    # === too few samples and inputs ===
+    # === OLD DATA === # todo: deprecated, remove
+    # = too few samples and inputs: =
     # n_inputs, n_samples_list, models_list, eps_list, dataset = 10, [1, 10, 50, 100, 500], [0,1,2], [0.1, 0.3, 0.6], "mnist"
     # n_inputs, n_samples_list, models_list, eps_list, dataset = 100, [1, 10, 50, 100], [0,1,2], [0.1, 0.3, 0.6], "mnist"
 
-    # === final plot for paper ===
-    n_inputs, n_samples_list, models_list, eps_list, dataset = 1000, [1, 10, 50, 100], [2], [0.1], "mnist"
-
-
-    for model_idx in models_list:
-        for eps in eps_list:
-            exp_loss_gradients, n_samples_list = load_multiple_loss_gradients(dataset_name=dataset, eps=eps,
-                                                                              n_inputs=n_inputs, model_idx=model_idx)
-            catplot_exp_loss_gradients(loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
-                                       n_samples_list=n_samples_list,
-                                       fig_idx="_model="+str(model_idx))
-
-
-    # new tests
-    # model_idx = 3
-    # n_inputs, n_samples_list, models_list, eps_list, dataset = 1000, [1, 10, 50, 100], [2], [0.1], "fashion_mnist"
-    # exp_loss_gradients = []
+    # = final plot for paper =
+    # n_inputs, n_samples_list, models_list, eps_list, dataset = 1000, [1, 10, 50, 100], [2], [0.1], "mnist"
     #
-    # loss_gradients = load_loss_gradients(dataset_name=dataset, eps=eps,
-    #                                                                   n_inputs=n_inputs, model_idx=model_idx)
-    # catplot_exp_loss_gradients(loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
-    #                            n_samples_list=n_samples_list,
-    #                            fig_idx="_model=" + str(model_idx))
+    #
+    # for model_idx in models_list:
+    #     for eps in eps_list:
+    #         exp_loss_gradients, n_samples_list = load_multiple_loss_gradients(dataset_name=dataset, eps=eps,
+    #                                                                           n_inputs=n_inputs, model_idx=model_idx)
+    #         catplot_exp_loss_gradients(loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
+    #                                    n_samples_list=n_samples_list, dataset_name=dataset, model_idx=model_idx)
+
+    # === NEW DATA ===
+
+    n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 2, "mnist"
+    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1, 10, 50, 100], 5, "fashion_mnist"
+
+    exp_loss_gradients = []
+    for samples in n_samples_list:
+        # filename = str(dataset)+"_inputs="+str(n_inputs)+"_samples="+str(samples)+"_loss_grads_"+str(model_idx)+".pkl"
+        # exp_loss_gradients.append(load_from_pickle(path=DATA_PATH+str(dataset)+"/"+filename))
+        exp_loss_gradients.append(load_loss_gradients(dataset_name=dataset, n_inputs=n_inputs, n_samples=samples,
+                                                      model_idx=model_idx))
+
+    catplot_exp_loss_gradients(loss_gradients=exp_loss_gradients, n_inputs=n_inputs,
+                               n_samples_list=n_samples_list,  dataset_name=dataset, model_idx=model_idx)
+
+    boxenplot_loss(loss_gradients=exp_loss_gradients, n_samples_list=n_samples_list)
+    boxenplot_robustness(loss_gradients=exp_loss_gradients, n_samples_list=n_samples_list)
+
 
 if __name__ == "__main__":
     assert pyro.__version__.startswith('1.1.0')
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
-    parser.add_argument("--device", default='cpu', type=str, help='use "cpu" or "cuda".')
+    parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
     parser.add_argument("--inputs", default=100, type=int)
 
     main(args=parser.parse_args())

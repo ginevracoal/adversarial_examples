@@ -1,30 +1,42 @@
 import sys
 
-
 sys.path.append(".")
+from directories import *
 import argparse
 
+
+from utils import execution_time, plot_loss_accuracy
+
 import pyro
+import random
 from pyro.infer import SVI, Trace_ELBO
 import pyro.optim as pyroopt
-
-from BayesianInference.plots.plot_utils import *
+# from BayesianInference.plots.plot_utils import *
 from BayesianInference.hidden_bnn import HiddenBNN
-from BayesianInference.adversarial_attacks import *
-from BayesianInference.loss_gradients import *
+# from BayesianInference.adversarial_attacks import *
+from BayesianInference.pyro_utils import data_loaders
+# from BayesianInference.loss_gradients import *
 
 
 DEBUG=False
 
 
-hidden_vi_models = [{"idx": 0, "filename": "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", "activation": "softmax",
-                   "dataset": "mnist", "architecture": "fully_connected"},
-                  {"idx": 1, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", "activation": "softmax",
-                   "dataset": "mnist", "architecture": "fully_connected"},
-                  {"idx": 2, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", "activation": "softmax",
-                   "dataset": "mnist", "architecture": "fully_connected"},
-                  {"idx": 3, "filename": "hidden_vi_fmnist_inputs=100_lr=0.0002_epochs=800", "activation": "softmax",
-                   "dataset": "fashion_mnist", "architecture": "fully_connected"}]
+hidden_vi_models = [
+    # mnist
+    {"idx":0, "filename": "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", "activation": "softmax",
+     "dataset": "mnist", "architecture": "fully_connected"}, # pochi input, 75% test
+    {"idx":1, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", "activation": "softmax",
+    "dataset": "mnist", "architecture": "fully_connected"}, # overfitta, 85% test
+    {"idx":2, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", "activation": "softmax",
+    "dataset": "mnist", "architecture": "fully_connected"}, # 85% test
+    # fashion mnist
+    {"idx":3, "filename": "hidden_vi_fashion_mnist_inputs=100_lr=0.0002_epochs=800", "activation": "softmax",
+    "dataset": "fashion_mnist", "architecture": "fully_connected"}, # 74% train
+    {"idx":4, "filename":"hidden_vi_fashion_mnist_inputs=500_lr=0.0002_epochs=500","activation":"softmax",
+    "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 85% train, 75% test
+    {"idx":5, "filename":"hidden_vi_fashion_mnist_inputs=1000_lr=5e-05_epochs=600","activation":"softmax",
+    "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 83% train, 73% test
+]
 
 
 class VI_BNN(HiddenBNN):
@@ -110,34 +122,33 @@ class VI_BNN(HiddenBNN):
 
 def main(args):
 
-
     # === load ===
 
-    model, relative_path = (hidden_vi_models[0], TRAINED_MODELS)
-
-    train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=model["dataset"], batch_size=32, n_inputs=args.inputs, shuffle=True)
-
-    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
-                     activation=model["activation"])
-    posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=RESULTS,
-                                           activation=model["activation"])
-    posterior.evaluate(data_loader=train_loader, n_samples=args.samples)
+    # model, relative_path = (hidden_vi_models[0], TRAINED_MODELS)
+    #
+    # train_loader, test_loader, data_format, input_shape = \
+    #     data_loaders(dataset_name=model["dataset"], batch_size=32, n_inputs=args.inputs, shuffle=True)
+    #
+    # bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
+    #                  activation=model["activation"])
+    # posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=RESULTS,
+    #                                        activation=model["activation"])
+    # posterior.evaluate(data_loader=train_loader, n_samples=args.samples)
 
     # === train ===
 
-    # train_loader, test_loader, data_format, input_shape = \
-    #     data_loaders(dataset_name=args.dataset, batch_size=32, n_inputs=args.inputs, shuffle=True)
+    train_loader, test_loader, data_format, input_shape = \
+        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
 
     # train_loader = slice_data_loader(data_loader=train_loader, slice_size=100)
     # test_loader = slice_data_loader(data_loader=test_loader, slice_size=1000)
 
-    # bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=args.architecture,
-    #                  activation=args.activation)
-    # posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs,
-    #                                      dataset_name=args.dataset)
-    #
-    # posterior.evaluate(data_loader=train_loader, n_samples=args.samples)
+    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=args.architecture,
+                     activation=args.activation)
+    posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs,
+                                         dataset_name=args.dataset)
+
+    posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
 
 
 
