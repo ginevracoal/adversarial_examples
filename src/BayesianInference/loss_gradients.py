@@ -20,49 +20,45 @@ def get_filename(dataset_name, n_inputs, n_samples, model_idx):
     return str(dataset_name)+"_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_loss_grads_"+str(model_idx)+".pkl"
 
 def expected_loss_gradient(posterior, n_samples, image, label, device, mode, baseclass=None):
-    loss_gradients = []
     input_size = image.size(0) * image.size(1) * image.size(2)
     image = image.view(-1, input_size).to(device)
     label = label.to(device).argmax(-1).view(-1)
 
     if mode == "vi":
-        x = copy.deepcopy(image)
-        x.requires_grad = True
-        posterior_copy = copy.deepcopy(posterior)
-        # posterior is a bayesnn object which performs random sampling from n_samples posteriors on forward calls
-        log_output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
-        avg_output = log_output.mean(0)
+        # === old ===
+        # x = copy.deepcopy(image)
+        # x.requires_grad = True
+        # posterior_copy = copy.deepcopy(posterior)
+        # output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
+        # avg_output = output.mean(0)
+        # loss = torch.nn.CrossEntropyLoss()(avg_output, label)  # use with softmax
+        # loss.backward()
+        # loss_gradient = copy.deepcopy(x.grad.data[0])
+        # posterior_copy.zero_grad()
+        # del posterior_copy
+        # del x
+        # exp_loss_gradient = torch.stack(loss_gradients).mean(dim=0)
 
-        if DEBUG:
-            print("\ntrue label =", label.item())
-            # print("\nlog_output[:5]=", log_output[:5].cpu().detach().numpy())
-            print("\nlog_output shape=", log_output.shape)
-            # print("\noutput=", output[:10].cpu().detach().numpy())
-            print("avg_output shape=",avg_output.shape)
-            print("avg_output[:5]=",avg_output[:5].cpu().detach().numpy())
-            # print("\navg_output.exp() =", avg_output.exp().cpu().detach().numpy())
-            print("check prob distribution:", avg_output.sum(dim=1).item())
-            # print("\ncheck prob distribution:", avg_output.exp().sum(dim=1).item())
+        # === new ===
+        sum_sign_data_grad = 0.0
+        for _ in range(n_samples):
+            x = copy.deepcopy(image)
+            x.requires_grad = True
+            posterior_copy = copy.deepcopy(posterior)
+            output = posterior_copy.forward(x, n_samples=1).mean(0)
+            loss = torch.nn.CrossEntropyLoss()(output, label)
 
-        if posterior.loss == "crossentropy":
-            loss = torch.nn.CrossEntropyLoss()(avg_output, label)  # use with softmax
-        elif posterior.loss == "nllloss":
-            # loss = torch.nn.NLLLoss()(avg_output, label)  # use with log softmax
-            loss = torch.nn.CrossEntropyLoss()(avg_output.exp(), label)  # use with log softmax
-        else:
-            raise AttributeError("Wrong loss function.")
+            posterior_copy.zero_grad()
+            loss.backward(retain_graph=True)
+            image_grad = x.grad.data
+            # Collect the element-wise sign of the data gradient
+            sum_sign_data_grad = sum_sign_data_grad + image_grad.sign()
 
-        loss.backward()
-        loss_gradient = copy.deepcopy(x.grad.data[0])
-        loss_gradients.append(loss_gradient)
-        if DEBUG:
-            print("\nloss = ", loss.item())
-            print("\nloss_gradient[:5] = ", loss_gradient[:5].cpu().detach().numpy()) # len = 784
-        posterior_copy.zero_grad()
-        del posterior_copy
-        del x
+        exp_loss_gradient = sum_sign_data_grad/n_samples
 
-    # elif mode == "hmc":
+
+    elif mode == "hmc":
+        raise NotImplementedError
     #     x = copy.deepcopy(image)
     #     x.requires_grad = True
     #     output = baseclass.predict(inputs=x, posterior_samples=posteriors)
@@ -74,15 +70,8 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
     #     loss_gradient = copy.deepcopy(x.grad.data[0])
     #     loss_gradients.append(loss_gradient)
     #     del x
-
     else:
         raise ValueError("wrong inference mode")
-
-    exp_loss_gradient = torch.stack(loss_gradients).mean(dim=0)
-    # print("\nexp_loss_gradient[:20] =", exp_loss_gradient[:20])
-
-    # print(f"mean_over_features = {exp_loss_gradient.mean(0).item()} "
-    #       f"\tstd_over_features = {exp_loss_gradient.std(0).item()}")
 
     return exp_loss_gradient
 
@@ -98,11 +87,10 @@ def expected_loss_gradients(posterior, n_samples, data_loader, dataset_name, dev
                                                              label=labels[i], mode=mode, device=device))
 
     exp_loss_gradients = torch.stack(exp_loss_gradients)
-    mean_over_inputs = exp_loss_gradients.mean(0)  # len = 784
-    std_over_inputs = exp_loss_gradients.std(0)  # len = 784
-
-    print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20].cpu().detach()} "
-          f"\n\nstd_over_inputs[:20] = {std_over_inputs[:20].cpu().detach()}")
+    # mean_over_inputs = exp_loss_gradients.mean(0)  # len = 784
+    # std_over_inputs = exp_loss_gradients.std(0)  # len = 784
+    # print(f"\nmean_over_inputs[:20] = {mean_over_inputs[:20].cpu().detach()} "
+    #       f"\n\nstd_over_inputs[:20] = {std_over_inputs[:20].cpu().detach()}")
     print(f"\nexp_overall_mean = {exp_loss_gradients.mean()} \t exp_overall_std = {exp_loss_gradients.std()}")
 
     exp_loss_gradients = exp_loss_gradients.cpu().detach().numpy()
@@ -130,8 +118,7 @@ def categorical_cross_entropy(y_pred, y_true):
 
 def load_loss_gradients(dataset_name, n_inputs, n_samples, model_idx, relpath=DATA_PATH):
     filename = get_filename(dataset_name, n_inputs, n_samples, model_idx)
-    return load_from_pickle(path=relpath+str(dataset_name)+"/"+filename)
-
+    return load_from_pickle(path=relpath+str(dataset_name)+"/"+filename).squeeze()
 
 def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
     if loss_gradients.shape[1] != len(n_samples_list):
@@ -159,6 +146,45 @@ def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
     print("\nvanishing_gradients_idxs = ", vanishing_gradients_idxs)
     return vanishing_gradients_idxs
 
+def compute_constantly_null_grads(loss_gradients, n_samples_list):
+    if loss_gradients.shape[1] != len(n_samples_list):
+        raise ValueError("Second dimension should equal the length of `n_samples_list`")
+
+    const_null_idxs = []
+    for image_idx, image_gradients in enumerate(loss_gradients):
+        count_samples_idx = 0
+        for samples_idx, n_samples in enumerate(n_samples_list):
+            gradient_norm = np.max(np.abs(image_gradients[samples_idx]))
+            if gradient_norm == 0.0:
+                count_samples_idx += 1
+        if count_samples_idx == len(n_samples_list):
+            const_null_idxs.append(image_idx)
+
+    print("\nconst_null_idxs = ", const_null_idxs)
+    return const_null_idxs
+
+def categorical_loss_gradients_norms(loss_gradients, n_samples_list, dataset_name, model_idx):
+    loss_gradients = np.array(np.transpose(loss_gradients, (1,0,2)))
+
+    if loss_gradients.shape[1] != len(n_samples_list):
+        raise ValueError("Second dimension should equal the length of `n_samples_list`")
+
+    vanishing_idxs = compute_vanishing_grads_idxs(loss_gradients, n_samples_list)
+    const_null_idxs = compute_constantly_null_grads(loss_gradients, n_samples_list)
+
+    loss_gradients_norms_categories = []
+    for image_idx in range(len(loss_gradients)):
+        if image_idx in vanishing_idxs:
+            loss_gradients_norms_categories.append("vanishing")
+        elif image_idx in const_null_idxs:
+            loss_gradients_norms_categories.append("const_null")
+        else:
+            loss_gradients_norms_categories.append("other")
+
+    filename = str(dataset_name)+"_bnn_inputs="+str(len(loss_gradients))+\
+               "_samples="+str(n_samples_list)+"_cat_lossGrads_norms"+str(model_idx)+".pkl"
+    save_to_pickle(data=loss_gradients_norms_categories, relative_path=RESULTS, filename=filename)
+    return {"categories":loss_gradients_norms_categories}
 
 # # todo: soon deprecated
 # def load_multiple_loss_gradients_old(dataset_name, n_inputs, eps, model_idx, relpath=DATA_PATH):
@@ -200,25 +226,38 @@ def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
 
 def main(args):
 
-    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 2, "mnist"
-    n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 5, "fashion_mnist"
-
-
+    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100], 2, "mnist"
+    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100], 5, "fashion_mnist"
+    n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100,500], 1, "mnist"
     model = hidden_vi_models[model_idx]
-    for n_samples in n_samples_list:
-        train_loader, test_loader, data_format, input_shape = \
-            data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=n_inputs, shuffle=True)
 
+    # model = {"idx": 6, "filename": "hidden_vi_fashion_mnist_inputs=60000_lr=2e-05_epochs=200", "activation": "softmax",
+    # "dataset": "fashion_mnist", "architecture": "fully_connected"} # 75.08 test
+    # n_samples_list = [1,5,10,50,100]
+    # n_inputs = 1000
+
+    # = compute expected loss gradients =
+    train_loader, test_loader, data_format, input_shape = \
+        data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=n_inputs, shuffle=True)
+
+    for n_samples in n_samples_list:
         bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
                          activation=model["activation"])
-        posterior = bayesnn.load_posterior(posterior_name=model["filename"],
-                                           relative_path=TRAINED_MODELS,
-                                           activation=model["activation"])
+        posterior = bayesnn.load_posterior(posterior_name=model["filename"], activation=model["activation"],
+                                           relative_path=TRAINED_MODELS)
 
-        expected_loss_gradients(posterior=posterior, n_samples=n_samples, dataset_name=dataset,
+        expected_loss_gradients(posterior=posterior, n_samples=n_samples, dataset_name=model["dataset"],
                                 model_idx=model["idx"], data_loader=test_loader, device=args.device, mode="vi")
 
         del bayesnn, posterior
+
+    # = compute categorical loss gradients =
+    # samples_loss_gradients = []
+    # for n_samples in n_samples_list:
+    #     samples_loss_gradients.append(load_loss_gradients(dataset_name=model["dataset"], n_inputs=n_inputs,
+    #                                                       n_samples=n_samples, model_idx=model["idx"]))
+    # categorical_loss_gradients_norms(samples_loss_gradients, n_samples_list, dataset_name=model["dataset"],
+    #                                  model_idx=model["idx"])
 
 
 if __name__ == "__main__":

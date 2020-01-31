@@ -11,8 +11,7 @@ from BayesianInference.hidden_bnn import NN
 from BayesianInference.hidden_vi_bnn import VI_BNN
 
 
-# def nn_create_save_data(dataset_name, device, architecture="fully_connected", activation="softmax"):
-def nn_create_save_data(dataset_name, device, architecture="fully_connected", activation="softmax"):
+def grid_search_training(dataset_name, device, architecture="fully_connected", activation="softmax"):
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=dataset_name, batch_size=64, n_inputs=60000, shuffle=True)
 
@@ -137,7 +136,7 @@ def scatterplot_accuracy_robustness(accuracy, robustness, model_type, epsilon):
     """
     sns.set()
     plt.subplots(figsize=(8, 6), dpi=150)
-    sns.set_palette("YlGnBu",2)
+    sns.set_palette("YlGnBu_d",2)
 
     # size = ["$%s$" % x for x in epsilon]
     df = pd.DataFrame(data={"accuracy":accuracy,"robustness":robustness,"model":model_type,"epsilon":epsilon})
@@ -160,7 +159,7 @@ def scatterplot_accuracy_robustness(accuracy, robustness, model_type, epsilon):
 
 def main(args):
 
-    # robustness, accuracy, epsilon, model_type = create_save_data(dataset_name=args.dataset, device=args.device)
+    # robustness, accuracy, epsilon, model_type = grid_search_training(dataset_name=args.dataset, device=args.device)
     robustness, accuracy, epsilon, model_type = load_old_data()
     scatterplot_accuracy_robustness(accuracy=accuracy, robustness=robustness, model_type=model_type, epsilon=epsilon)
 

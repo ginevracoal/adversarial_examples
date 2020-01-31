@@ -31,7 +31,7 @@ def softmax_robustness(original_outputs, adversarial_outputs):
     softmax_differences = softmax_difference(original_outputs, adversarial_outputs)
     robustness = (torch.ones_like(softmax_differences)-softmax_differences).sum(dim=0)/len(original_outputs)
     # print(softmax_differences)
-    print("softmax_robustness =", robustness.item())
+    print(f"softmax_robustness = {robustness.item():.2f}")
     return robustness.item()
 
 def softmax_robustness_ths(original_outputs, adversarial_outputs):

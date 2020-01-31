@@ -1,21 +1,15 @@
 import sys
-
 sys.path.append(".")
 from directories import *
+
 import argparse
-
-
-from utils import execution_time, plot_loss_accuracy
-
 import pyro
 import random
 from pyro.infer import SVI, Trace_ELBO
 import pyro.optim as pyroopt
-# from BayesianInference.plots.plot_utils import *
+from utils import execution_time, plot_loss_accuracy
 from BayesianInference.hidden_bnn import HiddenBNN
-# from BayesianInference.adversarial_attacks import *
 from BayesianInference.pyro_utils import data_loaders
-# from BayesianInference.loss_gradients import *
 
 
 DEBUG=False
@@ -23,27 +17,27 @@ DEBUG=False
 
 hidden_vi_models = [
     # mnist
-    {"idx":0, "filename": "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", "activation": "softmax",
+    {"idx":0, "filename": "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", "activation": "leaky_relu",
      "dataset": "mnist", "architecture": "fully_connected"}, # pochi input, 75% test
-    {"idx":1, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", "activation": "softmax",
+    {"idx":1, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", "activation": "leaky_relu",
     "dataset": "mnist", "architecture": "fully_connected"}, # overfitta, 85% test
-    {"idx":2, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", "activation": "softmax",
+    {"idx":2, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", "activation": "leaky_relu",
     "dataset": "mnist", "architecture": "fully_connected"}, # 85% test
     # fashion mnist
-    {"idx":3, "filename": "hidden_vi_fashion_mnist_inputs=100_lr=0.0002_epochs=800", "activation": "softmax",
+    {"idx":3, "filename": "hidden_vi_fashion_mnist_inputs=100_lr=0.0002_epochs=800", "activation": "leaky_relu",
     "dataset": "fashion_mnist", "architecture": "fully_connected"}, # 74% train
-    {"idx":4, "filename":"hidden_vi_fashion_mnist_inputs=500_lr=0.0002_epochs=500","activation":"softmax",
+    {"idx":4, "filename":"hidden_vi_fashion_mnist_inputs=500_lr=0.0002_epochs=500","activation":"leaky_relu",
     "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 85% train, 75% test
-    {"idx":5, "filename":"hidden_vi_fashion_mnist_inputs=1000_lr=5e-05_epochs=600","activation":"softmax",
+    {"idx":5, "filename":"hidden_vi_fashion_mnist_inputs=1000_lr=5e-05_epochs=600","activation":"leaky_relu",
     "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 83% train, 73% test
 ]
 
 
 class VI_BNN(HiddenBNN):
-    def __init__(self, input_shape, device, architecture="fully_connected", activation="softmax"):
+    def __init__(self, input_shape, device, architecture="fully_connected", activation="leaky_relu"):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
         self.activation = activation
-        self.loss = "crossentropy" if activation == "softmax" else "nllloss"
+        self.loss = "crossentropy"
         self.hidden_size = 512
         self.n_classes = 10
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=self.activation,
@@ -114,26 +108,13 @@ class VI_BNN(HiddenBNN):
         plot_loss_accuracy({'loss':loss_list, 'accuracy':accuracy_list}, path=RESULTS + "bnn/" + filename + ".png")
         return self
 
-    def load_posterior(self, posterior_name, activation="softmax", relative_path=TRAINED_MODELS):
+    def load_posterior(self, posterior_name, activation="leaky_relu", relative_path=TRAINED_MODELS):
         posterior = self.load(filename=posterior_name, relative_path=relative_path)
         posterior.activation = activation
         return posterior
 
 
 def main(args):
-
-    # === load ===
-
-    # model, relative_path = (hidden_vi_models[0], TRAINED_MODELS)
-    #
-    # train_loader, test_loader, data_format, input_shape = \
-    #     data_loaders(dataset_name=model["dataset"], batch_size=32, n_inputs=args.inputs, shuffle=True)
-    #
-    # bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
-    #                  activation=model["activation"])
-    # posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=RESULTS,
-    #                                        activation=model["activation"])
-    # posterior.evaluate(data_loader=train_loader, n_samples=args.samples)
 
     # === train ===
 
@@ -150,6 +131,26 @@ def main(args):
 
     posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
 
+    # === load ===
+
+    # model = {"idx": 7, "filename": "hidden_vi_mnist_inputs=60000_lr=2e-05_epochs=200", "activation": "softmax",
+    # "dataset": "mnist", "architecture": "fully_connected"} # 83.73 test
+    # model = {"idx": 6, "filename": "hidden_vi_fashion_mnist_inputs=60000_lr=2e-05_epochs=200", "activation": "softmax",
+    # "dataset": "fashion_mnist", "architecture": "fully_connected"} # 75.08 test
+
+    # model = hidden_vi_models[2]
+    #
+    # train_loader, test_loader, data_format, input_shape = \
+    #     data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=args.inputs, shuffle=True)
+    #
+    # bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
+    #                  activation=model["activation"])
+    # posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=TRAINED_MODELS,
+    #                                        activation=model["activation"])
+    # posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
+
+
+
 
 
 if __name__ == "__main__":
@@ -158,11 +159,11 @@ if __name__ == "__main__":
 
     parser.add_argument("-n", "--inputs", nargs="?", default=10, type=int)
     parser.add_argument("--epochs", nargs='?', default=10, type=int)
-    parser.add_argument("--samples", nargs='?', default=3, type=int)
+    parser.add_argument("--samples", nargs='?', default=8, type=int)
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
     parser.add_argument("--architecture", nargs='?', default="fully_connected", type=str,
                         help='use "fully_connected" or "convolutional"')
-    parser.add_argument("--activation", nargs='?', default="softmax", type=str)
+    parser.add_argument("--activation", nargs='?', default="leaky_relu", type=str)
     parser.add_argument("--lr", nargs='?', default=0.002, type=float)
     parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
 

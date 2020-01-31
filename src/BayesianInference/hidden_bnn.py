@@ -6,7 +6,6 @@ import argparse
 import pyro
 from pyro import poutine
 from pyro.distributions import OneHotCategorical, Normal
-from torch.autograd import Variable
 import torch
 from torch import nn
 import pyro.contrib.bnn as bnn
@@ -14,14 +13,10 @@ import torch.nn.functional as nnf
 import pyro.distributions as dist
 from torch.distributions import constraints
 import os
-import numpy as np
 from utils import save_to_pickle, load_from_pickle
 import torch.optim as optim
 import random
-from BayesianSGD.classifier import SGDClassifier
 from utils import execution_time
-
-# from BayesianInference.adversarial_attacks import attack
 from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 
 softplus = torch.nn.Softplus()
@@ -30,7 +25,7 @@ DEBUG=False
 
 
 class NN(nn.Module):
-    def __init__(self, input_size, hidden_size, architecture, device, activation="softmax", n_classes=10):
+    def __init__(self, input_size, hidden_size, architecture, device, activation="leaky_relu", n_classes=10):
         super(NN, self).__init__()
         self.input_size = input_size
         self.architecture = architecture
@@ -38,16 +33,29 @@ class NN(nn.Module):
         self.dim = -1
         self.device = device
 
+        if activation == "leaky_relu":
+            self.activation = nn.LeakyReLU
+        elif activation == "sigmoid":
+            self.activation = nn.Sigmoid
+        elif activation == "tanh":
+            self.activation = nn.Tanh
+
         if self.architecture == "fully_connected":
             self.model = nn.Sequential(
                 nn.Linear(self.input_size, hidden_size),
-                nn.LeakyReLU(),
+                self.activation(),
                 nn.Linear(hidden_size, hidden_size),
-                nn.LeakyReLU(),
+                self.activation(),
                 nn.Linear(hidden_size, n_classes),
-                nn.Softmax(dim=self.dim) if activation == "softmax" else nn.LogSoftmax(dim=self.dim)
+                nn.Softmax(dim=self.dim)
             ).to(self.device)
-
+        elif self.architecture == "fully_connected_2":
+            self.model = nn.Sequential(
+                nn.Linear(self.input_size, hidden_size),
+                self.activation(),
+                nn.Linear(hidden_size, n_classes),
+                nn.Softmax(dim=self.dim)
+            ).to(self.device)
         elif self.architecture == "convolutional":
             self.conv1 = nn.Conv2d(1, 16, 1).to(self.device)
             self.conv2 = nn.Conv2d(16, 32, 3).to(self.device)
@@ -60,17 +68,18 @@ class NN(nn.Module):
         print("\nTotal number of network weights =", sum(p.numel() for p in self.parameters()))
 
     def forward(self, inputs):
-        if self.architecture == "fully_connected":
+        if self.architecture in ["fully_connected","fully_connected_2"]:
             inputs = inputs.to(self.device).view(-1, self.input_size)
             return self.model(inputs.to(self.device))
+
         elif self.architecture == "convolutional":
             inputs = inputs.permute(0,3,1,2).to(self.device)
-            output = nn.LeakyReLU()(self.conv1(inputs))
-            output = nn.LeakyReLU()(self.conv2(output))
+            output = self.activation()(self.conv1(inputs))
+            output = self.activation()(self.conv2(output))
             output = nn.MaxPool2d((2,2))(output)
             output = self.dropout1(output)
             output = output.view(-1, output.size(1)*output.size(2)*output.size(3))
-            output = nn.LeakyReLU()(self.fc1(output))
+            output = self.activation()(self.fc1(output))
             output = self.dropout2(output)
             output = self.out(output)
             return output
@@ -145,14 +154,16 @@ class HiddenBNN(nn.Module):
         self.architecture = architecture
         self.n_classes = 10
         self.hidden_size = hidden_size
-        if activation == "softmax":
-            self.activation_func = nnf.softmax
-        elif activation == "log_softmax":
-            self.activation_func = nnf.log_softmax
         self.input_size = input_size
         self.net = NN(input_size=input_size, hidden_size=self.hidden_size, n_classes=self.n_classes,
                       activation=activation, architecture=architecture, device=device)
-        # print(self.net)
+
+        if activation == "leaky_relu":
+            self.activation = nn.LeakyReLU #lambda x: nnf.leaky_relu(x)
+        elif activation == "sigmoid":
+            self.activation = nn.Sigmoid #lambda x: nnf.sigmoid(x)
+        elif activation == "tanh":
+            self.activation = nn.Tanh #lambda x: nnf.tanh(x)
 
     def model(self, inputs, labels=None, kl_factor=1.0):
         batch_size = inputs.size(0)
@@ -168,11 +179,27 @@ class HiddenBNN(nn.Module):
             with pyro.plate('data', size=batch_size):
                 # sample conditionally independent hidden layers
                 h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
                 h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
                 logits = pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
-                                                               non_linearity=lambda x: self.activation_func(x, dim=self.net.dim),
+                                                               non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
+                                                               KL_factor=kl_factor,
+                                                               include_hidden_bias=False))
+                pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
+                return logits
+        elif self.architecture == "fully_connected_2":
+            # Set-up parameters for the distribution of weights for each layer `a<n>`
+            a1_mean = torch.zeros(self.input_size, 32 * 3).to(self.device)
+            a1_scale = torch.ones(self.input_size, self.hidden_size).to(self.device)
+            a4_mean = torch.zeros(self.hidden_size + 1, self.n_classes).to(self.device)
+            a4_scale = torch.ones(self.hidden_size + 1, self.n_classes).to(self.device)
+            with pyro.plate('data', size=batch_size):
+                # sample conditionally independent hidden layers
+                h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
+                logits = pyro.sample('logits', bnn.HiddenLayer(h1, a4_mean, a4_scale,
+                                                non_linearity=lambda x: nnf.softmax(x,dim=self.net.dim),
                                                                KL_factor=kl_factor,
                                                                include_hidden_bias=False))
                 pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
@@ -199,11 +226,17 @@ class HiddenBNN(nn.Module):
             lifted_module = pyro.random_module("module", net, priors)
             lifted_reg_model = lifted_module()
             outputs = lifted_reg_model(inputs.to(self.device))
-            logits = self.activation_func(outputs, dim=self.net.dim)
+            logits = nnf.softmax(outputs, dim=self.net.dim)
             pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels.to(self.device))
             return logits.to(self.device)
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
+
+        # todo controllare se con i nuovi modelli funziona correttamente
+        # handle old models
+        if type(self.activation)==str:
+            self.activation = nnf.leaky_relu
+
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
 
@@ -220,13 +253,27 @@ class HiddenBNN(nn.Module):
 
             with pyro.plate('data', size=batch_size):
                 h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
                 h2 = pyro.sample('h2', bnn.HiddenLayer(h1, a2_mean, a2_scale,
-                                                       non_linearity=nnf.leaky_relu, KL_factor=kl_factor))
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
                 pyro.sample('logits', bnn.HiddenLayer(h2, a4_mean, a4_scale,
-                                                      non_linearity=lambda x: self.activation_func(x, dim=self.net.dim),
+                                                      non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
                                                       KL_factor=kl_factor, include_hidden_bias=False))
 
+        elif self.architecture == "fully_connected_2":
+            a1_mean = pyro.param('a1_mean', 0.01 * torch.randn(self.input_size, self.hidden_size)).to(self.device)
+            a1_scale = pyro.param('a1_scale', 0.1 * torch.ones(self.input_size, self.hidden_size),
+                                  constraint=constraints.greater_than(0.01)).to(self.device)
+            a4_mean = pyro.param('a4_mean', 0.01 * torch.randn(self.hidden_size + 1, self.n_classes)).to(self.device)
+            a4_scale = pyro.param('a4_scale', 0.1 * torch.ones(self.hidden_size + 1, self.n_classes),
+                                  constraint=constraints.greater_than(0.01)).to(self.device)
+
+            with pyro.plate('data', size=batch_size):
+                h1 = pyro.sample('h1', bnn.HiddenLayer(flat_inputs, a1_mean, a1_scale,
+                                                       non_linearity=self.activation, KL_factor=kl_factor))
+                pyro.sample('logits', bnn.HiddenLayer(h1, a4_mean, a4_scale,
+                                                      non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
+                                                      KL_factor=kl_factor, include_hidden_bias=False))
         elif self.architecture == "convolutional":
             net = self.net
             # convolution layer weights
@@ -279,7 +326,7 @@ class HiddenBNN(nn.Module):
             lifted_module = pyro.random_module("module", net, priors)
             lifted_reg_model = lifted_module()
 
-            logits = self.activation_func(lifted_reg_model(inputs.to(self.device)), dim=self.net.dim)
+            logits = nnf.softmax(lifted_reg_model(inputs.to(self.device)), dim=self.net.dim)
             return logits.to(self.device)
 
 
@@ -288,16 +335,14 @@ class HiddenBNN(nn.Module):
         res = []
 
         if DEBUG:
-            if self.dataset_name == "mnist":
+            if self.architecture in ["fully_connected","fully_connected_2"]:
                 print("a1_mean", pyro.get_param_store()["a1_mean"])
-            else:
+            elif self.architecture == "convolutional":
                 print("conv1w_mu",pyro.get_param_store()["conv1w_mu"].flatten())
 
         for _ in range(n_samples):
             guide_trace = poutine.trace(self.guide).get_trace(inputs)
-            # print(guide_trace.nodes)
-            # exit()
-            if self.architecture == "fully_connected":
+            if self.architecture in ["fully_connected","fully_connected_2"]:
                 res.append(guide_trace.nodes['logits']['value'])
             elif self.architecture == "convolutional":
                 res.append(guide_trace.nodes['_RETURN']['value'])
@@ -344,11 +389,6 @@ def main(args):
 
     epsilon_list = [0.1, 0.3, 0.6]
 
-    plot_accuracy = []
-    plot_robustness = []
-    plot_eps = []
-    model_type = []
-
     for epsilon in epsilon_list:
         print("\n\nepsilon =", epsilon)
 
@@ -361,8 +401,8 @@ def main(args):
                 for epochs in [10, 20, 50, 100]:
                     # === initialize class ===
                     input_size = input_shape[0]*input_shape[1]*input_shape[2]
-                    net = NN(input_size=input_size, hidden_size=512, dataset_name=args.dataset, activation="softmax",
-                             device=args.device)
+                    net = NN(input_size=input_size, hidden_size=512, activation="leaky_relu",
+                             device=args.device, architecture="fully_connected")
                     # path = RESULTS +"nn/"
                     # filename = str(args.dataset)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(args.inputs)
 
@@ -378,26 +418,6 @@ def main(args):
                     # == evaluate ===
                     # acc = net.evaluate(test_loader=test,device=args.device)
 
-                    # == attack ==
-                    attack_dict = attack(model=net.model, data_loader=test, epsilon=epsilon, device=args.device)
-
-                    # attack_dict = load_from_pickle(path=RESULTS + "nn/"+filename)
-                    plot_robustness.append(attack_dict["softmax_robustness"])
-                    plot_accuracy.append(attack_dict["original_accuracy"])
-                    plot_eps.append(attack_dict["epsilon"])
-                    model_type.append("nn")
-                    # todo loss gradient norms plot for BNNs
-
-    idx = 0
-    filename = str(args.dataset) + "_nn_attack"+str(idx)+".pkl"
-    data = {"accuracy":plot_accuracy, "softmax_robustness":plot_robustness,
-            "model_type":model_type, "epsilon":plot_eps}
-
-    save_to_pickle(relative_path=RESULTS + "nn/", filename=filename, data=data)
-
-    scatterplot_accuracy_robustness(accuracy=plot_accuracy, robustness=plot_robustness, model_type=model_type,
-                                    epsilon=plot_eps)
-
 
 if __name__ == "__main__":
     assert pyro.__version__.startswith('1.1.0')
@@ -406,7 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--inputs", nargs="?", default=1000, type=int)
     parser.add_argument("--epochs", nargs='?', default=10, type=int)
     parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
-    parser.add_argument("--activation", nargs='?', default="softmax", type=str)
+    parser.add_argument("--activation", nargs='?', default="leaky_relu", type=str)
     parser.add_argument("--lr", nargs='?', default=0.002, type=float)
     parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
 
