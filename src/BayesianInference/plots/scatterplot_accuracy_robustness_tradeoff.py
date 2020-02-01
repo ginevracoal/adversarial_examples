@@ -12,7 +12,7 @@ from BayesianInference.hidden_vi_bnn import VI_BNN
 import itertools
 
 
-DATA_PATH = "../data/attacks/"
+DATA_PATH = "../data/rob_acc_tradeoff/"
 
 EPS=0.25
 ATTACK_SAMPLES=100
@@ -99,26 +99,26 @@ def prepare_data(dataset_name, n_models, n_attack_samples=ATTACK_SAMPLES, n_pred
 
     for idx in filename_idxs:
         filename = str(dataset_name)+"_nn_inputs="+str(TEST_IMAGES)+"_eps="+str(eps)+"_attack_"+str(idx)+".pkl"
-        attack_dict = load_from_pickle(RESULTS+"attacks/"+filename)
+        attack_dict = load_from_pickle(DATA_PATH+"attacks/"+filename)
         robustness.append(attack_dict["softmax_robustness"])
         original_accuracy.append(attack_dict["original_accuracy"])
         adversarial_accuracy.append(attack_dict["adversarial_accuracy"])
         model_type.append("nn")
 
-    for idx in filename_idxs:
-        filename = str(dataset_name)+"_bnn_inputs=" + str(TEST_IMAGES) + "_attackSamp=" + str(n_attack_samples) \
-                   +"_predSamp=" +str(n_pred_samples)+ "_eps=" + str(eps) + "_attack_" + str(idx) + ".pkl"
-        attack_dict = load_from_pickle(RESULTS+"attacks/"+filename)
-        robustness.append(attack_dict["softmax_robustness"])
-        original_accuracy.append(attack_dict["original_accuracy"])
-        adversarial_accuracy.append(attack_dict["adversarial_accuracy"])
-        model_type.append("bnn")
+    # for idx in filename_idxs:
+    #     filename = str(dataset_name)+"_bnn_inputs=" + str(TEST_IMAGES) + "_attackSamp=" + str(n_attack_samples) \
+    #                +"_predSamp=" +str(n_pred_samples)+ "_eps=" + str(eps) + "_attack_" + str(idx) + ".pkl"
+    #     attack_dict = load_from_pickle(DATA_PATH+"attacks/"+filename)
+    #     robustness.append(attack_dict["softmax_robustness"])
+    #     original_accuracy.append(attack_dict["original_accuracy"])
+    #     adversarial_accuracy.append(attack_dict["adversarial_accuracy"])
+    #     model_type.append("bnn")
 
     scatterplot_dict = {"softmax_robustness":robustness, "original_accuracy":original_accuracy,
                         "adversarial_accuracy":adversarial_accuracy, "model_type":model_type}
     filename = str(dataset_name)+"_models="+str(n_models)+"_attackSamp="+str(n_attack_samples)+\
                "_predSamp="+str(n_pred_samples)+"_eps="+str(eps)+"_scatterplot.pkl"
-    save_to_pickle(data=scatterplot_dict, relative_path=RESULTS+"attacks/", filename=filename)
+    save_to_pickle(data=scatterplot_dict, relative_path=RESULTS, filename=filename)
     return scatterplot_dict
 
 
@@ -206,9 +206,10 @@ def main(args):
     # grid_search_training(dataset_name=args.dataset, device=args.device, model_type="nn", n_inputs=args.inputs)
     # grid_search_training(dataset_name=args.dataset, device=args.device, model_type="bnn", n_inputs=args.inputs)
 
-    # scatterplot_dict = prepare_data(dataset_name=args.dataset, n_models=162)
+    # scatterplot_dict = prepare_data(dataset_name=args.dataset, n_models=139)
+    scatterplot_dict = prepare_data(dataset_name=args.dataset, n_models=53)
     # scatterplot_dict = load_data(dataset_name=args.dataset, n_models=162, relative_path=DATA_PATH)
-    # scatterplot_accuracy_robustness(scatterplot_dict)
+    scatterplot_accuracy_robustness(scatterplot_dict)
 
 
 if __name__ == "__main__":

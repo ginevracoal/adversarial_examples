@@ -26,36 +26,35 @@ def expected_loss_gradient(posterior, n_samples, image, label, device, mode, bas
 
     if mode == "vi":
         # === old ===
-        # x = copy.deepcopy(image)
-        # x.requires_grad = True
-        # posterior_copy = copy.deepcopy(posterior)
-        # output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
-        # avg_output = output.mean(0)
-        # loss = torch.nn.CrossEntropyLoss()(avg_output, label)  # use with softmax
-        # loss.backward()
-        # loss_gradient = copy.deepcopy(x.grad.data[0])
-        # posterior_copy.zero_grad()
-        # del posterior_copy
-        # del x
-        # exp_loss_gradient = torch.stack(loss_gradients).mean(dim=0)
+        x = copy.deepcopy(image)
+        x.requires_grad = True
+        posterior_copy = copy.deepcopy(posterior)
+        output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
+        avg_output = output.mean(0)
+        loss = torch.nn.CrossEntropyLoss()(avg_output, label)
+        loss.backward()
+        exp_loss_gradient = copy.deepcopy(x.grad.data[0])
+        posterior_copy.zero_grad()
+        del posterior_copy
+        del x
 
         # === new ===
-        sum_sign_data_grad = 0.0
-        for _ in range(n_samples):
-            x = copy.deepcopy(image)
-            x.requires_grad = True
-            posterior_copy = copy.deepcopy(posterior)
-            output = posterior_copy.forward(x, n_samples=1).mean(0)
-            loss = torch.nn.CrossEntropyLoss()(output, label)
-
-            posterior_copy.zero_grad()
-            loss.backward(retain_graph=True)
-            image_grad = x.grad.data
-            # Collect the element-wise sign of the data gradient
-            sum_sign_data_grad = sum_sign_data_grad + image_grad.sign()
-
-        exp_loss_gradient = sum_sign_data_grad/n_samples
-
+        # sum_sign_data_grad = 0.0
+        # for _ in range(n_samples):
+        #     x = copy.deepcopy(image)
+        #     x.requires_grad = True
+        #     posterior_copy = copy.deepcopy(posterior)
+        #     output = posterior_copy.forward(x, n_samples=1).mean(0)
+        #     loss = torch.nn.CrossEntropyLoss()(output, label)
+        #
+        #     posterior_copy.zero_grad()
+        #     loss.backward(retain_graph=True)
+        #     image_grad = x.grad.data
+        #     # Collect the element-wise sign of the data gradient
+        #     sum_sign_data_grad = sum_sign_data_grad + image_grad.sign()
+        #
+        # exp_loss_gradient = sum_sign_data_grad/n_samples
+        ##################
 
     elif mode == "hmc":
         raise NotImplementedError
@@ -127,10 +126,12 @@ def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
     vanishing_gradients_idxs = []
 
     print("\nvanishing gradients norms:")
+    count_van_images = 0
     for image_idx, image_gradients in enumerate(loss_gradients):
         # gradient_norm = np.linalg.norm(image_gradients[0])
         gradient_norm = np.max(np.abs(image_gradients[0]))
         if gradient_norm != 0.0:
+            print("idx=",image_idx, end="\t\t")
             count_samples_idx = 0
             for samples_idx, n_samples in enumerate(n_samples_list):
                 # new_gradient_norm = np.linalg.norm(image_gradients[samples_idx])
@@ -141,7 +142,9 @@ def compute_vanishing_grads_idxs(loss_gradients, n_samples_list):
                     count_samples_idx += 1
             if count_samples_idx == len(n_samples_list):
                 vanishing_gradients_idxs.append(image_idx)
-                print("\n")
+                print(", count=", count_van_images)
+                count_van_images += 1
+            print("\n")
 
     print("\nvanishing_gradients_idxs = ", vanishing_gradients_idxs)
     return vanishing_gradients_idxs
@@ -226,9 +229,10 @@ def categorical_loss_gradients_norms(loss_gradients, n_samples_list, dataset_nam
 
 def main(args):
 
-    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100], 2, "mnist"
-    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100], 5, "fashion_mnist"
-    n_inputs, n_samples_list, model_idx, dataset = 1000, [1,10,50,100,500], 1, "mnist"
+    # n_inputs, n_samples_list, model_idx, dataset = 100, [500], 2, "mnist"
+    # n_inputs, n_samples_list, model_idx, dataset = 1000, [1, 10, 50, 100, 500], 5, "fashion_mnist"
+
+    n_inputs, n_samples_list, model_idx, dataset = 1000, [500], 5, "fashion_mnist"
     model = hidden_vi_models[model_idx]
 
     # model = {"idx": 6, "filename": "hidden_vi_fashion_mnist_inputs=60000_lr=2e-05_epochs=200", "activation": "softmax",

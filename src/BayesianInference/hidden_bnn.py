@@ -232,13 +232,9 @@ class HiddenBNN(nn.Module):
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
 
-        # todo controllare se con i nuovi modelli funziona correttamente
         # handle old models
-        # if type(self.activation)==str:
-        #     self.activation = nnf.leaky_relu
-
-        # print(self.activation)
-        # exit()
+        if type(self.activation)==str:
+            self.activation = nnf.leaky_relu
 
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
