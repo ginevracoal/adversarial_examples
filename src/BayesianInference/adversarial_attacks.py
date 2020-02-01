@@ -111,7 +111,7 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
 #             "softmax_robustness": softmax_rob, "loss_gradients":loss_gradients, "epsilon":epsilon}
 
 
-def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm"):
+def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm", model_idx=0):
 
     original_outputs = []
     adversarial_outputs = []
@@ -134,14 +134,18 @@ def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm"):
             original_correct += ((attack_dict["original_output"].argmax(-1) == label).sum().item())
             adversarial_correct += ((attack_dict["adversarial_output"].argmax(-1) == label).sum().item())
 
+            original_outputs.append(attack_dict["original_output"])
+            adversarial_outputs.append(attack_dict["adversarial_output"])
+
     original_accuracy = 100 * original_correct / len(data_loader.dataset)
     adversarial_accuracy = 100 * adversarial_correct / len(data_loader.dataset)
-
+    print(f"\norig_acc = {original_accuracy}\t\tadv_acc = {adversarial_accuracy}")
     softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
 
-    filename = str(dataset_name)+"_nn_inputs="+str(len(data_loader.dataset))+"_attack.pkl"
+    filename = str(dataset_name)+"_nn_inputs="+str(len(data_loader.dataset))+"_eps="+str(epsilon)\
+               +"_attack_"+str(model_idx)+".pkl"
     dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
-            "softmax_robustness": softmax_rob, "epsilon":epsilon}
+            "softmax_robustness": softmax_rob}
     save_to_pickle(data=dict, relative_path=RESULTS+"attacks/", filename=filename)
     return dict
 
@@ -156,14 +160,13 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
         loss_gradients = expected_loss_gradients(posterior=model, n_samples=n_attack_samples, dataset_name=dataset_name,
                                                  model_idx=model_idx, data_loader=data_loader, device=device, mode="vi")
 
-    losses = []
     original_outputs = []
     adversarial_outputs = []
 
     original_correct = 0.0
     adversarial_correct = 0.0
 
-    count = 0
+    images_count = 0
     for images, labels in data_loader:
         for idx in tqdm(range(len(images))):
             image = images[idx]
@@ -171,7 +174,7 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
             # input_shape = image.size(0) * image.size(1) * image.size(2)
             label = label.to(device).argmax(-1).view(-1)
             image = image.to(device).flatten()#view(-1, input_shape)
-            loss_gradient = torch.tensor(loss_gradients[count])
+            loss_gradient = torch.tensor(loss_gradients[images_count])
             # print(image.shape, loss_gradient.shape)
             attack_dict = fgsm_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
                                                n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
@@ -180,20 +183,19 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
 
             original_outputs.append(attack_dict["original_output"])
             adversarial_outputs.append(attack_dict["adversarial_output"])
-            losses.append(attack_dict["loss"])
             original_correct += ((attack_dict["original_output"].argmax(-1)==label).sum().item())
             adversarial_correct += ((attack_dict["adversarial_output"].argmax(-1)==label).sum().item())
-            count += 1
+            images_count += 1
 
     original_accuracy = 100 * original_correct / len(data_loader.dataset)
     adversarial_accuracy = 100 * adversarial_correct / len(data_loader.dataset)
-    print(f"\norig_acc = {original_accuracy}\t\tadv_acc = {adversarial_accuracy}")
+    print(f"\norig_acc = {original_accuracy} - adv_acc = {adversarial_accuracy} - ", end="")
     softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
 
     filename = str(dataset_name)+"_bnn_inputs="+str(len(data_loader.dataset))+"_attackSamp="+str(n_attack_samples)+\
-               "_predSamp="+"_eps="+str(epsilon)+"_attack.pkl"
+               "_predSamp="+str(n_pred_samples)+"_eps="+str(epsilon)+"_attack_"+str(model_idx)+".pkl"
     dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
-            "softmax_robustness": softmax_rob, "epsilon":epsilon, "n_samples":n_attack_samples}
+            "softmax_robustness": softmax_rob}
     save_to_pickle(data=dict, relative_path=RESULTS+"attacks/", filename=filename)
 
     return dict
@@ -244,7 +246,7 @@ def categorical_bayesian_attack(model, n_attack_samples, data_loader, dataset_na
 
         original_accuracy = 100 * original_correct / cat_count
         adversarial_accuracy = 100 * adversarial_correct / cat_count
-        print(f"\norig_acc = {original_accuracy:.2f}\tadv_acc = {adversarial_accuracy:.2f}", end="\t\t")
+        print(f"\norig_acc = {original_accuracy} - adv_acc = {adversarial_accuracy} - ", end="")
         softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
 
         category_dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,

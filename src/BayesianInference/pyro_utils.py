@@ -31,6 +31,6 @@ def slice_data_loader(data_loader, slice_size):
     images = np.array(images_list)
     labels = np.array(labels_list)
 
-    print("\nSliced data_loader shapes: ", images.shape, labels.shape)
+    print(f"\nSliced data_loader shapes: images = {images.shape}, labels = {labels.shape}")
     data_loader_slice = DataLoader(dataset=list(zip(images, labels)), batch_size=128)
     return data_loader_slice

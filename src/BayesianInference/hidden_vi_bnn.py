@@ -34,11 +34,11 @@ hidden_vi_models = [
 
 
 class VI_BNN(HiddenBNN):
-    def __init__(self, input_shape, device, architecture="fully_connected", activation="leaky_relu"):
+    def __init__(self, input_shape, device, architecture="fully_connected", activation="leaky_relu", hidden_size=512):
         self.input_size = input_shape[0]*input_shape[1]*input_shape[2]
         self.activation = activation
+        self.hidden_size = hidden_size
         self.loss = "crossentropy"
-        self.hidden_size = 512
         self.n_classes = 10
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=self.activation,
                                      hidden_size=self.hidden_size, architecture=architecture)
@@ -117,7 +117,6 @@ class VI_BNN(HiddenBNN):
 def main(args):
 
     # === train ===
-
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
 

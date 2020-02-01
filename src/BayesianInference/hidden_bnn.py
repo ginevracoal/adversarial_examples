@@ -60,9 +60,9 @@ class NN(nn.Module):
             self.conv1 = nn.Conv2d(1, 16, 1).to(self.device)
             self.conv2 = nn.Conv2d(16, 32, 3).to(self.device)
             self.dropout1 = nn.Dropout(0.25).to(self.device)
-            self.fc1 = nn.Linear(32*13*13, 128).to(self.device)
+            self.fc1 = nn.Linear(32*13*13, hidden_size).to(self.device)
             self.dropout2 = nn.Dropout(0.5).to(self.device)
-            self.out = nn.Linear(128, self.n_classes).to(self.device)
+            self.out = nn.Linear(hidden_size, self.n_classes).to(self.device)
 
         print(self)
         print("\nTotal number of network weights =", sum(p.numel() for p in self.parameters()))
@@ -97,7 +97,7 @@ class NN(nn.Module):
             total = 0.0
 
             for images, labels in train_loader:
-                images = images.to(device)#.view(-1, self.input_size)
+                images = images.to(device).view(-1, self.input_size)
                 labels = labels.to(device).argmax(-1)
                 total += labels.size(0)
 
@@ -128,7 +128,6 @@ class NN(nn.Module):
         self.model.eval()
         with torch.no_grad():
             correct_predictions = 0.0
-            accuracy = 0.0
 
             for images, labels in test_loader:
 
@@ -138,10 +137,11 @@ class NN(nn.Module):
                 predictions = outputs.argmax(dim=1)
                 correct_predictions += (predictions == labels).sum()
 
-            # print("\noutputs: ", outputs)
-            # print("\nlabels: ", labels)
-            # print("\npredictions: ", predictions)
-            # print(list(self.model.parameters())[0].clone())
+            if DEBUG:
+                print("\noutputs: ", outputs)
+                print("\nlabels: ", labels)
+                print("\npredictions: ", predictions)
+                print(list(self.model.parameters())[0].clone())
 
             accuracy = 100 * correct_predictions / len(test_loader.dataset)
             print("\nAccuracy: %.2f%%" % (accuracy))
@@ -159,11 +159,11 @@ class HiddenBNN(nn.Module):
                       activation=activation, architecture=architecture, device=device)
 
         if activation == "leaky_relu":
-            self.activation = nn.LeakyReLU #lambda x: nnf.leaky_relu(x)
+            self.activation = nnf.leaky_relu
         elif activation == "sigmoid":
-            self.activation = nn.Sigmoid #lambda x: nnf.sigmoid(x)
+            self.activation = nnf.sigmoid#nn.Sigmoid #lambda x: nnf.sigmoid(x)
         elif activation == "tanh":
-            self.activation = nn.Tanh #lambda x: nnf.tanh(x)
+            self.activation = nnf.tanh#nn.Tanh #lambda x: nnf.tanh(x)
 
     def model(self, inputs, labels=None, kl_factor=1.0):
         batch_size = inputs.size(0)
@@ -234,8 +234,11 @@ class HiddenBNN(nn.Module):
 
         # todo controllare se con i nuovi modelli funziona correttamente
         # handle old models
-        if type(self.activation)==str:
-            self.activation = nnf.leaky_relu
+        # if type(self.activation)==str:
+        #     self.activation = nnf.leaky_relu
+
+        # print(self.activation)
+        # exit()
 
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
