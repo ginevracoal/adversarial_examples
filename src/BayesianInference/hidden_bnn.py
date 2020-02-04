@@ -25,6 +25,7 @@ DEBUG=False
 
 
 class NN(nn.Module):
+    # todo bug in convolutional models
     def __init__(self, input_size, hidden_size, architecture, device, activation="leaky_relu", n_classes=10):
         super(NN, self).__init__()
         self.input_size = input_size
@@ -63,6 +64,7 @@ class NN(nn.Module):
             self.fc1 = nn.Linear(32*13*13, hidden_size).to(self.device)
             self.dropout2 = nn.Dropout(0.5).to(self.device)
             self.out = nn.Linear(hidden_size, self.n_classes).to(self.device)
+            self.model = self()
 
         print(self)
         print("\nTotal number of network weights =", sum(p.numel() for p in self.parameters()))
@@ -84,11 +86,12 @@ class NN(nn.Module):
             output = self.out(output)
             return output
 
-    def train_classifier(self, epochs, lr, train_loader, device, input_size):
+    def train_classifier(self, dataset_name, epochs, lr, train_loader, device, input_size):
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+        net = self.model
+        optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9)
 
-        self.model.train()
+        net.train()
         start = time.time()
         for epoch in range(epochs):
             total_loss = 0.0
@@ -103,7 +106,7 @@ class NN(nn.Module):
 
                 optimizer.zero_grad()
 
-                outputs = self.model(images).to(device)
+                outputs = net(images).to(device)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
@@ -122,7 +125,12 @@ class NN(nn.Module):
             print(f"\n[Epoch {epoch + 1}]\t loss: {total_loss:.8f} \t accuracy: {accuracy:.2f}", end="\t")
 
         execution_time(start=start, end=time.time())
-        # return model
+
+        path = RESULTS +"nn/"
+        filename = str(dataset_name)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(len(train_loader.dataset))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.model.state_dict(), path + filename + ".pt")
+
 
     def evaluate(self, test_loader, device):
         self.model.eval()
@@ -407,7 +415,7 @@ def main(args):
 
                     # === train ===
                     net.train_classifier(epochs=epochs, lr=lr, train_loader=train, device=args.device,
-                                                 input_size=input_size)
+                                                 input_size=input_size, dataset_name=args.dataset)
                     # os.makedirs(os.path.dirname(path), exist_ok=True)
                     # torch.save(net.model.state_dict(), path + filename + ".pt")
 

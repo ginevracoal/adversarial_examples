@@ -39,8 +39,8 @@ def plot_exp_loss_gradients_norms(loss_gradients, n_inputs, n_samples_list, data
 
 
 def final_plot(n_inputs, n_samples_list, relpath):
-    matplotlib.rc('font', **{'weight': 'bold', 'size': 10})
-    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 5), dpi=120, facecolor='w', edgecolor='k')
+    matplotlib.rc('font', **{'weight': 'bold', 'size': 8})
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 4), dpi=150, facecolor='w', edgecolor='k')
 
     # mnist
     loss_gradients = []
@@ -53,15 +53,16 @@ def final_plot(n_inputs, n_samples_list, relpath):
     for samples_idx, n_samples in enumerate(n_samples_list):
         print("\n\nsamples = ", n_samples, end="\t")
         for gradient in loss_gradients[samples_idx]:
-            plot_loss_gradients.append(np.max(np.abs(gradient)))
+            plot_loss_gradients.append(np.max(np.abs(gradient))+1)
             plot_samples.append(n_samples)
         print(plot_loss_gradients[-100:])
     df = pd.DataFrame(data={"loss_gradients": plot_loss_gradients, "n_samples": plot_samples})
     print(df.head())
     sns.boxenplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d",
-                       k_depth="proportion", ax=ax1)
+                       k_depth="proportion", ax=ax1,outlier_prop=0, dodge=False)
     ax1.set_ylabel(r"Expected Gradients $l_\infty$-norm ($|\nabla L(x,w_i)|_\infty$)")
     ax1.set_xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)")
+    ax1.set_yscale('log')
 
     # fashion mnist
     loss_gradients = []
@@ -74,7 +75,7 @@ def final_plot(n_inputs, n_samples_list, relpath):
     for samples_idx, n_samples in enumerate(n_samples_list):
         print("\n\nsamples = ", n_samples, end="\t")
         for gradient in loss_gradients[samples_idx]:
-            plot_loss_gradients.append(np.max(np.abs(gradient)))
+            plot_loss_gradients.append(np.max(np.abs(gradient))+1)
             plot_samples.append(n_samples)
         print(plot_loss_gradients[-100:])
     df = pd.DataFrame(data={"loss_gradients": plot_loss_gradients, "n_samples": plot_samples})
@@ -84,16 +85,17 @@ def final_plot(n_inputs, n_samples_list, relpath):
                        k_depth="proportion", ax=ax2)
     ax2.set_ylabel(r"Expected Gradients $l_\infty$-norm ($|\nabla L(x,w_i)|_\infty$)")
     ax2.set_xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)")
+    ax2.set_yscale('log')
 
-    filename = "expLossGradients_inputs=" + str(n_inputs) + "_final_boxenplot.png"
+    filename = "expLossGradients_inputs=" + str(n_inputs) + "_boxenplot.png"
     os.makedirs(os.path.dirname(RESULTS + "plots/"), exist_ok=True)
     fig.savefig(RESULTS + "plots/" + filename, dpi=150)
 
 
 def main():
 
-    # final_plot(n_inputs=1000, n_samples_list=[1,10,50,100], relpath=DATA_PATH)
-    # exit()
+    final_plot(n_inputs=1000, n_samples_list=[1,10,50,100,500], relpath=DATA_PATH)
+    exit()
 
     # n_inputs, n_samples_list, model_idx, dataset, relpath = 1000, [1,10,50,100,500], 2, "mnist", DATA_PATH
     # n_inputs, n_samples_list, model_idx, dataset, relpath = 1000, [1, 10, 50, 100,500], 5, "fashion_mnist", DATA_PATH

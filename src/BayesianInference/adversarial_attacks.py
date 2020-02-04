@@ -40,17 +40,53 @@ def fgsm_attack(model, image, label, epsilon, device):
     return {"loss_gradient":image_grad, "original_output":original_output, "adversarial_output":adversarial_output}
 
 
+def pgd_attack(model, image, label, epsilon, device, alpha=2 / 255, iters=40):
+    image = image.to(device)
+    label = label.to(device)
+
+    original_image = copy.deepcopy(image)
+    original_output = model.forward(image)
+
+    for i in range(iters):
+        image.requires_grad = True
+        output = model.forward(image)
+        loss = torch.nn.CrossEntropyLoss()(output, label).to(device)
+        model.zero_grad()
+        loss.backward()
+
+        perturbed_image = image + alpha * image.grad.sign()
+
+        eta = torch.clamp(perturbed_image - original_image, min=-epsilon, max=epsilon)
+        image = torch.clamp(original_image + eta, min=0, max=1).detach_()
+
+    adversarial_output = model.forward(perturbed_image)
+    return {"original_output":original_output, "adversarial_output":adversarial_output}
+
+
+def random_bayesian_attack(model, image, label, n_pred_samples, epsilon, device):
+
+    original_output = model.forward(image, n_samples=n_pred_samples).mean(0).to(device)
+    random_pert = torch.tensor([random.choice([-1,0,1]) for _ in range(784)]).to(device)
+    perturbed_image = image + epsilon * random_pert
+    perturbed_image = torch.clamp(perturbed_image, 0, 1)
+    adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0)
+
+    if DEBUG:
+        print("true_label =", label.item(), "\tperturbation_pred =", adversarial_output)
+
+    del model
+
+    return {"original_output": original_output, "adversarial_output": adversarial_output,
+            "n_pred_samples": n_pred_samples}
+
 def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, epsilon, device, loss_gradient=None):
 
     original_output = model.forward(image, n_samples=n_pred_samples).mean(0).to(device)
 
-    ### new ###
     if loss_gradient is None:
         loss_gradient = expected_loss_gradient(posterior=model, n_samples=n_attack_samples,
                                                     image=image, label=label, device=device, mode="vi")
     perturbed_image = image + epsilon * loss_gradient.to(device)
-
-    ###########
 
     perturbed_image = torch.clamp(perturbed_image, 0, 1)
     adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0)
@@ -62,56 +98,37 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
 
     del model
 
-    return {"original_output": original_output,"adversarial_output": adversarial_output,
+    attack_dict = {"original_output": original_output,"adversarial_output": adversarial_output,
             "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
+    return attack_dict
+
+def pgd_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, epsilon, device, alpha=2 / 255, iters=10):
+    image = image.to(device)
+    label = label.to(device)
+
+    original_image = copy.deepcopy(image)
+    original_output = model.forward(image, n_samples=n_pred_samples).mean(0).to(device)
+
+    for i in range(iters):
+        image.requires_grad = True
+        output = model.forward(image, n_samples=n_attack_samples).mean(0).to(device)
+        loss = torch.nn.CrossEntropyLoss()(output, label).to(device)
+        model.zero_grad()
+        loss.backward()
+
+        perturbed_image = image + alpha * image.grad.sign()
+
+        eta = torch.clamp(perturbed_image - original_image, min=-epsilon, max=epsilon)
+        image = torch.clamp(original_image + eta, min=0, max=1).detach_()
+
+    adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0).to(device)
+
+    attack_dict = {"original_output": original_output,"adversarial_output": adversarial_output,
+                   "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
+    return attack_dict
 
 
-# def old_attack(model, data_loader, epsilon, device, loss_gradients=None, method="fgsm"):
-#     """ Attack a NN model on the given inputs with epsilon perturbations.
-#     :return dictionary {"attacks","loss_gradients","original_accuracy","adversarial_accuracy","softmax_robustness"}
-#     """
-#
-#     attacks = []
-#     loss_gradients = []
-#     original_outputs = []
-#     adversarial_outputs =  []
-#
-#     original_correct = 0.0
-#     adversarial_correct = 0.0
-#
-#     for images, labels in data_loader:
-#         for idx in range(len(images)):
-#             image = images[idx]
-#             label = labels[idx]
-#
-#             input_shape = image.size(0) * image.size(1) * image.size(2)
-#             label = label.to(device).argmax(-1).view(-1)
-#             image = image.to(device).view(-1, input_shape)
-#
-#             # attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
-#             #                           label=label, epsilon=epsilon, device=device)
-#             #
-#             # # attacks.append(attack_dict["perturbed_image"])
-#             # loss_gradients.append(attack_dict["loss_gradient"])
-#             # original_outputs.append(attack_dict["original_output"])
-#             # adversarial_outputs.append(attack_dict["adversarial_output"])
-#
-#             attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
-#                                       label=label, epsilon=epsilon, device=device)
-#
-#             original_correct += ((attack_dict["original_output"].argmax(-1)==label).sum().item())
-#             adversarial_correct += ((attack_dict["adversarial_output"].argmax(-1)==label).sum().item())
-#
-#     original_accuracy = 100 * original_correct / len(data_loader.dataset)
-#     adversarial_accuracy = 100 * adversarial_correct / len(data_loader.dataset)
-#
-#     softmax_rob = softmax_robustness(original_outputs, adversarial_outputs)
-#
-#     return {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
-#             "softmax_robustness": softmax_rob, "loss_gradients":loss_gradients, "epsilon":epsilon}
-
-
-def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm", model_idx=0):
+def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm", model_idx=0, save_dir=RESULTS+"attacks/"):
 
     original_outputs = []
     adversarial_outputs = []
@@ -128,8 +145,12 @@ def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm", mod
             label = label.to(device).argmax(-1).view(-1)
             image = image.to(device).view(-1, input_shape)
 
-            attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
+            if method == "fgsm":
+                attack_dict = fgsm_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
                                       label=label, epsilon=epsilon, device=device)
+            elif method == "pgd":
+                attack_dict = pgd_attack(model=copy.deepcopy(model), image=copy.deepcopy(image),
+                                          label=label, epsilon=epsilon, device=device)
 
             original_correct += ((attack_dict["original_output"].argmax(-1) == label).sum().item())
             adversarial_correct += ((attack_dict["adversarial_output"].argmax(-1) == label).sum().item())
@@ -146,12 +167,12 @@ def attack(model, data_loader, dataset_name, epsilon, device, method="fgsm", mod
                +"_attack_"+str(model_idx)+".pkl"
     dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
             "softmax_robustness": softmax_rob}
-    save_to_pickle(data=dict, relative_path=RESULTS+"attacks/", filename=filename)
+    save_to_pickle(data=dict, relative_path=save_dir, filename=filename)
     return dict
 
 
 def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon, device, model_idx,
-                    loss_gradients=None, n_pred_samples=None, method="fgsm"):
+                    loss_gradients=None, n_pred_samples=None, save_dir=RESULTS+"attacks/", method="fgsm"):
 
     if n_pred_samples is None:
         n_pred_samples = n_attack_samples
@@ -176,10 +197,16 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
             image = image.to(device).flatten()#view(-1, input_shape)
             loss_gradient = torch.tensor(loss_gradients[images_count])
             # print(image.shape, loss_gradient.shape)
-            attack_dict = fgsm_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
-                                               n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
-                                               label=label, epsilon=epsilon, device=device,
-                                               loss_gradient=loss_gradient)
+
+            if method == "fgsm":
+                attack_dict = fgsm_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
+                                                   n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
+                                                   label=label, epsilon=epsilon, device=device,
+                                                   loss_gradient=loss_gradient)
+            elif method == "pgd":
+                attack_dict = pgd_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
+                                                   n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
+                                                   label=label, epsilon=epsilon, device=device)
 
             original_outputs.append(attack_dict["original_output"])
             adversarial_outputs.append(attack_dict["adversarial_output"])
@@ -196,7 +223,7 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
                "_predSamp="+str(n_pred_samples)+"_eps="+str(epsilon)+"_attack_"+str(model_idx)+".pkl"
     dict = {"original_accuracy": original_accuracy, "adversarial_accuracy": adversarial_accuracy,
             "softmax_robustness": softmax_rob}
-    save_to_pickle(data=dict, relative_path=RESULTS+"attacks/", filename=filename)
+    save_to_pickle(data=dict, relative_path=save_dir, filename=filename)
 
     return dict
 

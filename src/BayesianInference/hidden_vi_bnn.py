@@ -18,18 +18,18 @@ DEBUG=False
 hidden_vi_models = [
     # mnist
     {"idx":0, "filename": "hidden_vi_mnist_inputs=10000_lr=0.0002_epochs=100", "activation": "leaky_relu",
-     "dataset": "mnist", "architecture": "fully_connected"}, # pochi input, 75% test
+     "dataset": "mnist", "architecture": "fully_connected", "n_inputs":10000}, # pochi input, 75% test
     {"idx":1, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=100", "activation": "leaky_relu",
-    "dataset": "mnist", "architecture": "fully_connected"}, # overfitta, 85% test
+    "dataset": "mnist", "architecture": "fully_connected", "n_inputs":60000}, # overfitta, 85% test
     {"idx":2, "filename": "hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=11", "activation": "leaky_relu",
-    "dataset": "mnist", "architecture": "fully_connected"}, # 85% test
+    "dataset": "mnist", "architecture": "fully_connected", "n_inputs":60000}, # 85% test
     # fashion mnist
     {"idx":3, "filename": "hidden_vi_fashion_mnist_inputs=100_lr=0.0002_epochs=800", "activation": "leaky_relu",
-    "dataset": "fashion_mnist", "architecture": "fully_connected"}, # 74% train
+    "dataset": "fashion_mnist", "architecture": "fully_connected", "n_inputs":100}, # 74% train
     {"idx":4, "filename":"hidden_vi_fashion_mnist_inputs=500_lr=0.0002_epochs=500","activation":"leaky_relu",
-    "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 85% train, 75% test
+    "dataset":"fashion_mnist", "architecture":"fully_connected", "n_inputs":500}, # 85% train, 75% test
     {"idx":5, "filename":"hidden_vi_fashion_mnist_inputs=1000_lr=5e-05_epochs=600","activation":"leaky_relu",
-    "dataset":"fashion_mnist", "architecture":"fully_connected"}, # 83% train, 73% test
+    "dataset":"fashion_mnist", "architecture":"fully_connected", "n_inputs":1000}, # 83% train, 73% test
 ]
 
 

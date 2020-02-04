@@ -266,9 +266,5 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("--dataset", nargs='?', default="mnist", type=str)
     parser.add_argument("--device", default='cuda', type=str, help='use "cpu" or "cuda".')
-    parser.add_argument("--inputs", default=1000, type=int)
-
     main(args=parser.parse_args())
