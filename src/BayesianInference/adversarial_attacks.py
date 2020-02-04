@@ -40,7 +40,7 @@ def fgsm_attack(model, image, label, epsilon, device):
     return {"loss_gradient":image_grad, "original_output":original_output, "adversarial_output":adversarial_output}
 
 
-def pgd_attack(model, image, label, epsilon, device, alpha=2 / 255, iters=40):
+def pgd_attack(model, image, label, epsilon, device, alpha=2 / 255, iters=5):
     image = image.to(device)
     label = label.to(device)
 

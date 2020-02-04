@@ -21,13 +21,12 @@ def plot_random_attack(random_attack_dict, filename):
 
     sns.set()
     plt.subplots(figsize=(8, 8), dpi=100)
-    sns.set_palette("YlGnBu_d",2)
+    sns.set_palette("YlGnBu_d",3)
     g = sns.lineplot(x="samples", y="softmax_rob", hue="Attack", style="Attack", data=df, ci="sd")
     g.set(xticks=df.samples.values)
 
     plt.xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)", fontsize=10)
     plt.ylabel('Softmax difference ($l_\infty$)', fontsize=10)
-    plt.legend(loc='lower right', title="Attack", labels=["random","FGSM"])
 
     os.makedirs(os.path.dirname(RESULTS), exist_ok=True)
     plt.savefig(RESULTS+filename)
@@ -101,23 +100,26 @@ def get_filename(dataset, test_images, pred_samples, n_samples_list):
                +"_predSamp="+str(pred_samples)+"_random_attack"
 
 
-def final_plot(test_images, pred_samples=200, path=DATA_PATH):
+def final_plot(test_images, pred_samples, path=DATA_PATH):
     matplotlib.rc('font', **{'weight': 'bold', 'size': 8})
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 6), dpi=150, facecolor='w', edgecolor='k')
     sns.set()
-    sns.set_palette("YlGnBu_d",3)
+    # sns.set_palette("YlGnBu_d",3)
+    sns.set_palette("viridis",4)
 
-    n_inputs, n_samples_list = 1000, [1,10,50,100]
+    # n_inputs, n_samples_list = 1000, [1,10,50,100]
 
-    plot_attack = []
-    plot_samples = []
-    plot_diff = []
 
-    for row_idx, pred_samples in enumerate([None, pred_samples]):
-        for col_idx, dataset in enumerate( ["mnist","fashion_mnist"]):
-            for file in os.listdir(path+str(dataset)+"_predSamp="+str(pred_samples)):
+
+    for col_idx, pred_samples in enumerate([None, pred_samples]):
+        plot_attack = []
+        plot_samples = []
+        plot_diff = []
+        for row_idx, dataset in enumerate( ["mnist","fashion_mnist"]):
+            dir = path+"testImages="+str(test_images)+"/"+str(dataset)+"_predSamp="+str(pred_samples)+"/"
+            for file in os.listdir(dir):
                 if file.endswith(".pkl"):
-                    random_attack_dict=load_from_pickle(path+str(dataset)+"_predSamp="+str(pred_samples)+"/"+file)
+                    random_attack_dict=load_from_pickle(dir+file)
                     plot_attack.extend(random_attack_dict["attack_type"])
                     plot_samples.extend(random_attack_dict["samples"])
                     plot_diff.extend(random_attack_dict["softmax_diff"])
@@ -132,10 +134,10 @@ def final_plot(test_images, pred_samples=200, path=DATA_PATH):
 
             ax[row_idx, col_idx].set_xlabel("")
             ax[row_idx, col_idx].set_ylabel("")
-            ax[row_idx, 0].set_ylabel("MNIST", fontsize=9, rotation=270,labelpad=10)
-            ax[row_idx, 0].yaxis.set_label_position("right")
-            ax[row_idx, 1].set_ylabel(f"Fashion MNIST", fontsize=9, rotation=270,labelpad=10)
-            ax[row_idx, 1].yaxis.set_label_position("right")
+            ax[0, 1].set_ylabel("MNIST", fontsize=9, rotation=270,labelpad=10)
+            ax[0, 1].yaxis.set_label_position("right")
+            ax[1, 1].set_ylabel(f"Fashion MNIST", fontsize=9, rotation=270,labelpad=10)
+            ax[1, 1].yaxis.set_label_position("right")
 
             if row_idx == 0 and col_idx == 1:
                 ax[row_idx, col_idx].legend(loc='upper right', title="Attack", labels=["random", "FGSM","PGD"])
@@ -143,9 +145,10 @@ def final_plot(test_images, pred_samples=200, path=DATA_PATH):
                 ax[row_idx, col_idx].legend().remove()
 
             ax[0, 0].set_title(f"Predictive samples = attack samples ", fontsize=10)
-            ax[1, 0].set_title(f"Predictive samples = {pred_samples}", fontsize=10)
-            ax[0, 1].set_title(f"Predictive samples = attack samples ", fontsize=10)
-            ax[1, 1].set_title(f"Predictive samples = {pred_samples}", fontsize=10)
+            ax[0, 1].set_title(f"Predictive samples = {pred_samples}", fontsize=10)
+            # ax[1, 0].set_title(f"Predictive samples = {pred_samples}", fontsize=10)
+            # ax[0, 1].set_title(f"Predictive samples = attack samples ", fontsize=10)
+            # ax[1, 1].set_title(f"Predictive samples = {pred_samples}", fontsize=10)
 
     fig.text(0.04, 0.5, r'Softmax difference ($l_\infty$)', fontsize=11, va='center', rotation='vertical')
     fig.text(0.5, 0.04, r"Samples involved in the attacks ($w_i \sim p(w|D)$)", ha='center', fontsize=11)
@@ -157,14 +160,15 @@ def final_plot(test_images, pred_samples=200, path=DATA_PATH):
 def main(args):
 
     test_images = 10
-    pred_samples = None # None or int
+    pred_samples = 500 # None or int
 
     # == final plot ==
-    final_plot(test_images=test_images)
+    final_plot(test_images=test_images, pred_samples=pred_samples)
     exit()
 
     # == produce attacks ==
     n_samples_list = [1,10,50,100]
+    loss_gradients_test_images = 1000
 
     if args.dataset == "mnist":
         model = hidden_vi_models[2]
@@ -174,7 +178,7 @@ def main(args):
         raise AssertionError("wrong dataset name")
 
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=model["n_inputs"], shuffle=True)
+        data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=loss_gradients_test_images, shuffle=True)
     test = slice_data_loader(data_loader=test_loader, slice_size=test_images)
 
     bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
@@ -184,8 +188,8 @@ def main(args):
 
     loss_gradients = {}
     for n_samples in n_samples_list:
-        gradients = load_loss_gradients(dataset_name=args.dataset, n_inputs=model["n_inputs"], n_samples=n_samples,
-                                        model_idx=model["idx"])
+        gradients = load_loss_gradients(dataset_name=args.dataset, n_inputs=loss_gradients_test_images,
+                                        n_samples=n_samples,  model_idx=model["idx"])
         loss_gradients.update({str(n_samples):gradients})
     random_attack_dict = attack_model(model=posterior, loss_gradients=loss_gradients, n_pred_samples=pred_samples,
                                       n_samples_list=n_samples_list, device=args.device, test_loader=test)

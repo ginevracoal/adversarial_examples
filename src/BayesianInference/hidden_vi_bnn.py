@@ -5,7 +5,7 @@ from directories import *
 import argparse
 import pyro
 import random
-from pyro.infer import SVI, Trace_ELBO
+from pyro.infer import SVI, Trace_ELBO, TraceMeanField_ELBO
 import pyro.optim as pyroopt
 from utils import execution_time, plot_loss_accuracy
 from BayesianInference.hidden_bnn import HiddenBNN
@@ -40,21 +40,22 @@ class VI_BNN(HiddenBNN):
         self.hidden_size = hidden_size
         self.loss = "crossentropy"
         self.n_classes = 10
-        super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=self.activation,
+        self.filename = "hidden_vi_activation=" + str(activation) + \
+                        "_hidden=" + str(hidden_size) + "_architecture=" + str(architecture)
+        super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=activation,
                                      hidden_size=self.hidden_size, architecture=architecture)
 
-    def get_filename(self, dataset_name, n_inputs, lr, n_epochs):
-        return "hidden_vi_" + str(dataset_name) + "_inputs=" + str(n_inputs) + \
-                "_lr=" + str(lr) + "_epochs=" + str(n_epochs)
+    # def get_filename(self, dataset_name, n_inputs, lr, n_epochs):
+    #     return "hidden_vi_" + str(dataset_name) + "_activation=" + str(self.activation_name) + \
+    #             "_hidden=" + str(self.hidden_size) + "_architecture=" + str(self.architecture)
 
     def infer_parameters(self, dataset_name, train_loader, lr, n_epochs, seed=0):
         random.seed(seed)
-        filename = self.get_filename(n_inputs=len(train_loader.dataset), lr=lr, n_epochs=n_epochs,
-                                     dataset_name=dataset_name)
+        filename = self.filename
         print("\nSVI BNN:", filename)
         # optim = pyroopt.SGD({'lr': lr, 'momentum': 0.9, 'nesterov': True})
         optim = pyroopt.Adam({"lr": lr})
-        elbo = Trace_ELBO()
+        elbo = TraceMeanField_ELBO()
         svi = SVI(self.model, self.guide, optim, loss=elbo)
 
         loss_list = []
@@ -97,7 +98,7 @@ class VI_BNN(HiddenBNN):
 
         learned_params = pyro.get_param_store().get_all_param_names()
         print(f"\nlearned params = {learned_params}")
-        self.save(filename=filename)
+        self.save(filename=filename, dataset_name=dataset_name)
 
         if DEBUG:
             if self.architecture == "fully_connected":
@@ -105,11 +106,12 @@ class VI_BNN(HiddenBNN):
             elif self.architecture == "convolutional":
                 print("conv1w_mu", pyro.get_param_store()["conv1w_mu"].flatten())
 
-        plot_loss_accuracy({'loss':loss_list, 'accuracy':accuracy_list}, path=RESULTS + "bnn/" + filename + ".png")
+        plot_loss_accuracy({'loss':loss_list, 'accuracy':accuracy_list},
+                           path=RESULTS +str(dataset_name)+"/bnn/" + filename + ".png")
         return self
 
-    def load_posterior(self, posterior_name, activation="leaky_relu", relative_path=TRAINED_MODELS):
-        posterior = self.load(filename=posterior_name, relative_path=relative_path)
+    def load_posterior(self, posterior_name, dataset_name, activation="leaky_relu", relative_path=TRAINED_MODELS):
+        posterior = self.load(filename=posterior_name, relative_path=relative_path, dataset_name=dataset_name)
         posterior.activation = activation
         return posterior
 
@@ -120,15 +122,13 @@ def main(args):
     train_loader, test_loader, data_format, input_shape = \
         data_loaders(dataset_name=args.dataset, batch_size=128, n_inputs=args.inputs, shuffle=True)
 
-    # train_loader = slice_data_loader(data_loader=train_loader, slice_size=100)
-    # test_loader = slice_data_loader(data_loader=test_loader, slice_size=1000)
-
     bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=args.architecture,
                      activation=args.activation)
     posterior = bayesnn.infer_parameters(train_loader=train_loader, lr=args.lr, n_epochs=args.epochs,
                                          dataset_name=args.dataset)
 
     posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
+    exit()
 
     # === load ===
 
@@ -138,15 +138,19 @@ def main(args):
     # "dataset": "fashion_mnist", "architecture": "fully_connected"} # 75.08 test
 
     # model = hidden_vi_models[2]
-    #
-    # train_loader, test_loader, data_format, input_shape = \
-    #     data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=args.inputs, shuffle=True)
-    #
-    # bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
-    #                  activation=model["activation"])
-    # posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=TRAINED_MODELS,
-    #                                        activation=model["activation"])
-    # posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
+
+    model = {"idx":7, "filename":"hidden_vi_mnist_inputs=60000_lr=0.0002_epochs=15","dataset":"mnist",
+             "activation":"tanh", "architecture":"fully_connected"}
+    # model = {"idx":8, "filename":"hidden_vi_fashion_mnist_inputs=60000_lr=0.0002_epochs=15"}
+
+    train_loader, test_loader, data_format, input_shape = \
+        data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=args.inputs, shuffle=False)
+
+    bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
+                     activation=model["activation"])
+    posterior = bayesnn.load_posterior(posterior_name=model["filename"], relative_path=TRAINED_MODELS,
+                                           activation=model["activation"], dataset_name=model["dataset"])
+    posterior.evaluate(data_loader=test_loader, n_samples=args.samples)
 
 
 

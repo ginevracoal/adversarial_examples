@@ -126,8 +126,8 @@ class NN(nn.Module):
 
         execution_time(start=start, end=time.time())
 
-        path = RESULTS +"nn/"
-        filename = str(dataset_name)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(len(train_loader.dataset))
+        path = RESULTS +str(dataset_name)+"/nn/"
+        filename = "nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(len(train_loader.dataset))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(self.model.state_dict(), path + filename + ".pt")
 
@@ -377,14 +377,14 @@ class HiddenBNN(nn.Module):
 
         return {"accuracy": accuracy, "outputs":outputs}
 
-    def save(self, filename, relative_path=RESULTS):
-        filepath = relative_path+"bnn/"+filename+".pr"
-        os.makedirs(os.path.dirname(relative_path+"bnn/"), exist_ok=True)
-        print("\nSaving params: ", filepath)
-        pyro.get_param_store().save(filepath)
+    def save(self, filename, dataset_name, relative_path=RESULTS):
+        path = relative_path+str(dataset_name)+"/bnn/"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        print("\nSaving params: ", path+filename+".pr")
+        pyro.get_param_store().save(path+filename+".pr")
 
-    def load(self, filename, relative_path=TRAINED_MODELS):
-        filepath = relative_path+"bnn/"+filename+".pr"
+    def load(self, filename, dataset_name, relative_path=TRAINED_MODELS):
+        filepath = relative_path+str(dataset_name)+"/bnn/"+filename+".pr"
         print("\nLoading params: ", filepath)
         pyro.get_param_store().load(filepath)
         return self
@@ -410,8 +410,8 @@ def main(args):
                     input_size = input_shape[0]*input_shape[1]*input_shape[2]
                     net = NN(input_size=input_size, hidden_size=512, activation="leaky_relu",
                              device=args.device, architecture="fully_connected")
-                    # path = RESULTS +"nn/"
-                    # filename = str(args.dataset)+"_nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(args.inputs)
+                    # path = RESULTS +str(args.dataset)+"/nn/"
+                    # filename = "nn_lr="+str(lr)+"_epochs="+str(epochs)+"_inputs="+str(args.inputs)
 
                     # === train ===
                     net.train_classifier(epochs=epochs, lr=lr, train_loader=train, device=args.device,

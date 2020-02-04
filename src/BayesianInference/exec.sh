@@ -4,7 +4,7 @@
 #  settings  #
 ##############
 
-DATASET_NAME="mnist"
+DATASET_NAME="fashion_mnist"
 N_INPUTS="100"
 EPOCHS="200"
 LR="0.002"
@@ -12,6 +12,7 @@ DEVICE="cpu"
 N_SAMPLES="5"
 WARMUP="1000"
 N_CHAINS="8"
+MODEL_TYPE="bnn"
 
 #############
 # execution #
@@ -41,8 +42,8 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_out.txt"
 #python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE &> $OUT
 #python "BayesianInference/adversarial_attacks.py" --dataset=$DATASET_NAME --device=$DEVICE &> $OUT
 #python "BayesianInference/loss_gradients.py" &> $OUT
-python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
-#python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE &> $OUT
+python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --device=$DEVICE --dataset=$DATASET_NAME --model_type=$MODEL_TYPE&> $OUT
+#python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
 
 # deactivate environment
 deactivate

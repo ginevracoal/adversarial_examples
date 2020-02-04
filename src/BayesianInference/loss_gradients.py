@@ -99,12 +99,6 @@ def expected_loss_gradients(posterior, n_samples, data_loader, dataset_name, dev
     save_to_pickle(data=exp_loss_gradients, relative_path=RESULTS+str(dataset_name)+"/", filename=filename)
     return exp_loss_gradients
 
-
-def expected_loss_gradients_multiple_posteriors(posteriors_list, n_samples, data_loader, device, mode, baseclass=None):
-    for posterior in posteriors_list:
-        expected_loss_gradients(posterior, n_samples, data_loader, device, mode, baseclass=None, mode=mode)
-
-
 def categorical_cross_entropy(y_pred, y_true):
     # y_pred = predicted probability vector
     y_pred = torch.clamp(y_pred, 1e-9, 1 - 1e-9)

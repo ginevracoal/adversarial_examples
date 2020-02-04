@@ -2,7 +2,8 @@ import sys
 sys.path.append(".")
 from directories import *
 
-from utils import load_from_pickle, save_to_pickle
+from BayesianInference.pyro_utils import data_loaders
+from utils import load_from_pickle, save_to_pickle, plot_heatmap
 import pyro
 import os
 import numpy as np
@@ -77,7 +78,72 @@ def plot_avg_gradients_grid(loss_gradients, n_samples_list, fig_idx):
     fig.savefig(dir + "expLossGradients_avgOverImages_"+str(fig_idx)+".png")
 
 
+def final_plot(n_samples_list):
+
+    fig, axs = plt.subplots(nrows=4, ncols=len(n_samples_list), figsize=(10, 8))
+
+    rows = []
+    for dataset in ["mnist", "fashion_mnist"]:
+        single_image_gradients_norms = load_from_pickle(DATA_PATH+"heatmaps/"+"single_grad_"+str(dataset)+".pkl")
+        avg_gradients_norms = load_from_pickle(DATA_PATH+"heatmaps/"+"avg_grads_"+str(dataset)+".pkl")
+        rows.append(single_image_gradients_norms)
+        rows.append(avg_gradients_norms)
+
+    for row_idx, gradients in enumerate(rows):
+        for col_idx, samples in enumerate(n_samples_list):
+            vmin, vmax = (np.min(gradients), np.max(gradients))
+            sns.heatmap(gradients[col_idx].reshape(28, 28), ax=axs[row_idx,col_idx], cbar=col_idx == 3,
+                        cmap="YlGnBu", square=True, vmin=vmin, vmax=vmax)# cbar_kws={'shrink': 1.5})
+            axs[row_idx,col_idx].tick_params(left="off", bottom="off", labelleft='off', labelbottom='off')
+
+            # norm = np.linalg.norm(x=loss_gradient, ord=2)
+            # expr = r"$|\langle\nabla_x L(x,w)\rangle_w|_2$"
+            norm = np.max(np.abs(gradients[col_idx]))
+            expr = r"$|\langle\nabla_x L(x,w)\rangle_w|_\infty$"
+
+            axs[row_idx,col_idx].set_title(f"{expr} = {norm:.3f}", fontsize=10)
+            axs[3,col_idx].set_xlabel(f"Samples = {samples}", fontsize=10)
+
+    labelpad=10
+    axs[0,0].set_ylabel("Single MNIST gradient", labelpad=labelpad)
+    axs[1,0].set_ylabel("Avg MNIST gradients", labelpad=labelpad)
+    axs[2,0].set_ylabel("Single F. MNIST gradient", labelpad=labelpad)
+    axs[3,0].set_ylabel("Avg F. MNIST gradients", labelpad=labelpad)
+
+    fig.tight_layout()
+    fig.savefig(RESULTS + "plots/" + "vanishing_loss_gradients_grid.png")
+
+def save_chosen_images():
+    test_loader = data_loaders(dataset_name="mnist", batch_size=128, n_inputs=1000, shuffle=False)[1]
+
+    count=0
+    for images, labels in test_loader:
+        for i in range(len(images)):
+            if count == 533:
+                save_to_pickle(data=images[i], relative_path=RESULTS+"plots/", filename="mnist_chosen_image.pkl")
+                fig, ax = plt.subplots(figsize=(8, 8), dpi=100)
+                sns.heatmap(images[i].reshape(28, 28), ax=ax, cmap="gray")
+                fig.savefig(RESULTS + "plots/" + "mnist_chosen_image.png")
+            count+=1
+
+    test_loader = data_loaders(dataset_name="fashion_mnist", batch_size=128, n_inputs=1000, shuffle=False)[1]
+    count=0
+    for images, labels in test_loader:
+        for i in range(len(images)):
+            if count == 794:
+                save_to_pickle(data=images[i], relative_path=RESULTS + "plots/",
+                               filename="fashion_mnist_chosen_image.pkl")
+                fig, ax = plt.subplots(figsize=(8, 8), dpi=100)
+                sns.heatmap(images[i].reshape(28, 28), ax=ax, cmap="gray")
+                fig.savefig(RESULTS + "plots/" + "fashion_mnist_chosen_image.png")
+            count+=1
+
 def main():
+
+    save_chosen_images()
+    exit()
+    final_plot(n_samples_list = [1, 10, 50, 100])
+    exit()
 
     # n_inputs, n_samples_list, model_idx, dataset, relpath = 100, [1,10,50,100,500], 2, "mnist", RESULTS
     # n_inputs, n_samples_list, model_idx, dataset, relpath = 100, [1,10,50,100], 5, "fashion_mnist", RESULTS
@@ -95,20 +161,6 @@ def main():
 
     plot_avg_gradients_grid(loss_gradients=exp_loss_gradients, n_samples_list=n_samples_list,
                             fig_idx="_inputs="+str(n_inputs)+"_" + str(model_idx))
-    exit()
-
-    # === final plots ===
-
-    n_samples_list = [1, 10, 50, 100]
-    for dataset in ["mnist", "fashion_mnist"]:
-
-        single_image_gradients_norms = load_from_pickle(DATA_PATH+"heatmaps/"+"single_grad_"+str(dataset)+".pkl")
-        fig = plot_vanishing_gradients(gradients=single_image_gradients_norms, n_samples_list=n_samples_list)
-        fig.savefig(RESULTS+"plots/"+"expLossGradients_vanishingImage_"+str(dataset)+".png")
-
-        avg_gradients_norms = load_from_pickle(DATA_PATH+"heatmaps/"+"avg_grads_"+str(dataset)+".pkl")
-        fig = plot_vanishing_gradients(gradients=avg_gradients_norms, n_samples_list=n_samples_list)
-        fig.savefig(RESULTS+"plots/"+"expLossGradients_avgOverImages_"+str(dataset)+".png")
 
 
 if __name__ == "__main__":
