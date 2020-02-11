@@ -174,6 +174,7 @@ class HiddenBNN(nn.Module):
             self.activation = nnf.tanh#nn.Tanh #lambda x: nnf.tanh(x)
 
     def model(self, inputs, labels=None, kl_factor=1.0):
+        # pyro.set_rng_seed(0)
         batch_size = inputs.size(0)
         flat_inputs = inputs.to(self.device).view(-1, self.input_size)
         if self.architecture == "fully_connected":
@@ -239,7 +240,6 @@ class HiddenBNN(nn.Module):
             return logits.to(self.device)
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
-
         # handle old models
         if type(self.activation)==str:
             self.activation = nnf.leaky_relu
@@ -338,7 +338,8 @@ class HiddenBNN(nn.Module):
 
 
     def forward(self, inputs, n_samples):
-        random.seed(0)
+        pyro.set_rng_seed(0)
+
         res = []
 
         if DEBUG:

@@ -45,10 +45,6 @@ class VI_BNN(HiddenBNN):
         super(VI_BNN, self).__init__(input_size=self.input_size, device=device, activation=activation,
                                      hidden_size=self.hidden_size, architecture=architecture)
 
-    # def get_filename(self, dataset_name, n_inputs, lr, n_epochs):
-    #     return "hidden_vi_" + str(dataset_name) + "_activation=" + str(self.activation_name) + \
-    #             "_hidden=" + str(self.hidden_size) + "_architecture=" + str(self.architecture)
-
     def infer_parameters(self, dataset_name, train_loader, lr, n_epochs, seed=0):
         random.seed(seed)
         filename = self.filename
@@ -70,8 +66,6 @@ class VI_BNN(HiddenBNN):
             for images, labels in train_loader:
                 images = images.to(self.device)
                 labels = labels.to(self.device)
-                # svi.step() = take a gradient step on the loss function
-                # images and labels are passed to model() and guide()
                 loss = svi.step(inputs=images,#.view(-1,self.input_size),
                                 labels=labels)
                 total_loss += loss / len(train_loader.dataset)

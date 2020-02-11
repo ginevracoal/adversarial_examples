@@ -47,11 +47,13 @@ def pgd_attack(model, image, label, epsilon, device, alpha=2 / 255, iters=5):
     original_image = copy.deepcopy(image)
     original_output = model.forward(image)
 
+    model_copy = copy.deepcopy(model)
+
     for i in range(iters):
         image.requires_grad = True
-        output = model.forward(image)
+        output = model_copy.forward(image)
         loss = torch.nn.CrossEntropyLoss()(output, label).to(device)
-        model.zero_grad()
+        model_copy.zero_grad()
         loss.backward()
 
         perturbed_image = image + alpha * image.grad.sign()
@@ -59,7 +61,7 @@ def pgd_attack(model, image, label, epsilon, device, alpha=2 / 255, iters=5):
         eta = torch.clamp(perturbed_image - original_image, min=-epsilon, max=epsilon)
         image = torch.clamp(original_image + eta, min=0, max=1).detach_()
 
-    adversarial_output = model.forward(perturbed_image)
+    adversarial_output = model_copy.forward(perturbed_image)
     return {"original_output":original_output, "adversarial_output":adversarial_output}
 
 
@@ -85,8 +87,8 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
 
     if loss_gradient is None:
         loss_gradient = expected_loss_gradient(posterior=model, n_samples=n_attack_samples,
-                                                    image=image, label=label, device=device, mode="vi")
-    perturbed_image = image + epsilon * loss_gradient.to(device)
+                                               image=image, label=label, device=device, mode="vi")
+    perturbed_image = image + epsilon * loss_gradient.to(device).sign()
 
     perturbed_image = torch.clamp(perturbed_image, 0, 1)
     adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0)
@@ -99,29 +101,26 @@ def fgsm_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, 
     del model
 
     attack_dict = {"original_output": original_output,"adversarial_output": adversarial_output,
-            "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
+                   "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
     return attack_dict
 
-def pgd_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, epsilon, device, alpha=2 / 255, iters=10):
+def pgd_bayesian_attack(model, n_attack_samples, n_pred_samples, image, label, epsilon, device, alpha=2 / 255, iters=5):
     image = image.to(device)
     label = label.to(device)
 
-    original_image = copy.deepcopy(image)
+
     original_output = model.forward(image, n_samples=n_pred_samples).mean(0).to(device)
+    original_image = copy.deepcopy(image)
 
+    image_copy = copy.deepcopy(image)
     for i in range(iters):
-        image.requires_grad = True
-        output = model.forward(image, n_samples=n_attack_samples).mean(0).to(device)
-        loss = torch.nn.CrossEntropyLoss()(output, label).to(device)
-        model.zero_grad()
-        loss.backward()
-
-        perturbed_image = image + alpha * image.grad.sign()
-
+        loss_gradient = expected_loss_gradient(posterior=model, n_samples=n_attack_samples,
+                                               image=image_copy, label=label, device=device, mode="vi")
+        perturbed_image = original_image + alpha * loss_gradient.sign()
         eta = torch.clamp(perturbed_image - original_image, min=-epsilon, max=epsilon)
-        image = torch.clamp(original_image + eta, min=0, max=1).detach_()
+        image_copy = torch.clamp(original_image + eta, min=0, max=1).detach_()
 
-    adversarial_output = model.forward(perturbed_image, n_samples=n_pred_samples).mean(0).to(device)
+    adversarial_output = model.forward(image_copy, n_samples=n_pred_samples).mean(0).to(device)
 
     attack_dict = {"original_output": original_output,"adversarial_output": adversarial_output,
                    "n_attack_samples":n_attack_samples,"n_pred_samples":n_pred_samples}
@@ -192,11 +191,9 @@ def bayesian_attack(model, n_attack_samples, data_loader, dataset_name, epsilon,
         for idx in tqdm(range(len(images))):
             image = images[idx]
             label = labels[idx]
-            # input_shape = image.size(0) * image.size(1) * image.size(2)
             label = label.to(device).argmax(-1).view(-1)
-            image = image.to(device).flatten()#view(-1, input_shape)
+            image = image.to(device).flatten()
             loss_gradient = torch.tensor(loss_gradients[images_count])
-            # print(image.shape, loss_gradient.shape)
 
             if method == "fgsm":
                 attack_dict = fgsm_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
@@ -253,12 +250,9 @@ def categorical_bayesian_attack(model, n_attack_samples, data_loader, dataset_na
                     cat_count += 1
                     image = images[idx]
                     label = labels[idx]
-                    # input_shape = image.size(0) * image.size(1) * image.size(2)
                     label = label.to(device).argmax(-1).view(-1)
-                    image = image.to(device).flatten()#view(-1, input_shape)
-                    # exit()
+                    image = image.to(device).flatten()
                     loss_gradient = torch.tensor(loss_gradients[image_idx_count])
-                    # print(image.shape, loss_gradient.shape)
                     attack_dict = fgsm_bayesian_attack(model=copy.deepcopy(model), n_attack_samples=n_attack_samples,
                                                        n_pred_samples=n_pred_samples, image=copy.deepcopy(image),
                                                        label=label, epsilon=epsilon, device=device,
@@ -287,84 +281,13 @@ def categorical_bayesian_attack(model, n_attack_samples, data_loader, dataset_na
     save_to_pickle(data=cat_attack_dict, relative_path=RESULTS+"attacks/", filename=filename)
     return cat_attack_dict
 
-
-# def bnn_create_save_data_pretrained_models(dataset_name, device):
-#     train_loader, test_loader, data_format, input_shape = \
-#         data_loaders(dataset_name=dataset_name, batch_size=64, n_inputs=60000, shuffle=True)
-#
-#
-#     accuracy = []
-#     robustness = []
-#     epsilon = []
-#     model_type = []
-#
-#     # === load models ===
-#     count = 82
-#
-#     for idx in [0]:
-#
-#         for test_slice in [500]:
-#             test = slice_data_loader(test_loader, slice_size=test_slice)
-#             model_dict = models_list[idx]
-#
-#             bayesnn = VI_BNN(input_shape=input_shape, device=device, architecture=model_dict["activation"],
-#                              activation=model_dict["activation"])
-#             posterior = bayesnn.load_posterior(posterior_name=model_dict["filename"], relative_path=TRAINED_MODELS,
-#                                                    activation=model_dict["activation"])
-#             for eps in [0.1, 0.3, 0.6]:
-#                 for n_samples in [2]:
-#                     posterior.evaluate(data_loader=test, n_samples=n_samples)
-#
-#                     filename = str(model_dict["dataset"])+"_eps="+str(eps)+"_samples="+str(n_samples)+"_attacks.pkl"
-#                     attack_dict = bayesian_attack(model=posterior, data_loader=test, epsilon=eps, device=device,
-#                                                   n_attack_samples=n_samples, n_pred_samples=n_samples,
-#                                                   dataset_name=dataset_name)
-#
-#                     robustness.append(attack_dict["softmax_robustness"])
-#                     accuracy.append(attack_dict["original_accuracy"])
-#                     epsilon.append(eps)
-#                     model_type.append("bnn")
-#
-#                     count += 1
-#                     filename = str(dataset_name) + "_bnn_attack_" + str(count) + ".pkl"
-#                     save_to_pickle(relative_path=RESULTS + "bnn/", filename=filename, data=attack_dict)
-#
-#     scatterplot_accuracy_robustness(accuracy=accuracy, robustness=robustness, model_type=model_type, epsilon=epsilon)
-#     return robustness, accuracy, epsilon, model_type
-
-
-# def create_save_data(dataset_name, device):
-#
-#     model_type = []
-#     accuracy = []
-#     robustness = []
-#     epsilon = []
-#
-#
-#     nn_robustness, nn_accuracy, nn_epsilon, nn_model_type = nn_create_save_data(dataset_name, device)
-#     model_type.extend(nn_model_type)
-#     robustness.extend(nn_robustness)
-#     accuracy.extend(nn_accuracy)
-#     epsilon.extend(nn_epsilon)
-#
-#     # bnn_robustness, bnn_accuracy, bnn_epsilon, bnn_model_type = bnn_create_save_data_pretrained_models(dataset_name, device)
-#     bnn_robustness, bnn_accuracy, bnn_epsilon, bnn_model_type = bnn_create_save_data(dataset_name, device)
-#     model_type.extend(bnn_model_type)
-#     robustness.extend(bnn_robustness)
-#     accuracy.extend(bnn_accuracy)
-#     epsilon.extend(bnn_epsilon)
-#
-#     return robustness, accuracy, epsilon, model_type
-
-
 def main(args):
 
     # = initialization =
     n_inputs, n_samples_list, model_idx, dataset = 1000, [1,5,10,50,100], 2, "mnist"
 
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=dataset, batch_size=128, n_inputs=n_inputs, shuffle=True)
-    # test_loader = slice_data_loader(test_loader, slice_size=100)
+        data_loaders(dataset_name=dataset, batch_size=128, n_inputs=n_inputs)
 
     # = load the posterior =
     model = hidden_vi_models[model_idx]

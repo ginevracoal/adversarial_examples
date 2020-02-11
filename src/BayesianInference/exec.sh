@@ -42,8 +42,8 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_out.txt"
 #python3 "BayesianInference/hmc_bnn.py" --dataset=$DATASET_NAME --inputs=$N_INPUTS --chains=$N_CHAINS --warmup=$WARMUP --device=$DEVICE &> $OUT
 #python "BayesianInference/adversarial_attacks.py" --dataset=$DATASET_NAME --device=$DEVICE &> $OUT
 #python "BayesianInference/loss_gradients.py" &> $OUT
-python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --device=$DEVICE --dataset=$DATASET_NAME --model_type=$MODEL_TYPE&> $OUT
-#python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
+#python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --device=$DEVICE --dataset=$DATASET_NAME --model_type=$MODEL_TYPE&> $OUT
+python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
 
 # deactivate environment
 deactivate

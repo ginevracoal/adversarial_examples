@@ -65,6 +65,7 @@ class VI_BNN(BNN):
         return {'loss':loss_list, 'accuracy':accuracy_list}
 
     def sample_models(self, n_samples):
+        random.seed(0)
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
         return sampled_models
 

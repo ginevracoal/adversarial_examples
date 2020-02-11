@@ -183,7 +183,8 @@ def final_plot():
     sns.set()
     matplotlib.rc('font', **{'weight': 'bold', 'size': 12})
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 5), dpi=150, facecolor='w', edgecolor='k')
-    sns.set_palette("YlGnBu", 2)
+    sns.set_palette("cool",2)
+    # sns.set_palette("ocean_r",2)
 
     for col_idx, dataset in enumerate(["mnist", "fashion_mnist"]):
         scatterplot_dict = load_data(relative_path=DATA_PATH, dataset_name=dataset)
@@ -192,7 +193,8 @@ def final_plot():
                                 "model": scatterplot_dict["model_type"]})
         df = df[df['accuracy'] > 60.0]
         print(df.head())
-        g = sns.scatterplot(data=df, x="accuracy", y="robustness", hue="model", alpha=0.8, linewidth=0.1,
+        g = sns.scatterplot(data=df, x="accuracy", y="robustness", hue="model", alpha=0.9, linewidth=0.1,
+                            style="model",
                             ax=ax[col_idx])
         g.set(xlim=(60, None))
         ax[col_idx].set_ylabel("")
@@ -209,7 +211,7 @@ def final_plot():
     # plt.legend(by_label.values(), by_label.keys(), loc='lower left')
 
     ax[0].legend().remove()
-    ax[1].legend(loc='upper right', title="Model", labels=["NN", "BNN"])
+    ax[1].legend(loc='upper right', title="")#, labels=["NN", "BNN"])
 
     os.makedirs(os.path.dirname(RESULTS + REL_PATH), exist_ok=True)
 
@@ -227,11 +229,11 @@ def main(args):
     #                                         n_attack_samples=ATTACK_SAMPLES, eps=EPS,
     #                                         n_pred_samples=PRED_SAMPLES)
 
-    # scatterplot_dict = build_scatterplot_dict(args.dataset, model_type=args.model_type, n_attack_samples=ATTACK_SAMPLES,
-    #                                           n_pred_samples=PRED_SAMPLES, relative_path=RESULTS)
+    scatterplot_dict = build_scatterplot_dict(args.dataset, model_type=args.model_type, n_attack_samples=ATTACK_SAMPLES,
+                                              n_pred_samples=PRED_SAMPLES, relative_path=RESULTS)
 
     # scatterplot_dict = load_data(relative_path=RESULTS, dataset_name=args.dataset)
-    scatterplot_dict = load_data(relative_path=DATA_PATH, dataset_name=args.dataset)
+    # scatterplot_dict = load_data(relative_path=DATA_PATH, dataset_name=args.dataset)
 
     scatterplot_accuracy_robustness(scatterplot_dict=scatterplot_dict, dataset_name=args.dataset)
 

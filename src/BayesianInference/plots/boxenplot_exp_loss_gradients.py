@@ -60,9 +60,9 @@ def final_plot(n_inputs, n_samples_list, relpath):
         print(plot_loss_gradients[-100:])
     df = pd.DataFrame(data={"loss_gradients": plot_loss_gradients, "n_samples": plot_samples})
     print(df.head())
-    # sns.boxenplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d",
-    #                    k_depth="proportion", ax=ax1,outlier_prop=0.0, dodge=False)
-    sns.violinplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d", ax=ax1)
+    sns.boxenplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="RdGy",#"YlGnBu_d",
+                       k_depth="proportion", ax=ax1,outlier_prop=0.0, dodge=False)
+    # sns.violinplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d", ax=ax1)
     # sns.boxplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlGnBu_d", ax=ax1)
     ax1.set_ylabel(r"Expected Gradients $l_\infty$-norm ($|\nabla L(x,w_i)|_\infty$)")
     ax1.set_xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)")
@@ -93,7 +93,7 @@ def final_plot(n_inputs, n_samples_list, relpath):
     ax2.set_xlabel("Samples involved in expectations ($w_i \sim p(w|D)$)")
     ax2.set_yscale('log')
 
-    filename = "expLossGradients_inputs=" + str(n_inputs) + "_boxenplot.png"
+    filename = "expLossGradients_boxenplot.png"
     os.makedirs(os.path.dirname(RESULTS + "plots/"), exist_ok=True)
     fig.savefig(RESULTS + "plots/" + filename)
 
@@ -102,6 +102,14 @@ def final_plot_gradient_components(n_inputs, n_samples_list, relpath):
 
     matplotlib.rc('font', **{'weight': 'bold', 'size': 12})
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5), dpi=150, facecolor='w', edgecolor='k')
+    # sns.set_palette("gist_heat", 5)
+    # cmap = sns.cubehelix_palette(n_colors=10, start=0.8, rot=0.1, light=0.9, hue=1.5, as_cmap=True)
+
+    cmap = sns.color_palette("ch:0.8,r=.1,l=.9")
+    sns.set_palette(cmap)
+    # sns.set_palette("YlOrRd", 5)
+    # sns.set_palette("YlGnBu", 6)
+    # sns.set_palette("ocean_r", 5)
 
     for col_idx, (model_idx, dataset) in enumerate([(2,"mnist"),(5,"fashion_mnist")]):
         loss_gradients = []
@@ -112,19 +120,16 @@ def final_plot_gradient_components(n_inputs, n_samples_list, relpath):
         plot_samples = []
         for samples_idx, n_samples in enumerate(n_samples_list):
             print("\n\nsamples = ", n_samples, end="\t")
-            # avg_loss_gradient = loss_gradients[samples_idx].mean(0)
-            avg_loss_gradient = np.array(loss_gradients[samples_idx]+1).flatten()#.mean(0)
+            avg_loss_gradient = np.array(loss_gradients[samples_idx]).flatten()
             loss_gradients_components.extend(avg_loss_gradient)
             plot_samples.extend(np.repeat(n_samples, len(avg_loss_gradient)))
-            # print(loss_gradients_components[-100:])
-            print(len(loss_gradients),len(loss_gradients[0]),loss_gradients[0].shape, len(loss_gradients_components))
-        # print(len(loss_gradients_components),len(loss_gradients_components[0]),loss_gradients_components)
+            # print(len(loss_gradients),len(loss_gradients[0]),loss_gradients[0].shape, len(loss_gradients_components))
 
         df = pd.DataFrame(data={"loss_gradients": loss_gradients_components, "n_samples": plot_samples})
         print(df.head())
-        # sns.boxenplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlOrRd",
-        #                    k_depth="proportion", ax=ax[col_idx],outlier_prop=0.0, dodge=False)
-        sns.stripplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, palette="YlOrRd", ax=ax[col_idx])
+
+        sns.stripplot(x="n_samples", y="loss_gradients", data=df, linewidth=-0.1, ax=ax[col_idx], jitter=0.2,
+                      alpha=0.4)
 
         ax[col_idx].set_ylabel("")
         ax[col_idx].set_xlabel("")
@@ -136,7 +141,7 @@ def final_plot_gradient_components(n_inputs, n_samples_list, relpath):
     fig.text(0.5, 0.01, "Samples involved in the expectations ($w \sim p(w|D)$)", ha='center')
     fig.text(0.03, 0.5, r"Expected Gradients components $\langle\nabla L(x,w)\rangle_{w}$", va='center', rotation='vertical')
 
-    filename = "expLossGradients_inputs=" + str(n_inputs) + "_boxenplot.png"
+    filename = "expLossGradients_stripplot.png"
     os.makedirs(os.path.dirname(RESULTS + "plots/"), exist_ok=True)
     fig.savefig(RESULTS + "plots/" + filename)
 

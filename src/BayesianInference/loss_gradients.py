@@ -7,7 +7,7 @@ from BayesianInference.pyro_utils import data_loaders, slice_data_loader
 import torch
 from BayesianInference.hidden_vi_bnn import VI_BNN, hidden_vi_models
 import copy
-from utils import save_to_pickle, load_from_pickle
+from utils import save_to_pickle, load_from_pickle, _onehot
 import numpy as np
 import argparse
 
@@ -20,41 +20,50 @@ def get_filename(dataset_name, n_inputs, n_samples, model_idx):
     return str(dataset_name)+"_inputs="+str(n_inputs)+"_samples="+str(n_samples)+"_loss_grads_"+str(model_idx)+".pkl"
 
 def expected_loss_gradient(posterior, n_samples, image, label, device, mode, baseclass=None):
-    input_size = image.size(0) * image.size(1) * image.size(2)
+    if len(list(image.size())) == 2:
+        input_size = image.size(1)
+    else:
+        input_size = image.size(0) * image.size(1) * image.size(2)
+
     image = image.view(-1, input_size).to(device)
     label = label.to(device).argmax(-1).view(-1)
 
     if mode == "vi":
-        # === old ===
+        # === first version ===
         x = copy.deepcopy(image)
-        x.requires_grad = True
         posterior_copy = copy.deepcopy(posterior)
-        output = posterior_copy.forward(inputs=x, n_samples=n_samples).to(device)
-        avg_output = output.mean(0)
-        loss = torch.nn.CrossEntropyLoss()(avg_output, label)
+
+        x.requires_grad = True
+        output = posterior_copy(x, n_samples=n_samples).mean(0)
+        # output = torch.nn.functional.one_hot(output.argmax(-1), int(10))#.to(dtype=torch.double)
+        loss = torch.nn.CrossEntropyLoss()(output.to(dtype=torch.double), label)
+        posterior_copy.zero_grad()
+
         loss.backward()
         exp_loss_gradient = copy.deepcopy(x.grad.data[0])
-        posterior_copy.zero_grad()
         del posterior_copy
         del x
 
-        # === new ===
-        # sum_sign_data_grad = 0.0
-        # for _ in range(n_samples):
-        #     x = copy.deepcopy(image)
-        #     x.requires_grad = True
-        #     posterior_copy = copy.deepcopy(posterior)
-        #     output = posterior_copy.forward(x, n_samples=1).mean(0)
-        #     loss = torch.nn.CrossEntropyLoss()(output, label)
+        # === second version ===
+        # posterior_copy = copy.deepcopy(posterior)
+        # x = copy.deepcopy(image)
+        # x.requires_grad = True
         #
+        # outputs = posterior_copy(x, n_samples=n_samples)
+        # print(outputs)
+        # exit()
+        #
+        # sum_sign_data_grad = 0.0
+        # for output in outputs:
+        #     loss = torch.nn.CrossEntropyLoss()(output, label)
         #     posterior_copy.zero_grad()
         #     loss.backward(retain_graph=True)
-        #     image_grad = x.grad.data
-        #     # Collect the element-wise sign of the data gradient
-        #     sum_sign_data_grad = sum_sign_data_grad + image_grad.sign()
+        #     sum_sign_data_grad = sum_sign_data_grad + x.grad.data.sign()
         #
         # exp_loss_gradient = sum_sign_data_grad/n_samples
-        ##################
+        # # print("\n",loss, exp_loss_gradient[0][:10])
+        # del loss
+        # ##################
 
     elif mode == "hmc":
         raise NotImplementedError
@@ -183,43 +192,6 @@ def categorical_loss_gradients_norms(loss_gradients, n_samples_list, dataset_nam
     save_to_pickle(data=loss_gradients_norms_categories, relative_path=RESULTS, filename=filename)
     return {"categories":loss_gradients_norms_categories}
 
-# # todo: soon deprecated
-# def load_multiple_loss_gradients_old(dataset_name, n_inputs, eps, model_idx, relpath=DATA_PATH):
-#
-#     exp_loss_gradients = []
-#
-#     if n_inputs == 100 and dataset_name=="mnist" and model_idx in [0,1,2] and eps in [0.1,0.3,0.6]:
-#
-#         n_samples_list = [1, 10, 50, 100]
-#         for samples in n_samples_list:
-#             filename = "mnist_inputs=100_epsilon="+str(eps)+"_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
-#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
-#
-#     elif n_inputs == 10 and dataset_name=="mnist" and model_idx in [0,1,2]:
-#
-#         n_samples_list = [1, 10, 50, 100, 500]
-#         for samples in [1, 10, 50, 100]:
-#             filename = "mnist_inputs=100_epsilon=0.1_samples="+ str(samples)+ "_model=" + str(model_idx) + "_attack.pkl"
-#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename)[:10])
-#         filename = "mnist_inputs=10_epsilon=0.1_samples=500_model=" + str(model_idx) + "_attack.pkl"
-#         exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
-#
-#     elif n_inputs == 1000 and dataset_name == "mnist" and model_idx == 2:
-#
-#         n_samples_list = [1, 10, 50, 100]
-#         for samples in [1, 10]:
-#             filename = "mnist_inputs=1000_epsilon=0.1_samples="+str(samples)+"_model="+str(model_idx)+"_attack.pkl"
-#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
-#         for samples in [50, 100]:
-#             filename = "mnist_inputs=1000_samples="+str(samples)+"_model="+str(model_idx)+"_loss_gradients.pkl"
-#             exp_loss_gradients.append(load_from_pickle(path=relpath+str(dataset_name)+"/"+filename))
-#     else:
-#         raise AssertionError("loss gradients are not available for the chosen params.")
-#
-#     exp_loss_gradients = np.array(exp_loss_gradients)
-#     print("exp_loss_gradients.shape =", exp_loss_gradients.shape)
-#     return exp_loss_gradients, n_samples_list
-###############
 
 def main(args):
 
@@ -236,13 +208,13 @@ def main(args):
 
     # = compute expected loss gradients =
     train_loader, test_loader, data_format, input_shape = \
-        data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=n_inputs, shuffle=True)
+        data_loaders(dataset_name=model["dataset"], batch_size=128, n_inputs=n_inputs)
 
     for n_samples in n_samples_list:
         bayesnn = VI_BNN(input_shape=input_shape, device=args.device, architecture=model["architecture"],
                          activation=model["activation"])
         posterior = bayesnn.load_posterior(posterior_name=model["filename"], activation=model["activation"],
-                                           relative_path=TRAINED_MODELS)
+                                           relative_path=TRAINED_MODELS, dataset_name=dataset)
 
         expected_loss_gradients(posterior=posterior, n_samples=n_samples, dataset_name=model["dataset"],
                                 model_idx=model["idx"], data_loader=test_loader, device=args.device, mode="vi")
