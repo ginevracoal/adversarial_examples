@@ -46,10 +46,11 @@ def final_plot(n_inputs, n_samples_list, relpath):
 
     # mnist
     loss_gradients = []
-    model_idx, dataset = 2, "mnist"
+    # model_idx, dataset = 2, "mnist" # old
+    model_idx, dataset = 0, "mnist" # new tests
     for samples in n_samples_list:
         loss_gradients.append(load_loss_gradients(dataset_name=dataset, n_inputs=n_inputs, n_samples=samples,
-                                                            model_idx=model_idx, relpath=DATA_PATH))
+                                                            model_idx=model_idx, relpath=relpath))
     plot_loss_gradients = []
     plot_samples = []
     for samples_idx, n_samples in enumerate(n_samples_list):
@@ -70,7 +71,8 @@ def final_plot(n_inputs, n_samples_list, relpath):
 
     # fashion mnist
     loss_gradients = []
-    model_idx, dataset = 5, "fashion_mnist"
+    # model_idx, dataset = 5, "fashion_mnist" # old
+    model_idx, dataset = 0, "mnist" # new tests
     for samples in n_samples_list:
         loss_gradients.append(load_loss_gradients(dataset_name=dataset, n_inputs=n_inputs, n_samples=samples,
                                                       model_idx=model_idx, relpath=relpath))
@@ -145,10 +147,15 @@ def final_plot_gradient_components(n_inputs, n_samples_list, relpath):
     os.makedirs(os.path.dirname(RESULTS + "plots/"), exist_ok=True)
     fig.savefig(RESULTS + "plots/" + filename)
 
+
+
+
+
 def main():
 
     # final_plot(n_inputs=1000, n_samples_list=[1,10,50,100,500], relpath=DATA_PATH)
-    final_plot_gradient_components(n_inputs=1000, n_samples_list=[1,10,50,100,500], relpath=DATA_PATH)
+    # final_plot_gradient_components(n_inputs=1000, n_samples_list=[1,10,50,100,500], relpath=DATA_PATH)
+    
     exit()
 
     # n_inputs, n_samples_list, model_idx, dataset, relpath = 1000, [1,10,50,100,500], 2, "mnist", DATA_PATH

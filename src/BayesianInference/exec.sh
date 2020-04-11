@@ -4,11 +4,11 @@
 #  settings  #
 ##############
 
-DATASET_NAME="fashion_mnist"
+DATASET_NAME="mnist"
 N_INPUTS="100"
 EPOCHS="200"
 LR="0.002"
-DEVICE="cpu"
+DEVICE="cuda"
 N_SAMPLES="5"
 WARMUP="1000"
 N_CHAINS="8"
@@ -43,7 +43,8 @@ OUT="${RESULTS}${TIME}_${DATASET_NAME}_out.txt"
 #python "BayesianInference/adversarial_attacks.py" --dataset=$DATASET_NAME --device=$DEVICE &> $OUT
 #python "BayesianInference/loss_gradients.py" &> $OUT
 #python3 "BayesianInference/plots/scatterplot_accuracy_robustness_tradeoff.py" --device=$DEVICE --dataset=$DATASET_NAME --model_type=$MODEL_TYPE&> $OUT
-python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
+# python3 "BayesianInference/plots/plot_random_attack.py" --device=$DEVICE --dataset=$DATASET_NAME &> $OUT
+python3 "BayesianInference/plots/classwise_loss_gradients.py" --device=$DEVICE &> $OUT
 
 # deactivate environment
 deactivate

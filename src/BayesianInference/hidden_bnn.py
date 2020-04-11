@@ -195,8 +195,8 @@ class HiddenBNN(nn.Module):
                                                                non_linearity=lambda x: nnf.softmax(x, dim=self.net.dim),
                                                                KL_factor=kl_factor,
                                                                include_hidden_bias=False))
-                pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
-                return logits
+                cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
+
         elif self.architecture == "fully_connected_2":
             # Set-up parameters for the distribution of weights for each layer `a<n>`
             a1_mean = torch.zeros(self.input_size, 32 * 3).to(self.device)
@@ -211,8 +211,8 @@ class HiddenBNN(nn.Module):
                                                 non_linearity=lambda x: nnf.softmax(x,dim=self.net.dim),
                                                                KL_factor=kl_factor,
                                                                include_hidden_bias=False))
-                pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
-                return logits
+                cond_model = pyro.sample("obs", dist.OneHotCategorical(logits=logits), obs=labels.to(self.device))
+
         elif self.architecture == "convolutional":
             net = self.net
             conv1w_prior = Normal(loc=torch.zeros_like(net.conv1.weight), scale=torch.ones_like(net.conv1.weight))
@@ -235,9 +235,10 @@ class HiddenBNN(nn.Module):
             lifted_module = pyro.random_module("module", net, priors)
             lifted_reg_model = lifted_module()
             outputs = lifted_reg_model(inputs.to(self.device))
-            logits = nnf.softmax(outputs, dim=self.net.dim)
-            pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels.to(self.device))
-            return logits.to(self.device)
+            logits = nnf.softmax(outputs, dim=self.net.dim).to(self.device)
+            cond_model = pyro.sample("obs", OneHotCategorical(logits=logits), obs=labels.to(self.device))
+
+        return torch.nn.functional.one_hot(logits.argmax(-1), int(10))#.to(dtype=torch.double)
 
     def guide(self, inputs, labels=None, kl_factor=1.0):
         # handle old models
@@ -334,8 +335,6 @@ class HiddenBNN(nn.Module):
             lifted_reg_model = lifted_module()
 
             logits = nnf.softmax(lifted_reg_model(inputs.to(self.device)), dim=self.net.dim)
-            return logits.to(self.device)
-
 
     def forward(self, inputs, n_samples):
         pyro.set_rng_seed(0)
